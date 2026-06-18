@@ -42,6 +42,7 @@ import {
   ThunderboltOutlined,
   CheckCircleOutlined,
   FormOutlined,
+  RobotOutlined,
 } from '@ant-design/icons'
 import { useParams, useNavigate } from 'react-router-dom'
 import { DndProvider, useDrag, useDrop } from 'react-dnd'
@@ -53,6 +54,7 @@ import { dataModelApi } from '@/api/dataModel'
 import { useAppStore } from '@/store/appStore'
 import CustomComponentWrapper, { CustomComponentPreview, useCustomComponentSchema } from '@/components/CustomComponentWrapper'
 import { loadCustomComponent } from '@/utils/componentLoader'
+import AiPagePanel from '@/components/AiPagePanel'
 
 const { Header, Sider, Content } = Layout
 const { Option } = Select
@@ -352,6 +354,8 @@ const PageDesigner: React.FC = () => {
   const [dataModels, setDataModels] = useState<any[]>([])
   const [history, setHistory] = useState<any[]>([])
   const [historyIndex, setHistoryIndex] = useState(-1)
+  const [aiPanelVisible, setAiPanelVisible] = useState(false)
+  const [aiSessionId, setAiSessionId] = useState('')
 
   const canvasRef = useRef<HTMLDivElement>(null)
 
@@ -443,6 +447,16 @@ const PageDesigner: React.FC = () => {
     loadPage()
     loadComponentLibrary()
     loadDataModels()
+    const createAiSession = async () => {
+      try {
+        const { aiPageApi } = await import('@/api/page')
+        const res = await aiPageApi.createSession()
+        setAiSessionId(res.data || '')
+      } catch (e) {
+        console.error('Create AI session failed:', e)
+      }
+    }
+    createAiSession()
   }, [loadPage, loadComponentLibrary, loadDataModels])
 
   const buildComponentTree = (components: PageComponent[]): any[] => {
@@ -548,6 +562,37 @@ const PageDesigner: React.FC = () => {
       console.error(e)
     }
   }
+
+  const handlePageGenerated = useCallback((pageData: { pageName: string; components: any[] }) => {
+    if (!page) return
+    saveHistory()
+
+    const validComponents = pageData.components.map((comp: any, index: number) => ({
+      ...comp,
+      componentId: comp.componentId || `comp_${Date.now()}_${index}`,
+      sortOrder: comp.sortOrder || index + 1,
+      propsConfig: typeof comp.propsConfig === 'string' ? comp.propsConfig : JSON.stringify(comp.propsConfig || {}),
+      styleConfig: typeof comp.styleConfig === 'string' ? comp.styleConfig : JSON.stringify(comp.styleConfig || {}),
+      eventConfig: typeof comp.eventConfig === 'string' ? comp.eventConfig : JSON.stringify(comp.eventConfig || []),
+      dataSourceConfig: typeof comp.dataSourceConfig === 'string' ? comp.dataSourceConfig : JSON.stringify(comp.dataSourceConfig || {}),
+      validationConfig: typeof comp.validationConfig === 'string' ? comp.validationConfig : JSON.stringify(comp.validationConfig || []),
+    }))
+
+    setPage({
+      ...page,
+      pageName: pageData.pageName || page.pageName,
+      components: validComponents,
+    })
+
+    form.setFieldsValue({
+      pageName: pageData.pageName || page.pageName,
+    })
+
+    const tree = buildComponentTree(validComponents)
+    setComponentTree(tree)
+    setSelectedComponentId(null)
+    message.success(`页面生成成功，共 ${validComponents.length} 个组件`)
+  }, [page, form])
 
   const handleDropComponent = (item: any, parentId?: string) => {
     if (!page) return
@@ -1437,6 +1482,13 @@ const PageDesigner: React.FC = () => {
               重做
             </Button>
             <Divider type="vertical" />
+            <Button 
+              icon={<RobotOutlined />} 
+              onClick={() => setAiPanelVisible(true)}
+              type="dashed"
+            >
+              AI助手
+            </Button>
             <Button icon={<EyeOutlined />} onClick={handlePreview}>
               预览
             </Button>
@@ -1693,6 +1745,24 @@ const PageDesigner: React.FC = () => {
           </div>
         </div>
       </Modal>
+
+      <Drawer
+        title="AI 页面助手"
+        placement="right"
+        width={420}
+        open={aiPanelVisible}
+        onClose={() => setAiPanelVisible(false)}
+        mask={false}
+        bodyStyle={{ padding: 0 }}
+      >
+        <AiPagePanel
+          sessionId={aiSessionId}
+          onSessionIdChange={setAiSessionId}
+          onPageGenerated={handlePageGenerated}
+          currentPage={page}
+          appId={currentApp?.id}
+        />
+      </Drawer>
 
       <Modal
         title="页面代码"

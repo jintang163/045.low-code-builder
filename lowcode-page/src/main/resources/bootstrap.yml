@@ -69,6 +69,17 @@ oss:
     secretKey: ${MINIO_SECRET_KEY:minioadmin}
     bucketName: ${MINIO_BUCKET:lowcode}
 
+ai:
+  llm:
+    enabled: ${AI_LLM_ENABLED:true}
+    provider: ${AI_LLM_PROVIDER:openai}
+    api-key: ${AI_LLM_API_KEY:your-api-key-here}
+    endpoint: ${AI_LLM_ENDPOINT:https://api.openai.com/v1}
+    model: ${AI_LLM_MODEL:gpt-4o-mini}
+    temperature: ${AI_LLM_TEMPERATURE:0.3}
+    max-tokens: ${AI_LLM_MAX_TOKENS:4096}
+    timeout: ${AI_LLM_TIMEOUT:60}
+
 ---
 spring:
   config:

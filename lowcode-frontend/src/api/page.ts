@@ -152,3 +152,35 @@ export const customComponentApi = {
   deprecateVersion: (versionId: number) =>
     request.put(`/custom-component/version/${versionId}/deprecate`),
 }
+
+export interface AiChatMessage {
+  role: 'user' | 'assistant' | 'system'
+  content: string
+}
+
+export interface AiPageGenerateDTO {
+  sessionId?: string
+  userMessage: string
+  appId?: number
+  currentPageJson?: string
+  history?: AiChatMessage[]
+}
+
+export interface AiPageGenerateVO {
+  sessionId: string
+  pageJson: string
+  pageName: string
+  replyMessage: string
+  history: AiChatMessage[]
+  success: boolean
+  errorMessage?: string
+}
+
+export const aiPageApi = {
+  generate: (data: AiPageGenerateDTO) =>
+    request.post<AiPageGenerateVO>('/ai/page/generate', data),
+  createSession: () =>
+    request.post<string>('/ai/page/session'),
+  clearSession: (sessionId: string) =>
+    request.delete(`/ai/page/session/${sessionId}`),
+}
