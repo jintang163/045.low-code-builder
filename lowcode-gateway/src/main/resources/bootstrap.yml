@@ -1,0 +1,56 @@
+spring:
+  application:
+    name: lowcode-gateway
+  profiles:
+    active: dev
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848
+        namespace: lowcode
+      config:
+        server-addr: 127.0.0.1:8848
+        namespace: lowcode
+        file-extension: yml
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      routes:
+        - id: lowcode-auth
+          uri: lb://lowcode-auth
+          predicates:
+            - Path=/api/auth/**,/api/user/**
+        - id: lowcode-model
+          uri: lb://lowcode-model
+          predicates:
+            - Path=/api/model/**,/api/datasource/**,/api/generator/**,/api/migration/**,/api/relation/**
+        - id: lowcode-page
+          uri: lb://lowcode-page
+          predicates:
+            - Path=/api/page/**,/api/component/**
+        - id: lowcode-flow
+          uri: lb://lowcode-flow
+          predicates:
+            - Path=/api/logic/**,/api/debug/**,/api/workflow/**
+        - id: lowcode-oss
+          uri: lb://lowcode-oss
+          predicates:
+            - Path=/api/oss/**
+      globalcors:
+        corsConfigurations:
+          '[/**]':
+            allowedOriginPatterns: "*"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+            allowCredentials: true
+            maxAge: 3600
+
+server:
+  port: 8080
+
+logging:
+  level:
+    org.springframework.cloud.gateway: info
+    com.lowcode.gateway: debug

@@ -1,0 +1,246 @@
+package com.lowcode.page.service;
+
+import com.alibaba.fastjson2.JSON;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.lowcode.common.exception.BusinessException;
+import com.lowcode.common.exception.ErrorCode;
+import com.lowcode.page.entity.Page;
+import com.lowcode.page.entity.PageComponent;
+import com.lowcode.page.mapper.PageMapper;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.*;
+import java.util.stream.Collectors;
+
+@Slf4j
+@Service
+public class PageService extends ServiceImpl<PageMapper, Page> {
+
+    @Autowired
+    private PageComponentService componentService;
+
+    public Page getPageDetail(Long id) {
+        Page page = getById(id);
+        if (page == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "页面不存在");
+        }
+
+        LambdaQueryWrapper<PageComponent> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(PageComponent::getPageId, id);
+        wrapper.orderByAsc(PageComponent::getSortOrder);
+        List<PageComponent> components = componentService.list(wrapper);
+        page.setComponents(components);
+
+        return page;
+    }
+
+    public List<Page> getPageList(Long appId) {
+        LambdaQueryWrapper<Page> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Page::getAppId, appId);
+        wrapper.orderByDesc(Page::getCreatedTime);
+        List<Page> pages = list(wrapper);
+        return pages;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public Page savePage(Page page) {
+        LambdaQueryWrapper<Page> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Page::getPageCode, page.getPageCode());
+        wrapper.eq(Page::getAppId, page.getAppId());
+        Long count = count(wrapper);
+        if (count > 0) {
+            throw new BusinessException(ErrorCode.PAGE_EXISTS);
+        }
+
+        if (page.getIsHome() != null && page.getIsHome() == 1) {
+            clearHomePage(page.getAppId());
+        }
+
+        save(page);
+
+        if (page.getComponents() != null) {
+            for (PageComponent component : page.getComponents()) {
+                component.setPageId(page.getId());
+                componentService.save(component);
+            }
+        }
+
+        return getPageDetail(page.getId());
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public Page updatePage(Page page) {
+        Page existing = getById(page.getId());
+        if (existing == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "页面不存在");
+        }
+
+        if (page.getIsHome() != null && page.getIsHome() == 1) {
+            clearHomePage(page.getAppId());
+        }
+
+        updateById(page);
+
+        LambdaQueryWrapper<PageComponent> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(PageComponent::getPageId, page.getId());
+        componentService.remove(wrapper);
+
+        if (page.getComponents() != null) {
+            for (PageComponent component : page.getComponents()) {
+                component.setPageId(page.getId());
+                componentService.save(component);
+            }
+        }
+
+        return getPageDetail(page.getId());
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void deletePage(Long id) {
+        Page page = getById(id);
+        if (page == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "页面不存在");
+        }
+
+        LambdaQueryWrapper<PageComponent> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(PageComponent::getPageId, id);
+        componentService.remove(wrapper);
+
+        removeById(id);
+    }
+
+    public Page publishPage(Long id) {
+        Page page = getById(id);
+        if (page == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "页面不存在");
+        }
+
+        page.setStatus(1);
+        updateById(page);
+        return page;
+    }
+
+    public String generatePageCode(Long id) {
+        Page page = getPageDetail(id);
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("import React, { useState, useEffect } from 'react';\n");
+        sb.append("import { Form, Input, Button, Table, Card, message } from 'antd';\n\n");
+        sb.append("const ").append(page.getPageCode()).append(" = () => {\n");
+        sb.append("  const [form] = Form.useForm();\n");
+        sb.append("  const [data, setData] = useState([]);\n\n");
+        sb.append("  useEffect(() => {\n");
+        sb.append("    // 页面加载时执行的逻辑\n");
+        sb.append("  }, []);\n\n");
+        sb.append("  const handleSubmit = (values) => {\n");
+        sb.append("    console.log('Form values:', values);\n");
+        sb.append("    message.success('提交成功');\n");
+        sb.append("  };\n\n");
+        sb.append("  return (\n");
+        sb.append("    <div style={{ padding: '24px' }}>\n");
+        sb.append("      <Card title=\"").append(page.getPageName()).append("\">\n");
+        sb.append("        <Form form={form} onFinish={handleSubmit} layout=\"vertical\">\n");
+
+        for (PageComponent component : page.getComponents()) {
+            if ("Input".equals(component.getComponentType())) {
+                sb.append("          <Form.Item\n");
+                sb.append("            label=\"").append(component.getComponentName()).append("\"\n");
+                sb.append("            name=\"").append(component.getComponentId()).append("\"\n");
+                sb.append("          >\n");
+                sb.append("            <Input placeholder=\"请输入\" />\n");
+                sb.append("          </Form.Item>\n");
+            } else if ("Button".equals(component.getComponentType())) {
+                sb.append("          <Form.Item>\n");
+                sb.append("            <Button type=\"primary\" htmlType=\"submit\">\n");
+                sb.append("              ").append(component.getComponentName()).append("\n");
+                sb.append("            </Button>\n");
+                sb.append("          </Form.Item>\n");
+            } else if ("Table".equals(component.getComponentType())) {
+                sb.append("          <Table\n");
+                sb.append("            dataSource={data}\n");
+                sb.append("            columns={[]}\n");
+                sb.append("            rowKey=\"id\"\n");
+                sb.append("          />\n");
+            }
+        }
+
+        sb.append("        </Form>\n");
+        sb.append("      </Card>\n");
+        sb.append("    </div>\n");
+        sb.append("  );\n");
+        sb.append("};\n\n");
+        sb.append("export default ").append(page.getPageCode()).append(";\n");
+
+        return sb.toString();
+    }
+
+    public Map<String, Object> getPagePreviewData(Long id) {
+        Page page = getPageDetail(id);
+        Map<String, Object> result = new HashMap<>();
+        result.put("page", page);
+
+        List<Map<String, Object>> componentTree = buildComponentTree(page.getComponents());
+        result.put("componentTree", componentTree);
+
+        return result;
+    }
+
+    private List<Map<String, Object>> buildComponentTree(List<PageComponent> components) {
+        if (components == null || components.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Map<String, Map<String, Object>> componentMap = new LinkedHashMap<>();
+        List<Map<String, Object>> roots = new ArrayList<>();
+
+        for (PageComponent component : components) {
+            Map<String, Object> node = new LinkedHashMap<>();
+            node.put("id", component.getComponentId());
+            node.put("type", component.getComponentType());
+            node.put("name", component.getComponentName());
+            node.put("props", component.getPropsConfig() != null ? JSON.parse(component.getPropsConfig()) : new HashMap<>());
+            node.put("style", component.getStyleConfig() != null ? JSON.parse(component.getStyleConfig()) : new HashMap<>());
+            node.put("events", component.getEventConfig() != null ? JSON.parse(component.getEventConfig()) : new HashMap<>());
+            node.put("dataSource", component.getDataSourceConfig() != null ? JSON.parse(component.getDataSourceConfig()) : new HashMap<>());
+            node.put("validation", component.getValidationConfig() != null ? JSON.parse(component.getValidationConfig()) : new HashMap<>());
+            node.put("position", new HashMap<String, Object>() {{
+                put("x", component.getPositionX());
+                put("y", component.getPositionY());
+                put("width", component.getWidth());
+                put("height", component.getHeight());
+            }});
+            node.put("children", new ArrayList<Map<String, Object>>());
+
+            componentMap.put(component.getComponentId(), node);
+        }
+
+        for (PageComponent component : components) {
+            Map<String, Object> node = componentMap.get(component.getComponentId());
+            String parentId = component.getParentId();
+
+            if (parentId == null || parentId.isEmpty() || !componentMap.containsKey(parentId)) {
+                roots.add(node);
+            } else {
+                Map<String, Object> parent = componentMap.get(parentId);
+                ((List<Map<String, Object>>) parent.get("children")).add(node);
+            }
+        }
+
+        return roots;
+    }
+
+    private void clearHomePage(Long appId) {
+        LambdaQueryWrapper<Page> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Page::getAppId, appId);
+        wrapper.eq(Page::getIsHome, 1);
+        List<Page> homePages = list(wrapper);
+        for (Page homePage : homePages) {
+            homePage.setIsHome(0);
+            updateById(homePage);
+        }
+    }
+}

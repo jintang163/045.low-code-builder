@@ -1,0 +1,9 @@
+package com.lowcode.flow.mapper;
+
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.lowcode.flow.entity.LogicNode;
+import org.apache.ibatis.annotations.Mapper;
+
+@Mapper
+public interface LogicNodeMapper extends BaseMapper<LogicNode> {
+}
