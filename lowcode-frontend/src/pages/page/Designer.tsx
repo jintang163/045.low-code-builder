@@ -22,6 +22,7 @@ import {
   Badge,
   Row,
   Col,
+  Tag,
 } from 'antd'
 import {
   SaveOutlined,
@@ -47,9 +48,11 @@ import { DndProvider, useDrag, useDrop } from 'react-dnd'
 import { HTML5Backend } from 'react-dnd-html5-backend'
 import { createForm, Field } from '@formily/core'
 import { createSchemaField, FormProvider, FormItem, Input as FormilyInput, Select as FormilySelect, NumberPicker, Switch as FormilySwitch } from '@formily/antd'
-import { PageInfo, PageComponent, ComponentLibrary, pageApi, componentApi } from '@/api/page'
+import { PageInfo, PageComponent, ComponentLibrary, pageApi, componentApi, customComponentApi, CustomComponent } from '@/api/page'
 import { dataModelApi } from '@/api/dataModel'
 import { useAppStore } from '@/store/appStore'
+import CustomComponentWrapper, { CustomComponentPreview, useCustomComponentSchema } from '@/components/CustomComponentWrapper'
+import { loadCustomComponent } from '@/utils/componentLoader'
 
 const { Header, Sider, Content } = Layout
 const { Option } = Select
@@ -71,6 +74,7 @@ const componentCategories = [
   { key: 'data', name: '数据展示', icon: '📊' },
   { key: 'chart', name: '图表组件', icon: '📈' },
   { key: 'advanced', name: '高级组件', icon: '⚡' },
+  { key: 'custom', name: '自定义组件', icon: '🔧' },
 ]
 
 const componentIconMap: Record<string, string> = {
@@ -114,14 +118,24 @@ const componentIconMap: Record<string, string> = {
 }
 
 interface ComponentItemProps {
-  component: ComponentLibrary
+  component: ComponentLibrary | CustomComponent
   onDragStart?: () => void
 }
 
 const ComponentItem: React.FC<ComponentItemProps> = ({ component }) => {
+  const isCustom = 'currentVersion' in component
+  const defaultProps = isCustom
+    ? (component as CustomComponent).currentVersionInfo?.defaultProps
+    : (component as ComponentLibrary).defaultProps
+
   const [{ isDragging }, drag] = useDrag(() => ({
     type: 'COMPONENT',
-    item: { componentType: component.componentType, componentName: component.componentName, defaultProps: component.defaultProps },
+    item: {
+      componentType: component.componentType,
+      componentName: component.componentName,
+      defaultProps,
+      isCustom,
+    },
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
@@ -134,7 +148,7 @@ const ComponentItem: React.FC<ComponentItemProps> = ({ component }) => {
       style={{
         padding: '8px 12px',
         background: '#fff',
-        border: '1px solid #e8e8e8',
+        border: isCustom ? '1px solid #9254de' : '1px solid #e8e8e8',
         borderRadius: 4,
         marginBottom: 8,
         display: 'flex',
@@ -143,8 +157,15 @@ const ComponentItem: React.FC<ComponentItemProps> = ({ component }) => {
         opacity: isDragging ? 0.5 : 1,
       }}
     >
-      <span style={{ fontSize: 16 }}>{componentIconMap[component.componentType] || '📦'}</span>
+      <span style={{ fontSize: 16 }}>
+        {componentIconMap[component.componentType] || (component as any).icon || '📦'}
+      </span>
       <span style={{ fontSize: 13 }}>{component.componentName}</span>
+      {isCustom && (
+        <Tag color="purple" style={{ marginLeft: 'auto', fontSize: 10 }}>
+          自定义
+        </Tag>
+      )}
     </div>
   )
 }
@@ -179,6 +200,16 @@ const CanvasComponent: React.FC<CanvasComponentProps> = ({ component, isSelected
       background: isSelected ? '#e6f7ff' : '#fff',
       minHeight: 40,
       ...style,
+    }
+
+    const systemTypes = ['INPUT', 'TEXTAREA', 'NUMBER', 'SELECT', 'DATE', 'DATETIME', 'TIME', 'SWITCH', 'CHECKBOX', 'RADIO', 'UPLOAD', 'RICHTEXT', 'TABLE', 'BUTTON', 'LINK', 'IMAGE', 'TEXT', 'TITLE', 'ICON', 'DIVIDER', 'TABS', 'CARD', 'GRID', 'FLEX', 'MODAL', 'FORM', 'STEPS', 'TIMELINE', 'PROGRESS', 'RATE', 'SLIDER', 'LINECHART', 'BARCHART', 'PIECHART', 'AREACHART', 'SCATTERCHART', 'RADARCHART']
+
+    if (!systemTypes.includes(component.componentType)) {
+      return (
+        <div style={baseStyle}>
+          <CustomComponentPreview componentType={component.componentType} defaultProps={props} />
+        </div>
+      )
     }
 
     switch (component.componentType) {
@@ -313,7 +344,9 @@ const PageDesigner: React.FC = () => {
   const [codeModalVisible, setCodeModalVisible] = useState(false)
   const [codeContent, setCodeContent] = useState('')
   const [componentLibrary, setComponentLibrary] = useState<Record<string, ComponentLibrary[]>>({})
-  const [expandedCategory, setExpandedCategory] = useState<string[]>(['basic', 'form'])
+  const [customComponents, setCustomComponents] = useState<Record<string, CustomComponent[]>>({})
+  const [mergedComponentLibrary, setMergedComponentLibrary] = useState<Record<string, (ComponentLibrary | CustomComponent)[]>>({})
+  const [expandedCategory, setExpandedCategory] = useState<string[]>(['basic', 'form', 'custom'])
   const [dataModels, setDataModels] = useState<any[]>([])
   const [history, setHistory] = useState<any[]>([])
   const [historyIndex, setHistoryIndex] = useState(-1)
@@ -359,8 +392,22 @@ const PageDesigner: React.FC = () => {
 
   const loadComponentLibrary = useCallback(async () => {
     try {
-      const res = await componentApi.tree()
-      setComponentLibrary(res.data || {})
+      const [systemRes, customRes] = await Promise.all([
+        componentApi.tree(),
+        customComponentApi.tree(),
+      ])
+      setComponentLibrary(systemRes.data || {})
+      setCustomComponents(customRes.data || {})
+
+      const merged: Record<string, (ComponentLibrary | CustomComponent)[]> = {}
+      componentCategories.forEach((cat) => {
+        const systemComponents = systemRes.data?.[cat.key] || []
+        const customComponentsList = customRes.data?.[cat.key] || []
+        if (systemComponents.length > 0 || customComponentsList.length > 0) {
+          merged[cat.key] = [...systemComponents, ...customComponentsList]
+        }
+      })
+      setMergedComponentLibrary(merged)
     } catch (e) {
       console.error(e)
     }
@@ -630,8 +677,64 @@ const PageDesigner: React.FC = () => {
 
   const selectedComponent = page?.components?.find(c => c.componentId === selectedComponentId)
 
+  const CustomComponentPropsPanel: React.FC<{ componentType: string }> = ({ componentType }) => {
+    const { schema, loading, error } = useCustomComponentSchema(componentType)
+    const [form] = Form.useForm()
+
+    useEffect(() => {
+      if (selectedComponent) {
+        const props = selectedComponent.propsConfig ? JSON.parse(selectedComponent.propsConfig) : {}
+        form.setFieldsValue(props)
+      }
+    }, [selectedComponent, schema])
+
+    if (loading) {
+      return <div style={{ padding: 16, textAlign: 'center' }}><Spin size="small" /> 加载属性配置中...</div>
+    }
+
+    if (error) {
+      return <Alert type="error" message="加载属性配置失败" description={error} showIcon />
+    }
+
+    if (!schema?.propSchema) {
+      return <Alert type="info" message="该组件没有定义属性配置" showIcon />
+    }
+
+    const formilyForm = createForm()
+    const renderSchemaField = () => {
+      try {
+        return <SchemaField schema={schema.propSchema} />
+      } catch (e) {
+        console.error('Schema render error:', e)
+        return <Alert type="error" message="属性Schema格式错误" showIcon />
+      }
+    }
+
+    return (
+      <FormProvider form={formilyForm}>
+        {renderSchemaField()}
+        <Button type="primary" block onClick={handlePropsChange} style={{ marginTop: 16 }}>
+          保存属性
+        </Button>
+      </FormProvider>
+    )
+  }
+
   const getPropsSchema = () => {
     const type = selectedComponent?.componentType
+
+    const systemTypes = ['INPUT', 'TEXTAREA', 'NUMBER', 'SELECT', 'DATE', 'DATETIME', 'TIME', 'SWITCH', 'CHECKBOX', 'RADIO', 'UPLOAD', 'RICHTEXT', 'TABLE', 'BUTTON', 'LINK', 'IMAGE', 'TEXT', 'TITLE', 'ICON', 'DIVIDER', 'TABS', 'CARD', 'GRID', 'FLEX', 'MODAL', 'FORM', 'STEPS', 'TIMELINE', 'PROGRESS', 'RATE', 'SLIDER', 'LINECHART', 'BARCHART', 'PIECHART', 'AREACHART', 'SCATTERCHART', 'RADARCHART']
+
+    if (type && !systemTypes.includes(type)) {
+      return {
+        type: 'object',
+        properties: {
+          __customComponent: { type: 'string', title: '自定义组件', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+        },
+        __isCustom: true,
+      }
+    }
+
     const baseProps: any = {
       type: 'object',
       properties: {},
@@ -746,8 +849,13 @@ const PageDesigner: React.FC = () => {
   const renderPropsPanel = () => {
     if (!selectedComponent) return null
 
-    const form = createForm()
     const schema = getPropsSchema()
+
+    if ((schema as any).__isCustom) {
+      return <CustomComponentPropsPanel componentType={selectedComponent.componentType} />
+    }
+
+    const form = createForm()
 
     return (
       <FormProvider form={form}>
@@ -1318,17 +1426,17 @@ const PageDesigner: React.FC = () => {
                               <span>
                                 {cat.icon} {cat.name}
                                 <Badge
-                                  count={componentLibrary[cat.key]?.length || 0}
+                                  count={mergedComponentLibrary[cat.key]?.length || 0}
                                   size="small"
                                   style={{ marginLeft: 8 }}
                                 />
                               </span>
                             }
                           >
-                            {componentLibrary[cat.key]?.map(comp => (
+                            {mergedComponentLibrary[cat.key]?.map(comp => (
                               <ComponentItem key={comp.componentType} component={comp} />
                             ))}
-                            {(!componentLibrary[cat.key] || componentLibrary[cat.key].length === 0) && (
+                            {(!mergedComponentLibrary[cat.key] || mergedComponentLibrary[cat.key].length === 0) && (
                               <div style={{ textAlign: 'center', padding: '20px 0', color: '#999', fontSize: 12 }}>
                                 暂无组件
                               </div>

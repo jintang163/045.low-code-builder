@@ -13,6 +13,8 @@ import {
   MenuUnfoldOutlined,
   LogoutOutlined,
   ShopOutlined,
+  CodeSandboxOutlined,
+  BugOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAppStore } from '@/store/appStore'
@@ -67,6 +69,23 @@ const MainLayout: React.FC = ({ children }: { children?: React.ReactNode }) => {
       label: '工作流',
     },
     {
+      key: '/component',
+      icon: <CodeSandboxOutlined />,
+      label: '组件管理',
+      children: [
+        {
+          key: '/component',
+          icon: <CodeSandboxOutlined />,
+          label: '组件列表',
+        },
+        {
+          key: '/component/debugger',
+          icon: <BugOutlined />,
+          label: '组件调试',
+        },
+      ],
+    },
+    {
       key: '/settings',
       icon: <SettingOutlined />,
       label: '系统设置',
@@ -114,6 +133,8 @@ const MainLayout: React.FC = ({ children }: { children?: React.ReactNode }) => {
       '/logic/designer': '逻辑设计器',
       '/workflow': '工作流',
       '/workflow/designer': '工作流设计器',
+      '/component': '组件管理',
+      '/component/debugger': '组件调试',
     }
     const parts = location.pathname.split('/').filter(Boolean)
     const items = []

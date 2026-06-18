@@ -1,0 +1,106 @@
+{
+  "name": "lowcode-custom-component",
+  "version": "1.0.0",
+  "main": "index.js",
+  "description": "低代码平台自定义组件开发模板",
+  "author": "",
+  "componentType": "CustomComponent",
+  "componentName": "自定义组件",
+  "componentCategory": "custom",
+  "icon": "🔧",
+
+  "propSchema": {
+    "type": "object",
+    "properties": {
+      "title": {
+        "type": "string",
+        "title": "标题",
+        "default": "自定义组件",
+        "x-decorator": "FormItem",
+        "x-component": "Input"
+      },
+      "count": {
+        "type": "number",
+        "title": "计数",
+        "default": 0,
+        "x-decorator": "FormItem",
+        "x-component": "NumberPicker"
+      },
+      "disabled": {
+        "type": "boolean",
+        "title": "是否禁用",
+        "default": false,
+        "x-decorator": "FormItem",
+        "x-component": "Switch"
+      },
+      "type": {
+        "type": "string",
+        "title": "类型",
+        "default": "primary",
+        "x-decorator": "FormItem",
+        "x-component": "Select",
+        "enum": [
+          { "label": "主要", "value": "primary" },
+          { "label": "默认", "value": "default" },
+          { "label": "虚线", "value": "dashed" },
+          { "label": "链接", "value": "link" },
+          { "label": "文本", "value": "text" }
+        ]
+      },
+      "visible": {
+        "type": "boolean",
+        "title": "是否显示",
+        "default": true,
+        "x-decorator": "FormItem",
+        "x-component": "Switch"
+      }
+    }
+  },
+
+  "eventSchema": {
+    "onClick": {
+      "type": "object",
+      "title": "点击事件",
+      "properties": {
+        "timestamp": {
+          "type": "number",
+          "description": "点击时间戳"
+        },
+        "value": {
+          "type": "any",
+          "description": "组件当前值"
+        }
+      }
+    },
+    "onChange": {
+      "type": "object",
+      "title": "值变化事件",
+      "properties": {
+        "oldValue": {
+          "type": "any",
+          "description": "旧值"
+        },
+        "newValue": {
+          "type": "any",
+          "description": "新值"
+        }
+      }
+    }
+  },
+
+  "exposedEvents": ["onClick", "onChange"],
+
+  "defaultProps": {
+    "title": "自定义组件",
+    "count": 0,
+    "disabled": false,
+    "type": "primary",
+    "visible": true
+  },
+
+  "defaultStyle": {
+    "padding": 16,
+    "margin": 8,
+    "minHeight": 80
+  }
+}

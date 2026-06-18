@@ -634,3 +634,51 @@ CREATE TABLE IF NOT EXISTS sys_app_install (
     KEY idx_user_id (user_id),
     KEY idx_has_update (has_update)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应用安装关联表';
+
+CREATE TABLE IF NOT EXISTS sys_custom_component (
+    id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    component_type VARCHAR(50) NOT NULL COMMENT '组件类型（唯一标识）',
+    component_name VARCHAR(100) NOT NULL COMMENT '组件名称',
+    component_category VARCHAR(50) NOT NULL COMMENT '组件分类 基础 表单 布局 图表 业务 自定义',
+    icon VARCHAR(255) COMMENT '组件图标',
+    description VARCHAR(500) COMMENT '组件描述',
+    author VARCHAR(50) COMMENT '作者',
+    current_version VARCHAR(20) DEFAULT '1.0.0' COMMENT '当前版本号',
+    is_system TINYINT DEFAULT 0 COMMENT '是否系统组件 0否 1是',
+    status TINYINT DEFAULT 1 COMMENT '状态 0禁用 1启用',
+    created_by BIGINT COMMENT '创建人',
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_by BIGINT COMMENT '更新人',
+    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    deleted TINYINT DEFAULT 0 COMMENT '删除标记 0未删除 1已删除',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_component_type (component_type),
+    KEY idx_category (component_category),
+    KEY idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='自定义组件表';
+
+CREATE TABLE IF NOT EXISTS sys_custom_component_version (
+    id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    component_id BIGINT NOT NULL COMMENT '组件ID',
+    version VARCHAR(20) NOT NULL COMMENT '版本号（如1.0.0）',
+    change_log VARCHAR(500) COMMENT '版本更新说明',
+    package_path VARCHAR(500) NOT NULL COMMENT 'MinIO包路径',
+    package_size BIGINT COMMENT '包大小（字节）',
+    main_file VARCHAR(100) COMMENT '主入口文件',
+    prop_schema TEXT COMMENT '属性定义JSON Schema',
+    event_schema TEXT COMMENT '事件定义JSON Schema',
+    exposed_events TEXT COMMENT '暴露的事件JSON数组',
+    default_props TEXT COMMENT '默认属性JSON',
+    default_style TEXT COMMENT '默认样式JSON',
+    is_deprecated TINYINT DEFAULT 0 COMMENT '是否已废弃 0否 1是',
+    status TINYINT DEFAULT 1 COMMENT '状态 0历史 1当前',
+    created_by BIGINT COMMENT '创建人',
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_by BIGINT COMMENT '更新人',
+    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    deleted TINYINT DEFAULT 0 COMMENT '删除标记 0未删除 1已删除',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_component_version (component_id, version),
+    KEY idx_component_id (component_id),
+    KEY idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='自定义组件版本表';

@@ -71,3 +71,83 @@ export const componentApi = {
   update: (data: ComponentLibrary) => request.put<ComponentLibrary>('/component', data),
   delete: (id: number) => request.delete(`/component/${id}`),
 }
+
+export interface CustomComponentVersion {
+  id?: number
+  componentId: number
+  version: string
+  changeLog?: string
+  packagePath: string
+  packageSize?: number
+  mainFile?: string
+  propSchema?: string
+  eventSchema?: string
+  exposedEvents?: string
+  defaultProps?: string
+  defaultStyle?: string
+  isDeprecated?: number
+  status?: number
+  createdTime?: string
+}
+
+export interface CustomComponent {
+  id?: number
+  componentType: string
+  componentName: string
+  componentCategory: string
+  icon?: string
+  description?: string
+  author?: string
+  currentVersion: string
+  isSystem?: number
+  status?: number
+  versions?: CustomComponentVersion[]
+  currentVersionInfo?: CustomComponentVersion
+  packageUrl?: string
+}
+
+export interface CustomComponentUploadDTO {
+  componentType: string
+  componentName: string
+  componentCategory: string
+  icon?: string
+  description?: string
+  author?: string
+  version: string
+  changeLog?: string
+  file: File
+}
+
+export interface CustomComponentVersionUpdateDTO {
+  componentId: number
+  version: string
+  changeLog?: string
+  file: File
+}
+
+export const customComponentApi = {
+  upload: (data: FormData) =>
+    request.post<CustomComponent>('/custom-component/upload', data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  updateVersion: (data: FormData) =>
+    request.post<CustomComponent>('/custom-component/version', data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  page: (current = 1, size = 10, category?: string, keyword?: string) =>
+    request.get(`/custom-component/page`, { params: { current, size, category, keyword } }),
+  tree: () => request.get<Record<string, CustomComponent[]>>('/custom-component/tree'),
+  get: (id: number) => request.get<CustomComponent>(`/custom-component/${id}`),
+  getByType: (componentType: string) =>
+    request.get<CustomComponent>(`/custom-component/type/${componentType}`),
+  getBundleUrl: (id: number, version?: string) =>
+    request.get<string>(`/custom-component/${id}/bundle-url`, { params: { version } }),
+  download: (componentType: string, version?: string) =>
+    request.get(`/custom-component/download/${componentType}`, {
+      params: { version },
+      responseType: 'blob',
+    }),
+  delete: (id: number) => request.delete(`/custom-component/${id}`),
+  deprecateVersion: (versionId: number) =>
+    request.put(`/custom-component/version/${versionId}/deprecate`),
+}

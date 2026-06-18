@@ -12,6 +12,8 @@ import WorkflowDesigner from '@/pages/workflow/Designer'
 import DataSourceList from '@/pages/dataSource/List'
 import AppList from '@/pages/app/List'
 import TemplateMarket from '@/pages/template/Market'
+import ComponentList from '@/pages/component/List'
+import ComponentDebugger from '@/pages/component/Debugger'
 import Login from '@/pages/Login'
 
 const routes = [
@@ -89,6 +91,19 @@ const routes = [
           {
             path: 'designer',
             element: <PageDesigner />,
+          },
+        ],
+      },
+      {
+        path: 'component',
+        children: [
+          {
+            path: '',
+            element: <ComponentList />,
+          },
+          {
+            path: 'debugger',
+            element: <ComponentDebugger />,
           },
         ],
       },
