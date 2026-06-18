@@ -41,7 +41,7 @@ spring:
         - id: lowcode-generator
           uri: lb://lowcode-generator
           predicates:
-            - Path=/api/app/**
+            - Path=/api/app/**,/api/template/**
       globalcors:
         corsConfigurations:
           '[/**]':

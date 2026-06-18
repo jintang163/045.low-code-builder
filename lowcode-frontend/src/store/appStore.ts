@@ -1,8 +1,9 @@
 import { create } from 'zustand'
+import { AppInfo } from '@/api'
 
 interface AppState {
-  currentApp: { id: number; name: string } | null
-  setCurrentApp: (app: { id: number; name: string } | null) => void
+  currentApp: AppInfo | null
+  setCurrentApp: (app: AppInfo | null) => void
   collapsed: boolean
   setCollapsed: (collapsed: boolean) => void
   userInfo: any

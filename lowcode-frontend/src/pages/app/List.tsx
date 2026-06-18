@@ -82,7 +82,7 @@ const AppList: React.FC = () => {
   }
 
   const handleSelectApp = (app: AppInfo) => {
-    setCurrentApp({ id: app.id!, name: app.appName })
+    setCurrentApp(app)
     message.success(`已切换到应用: ${app.appName}`)
   }
 

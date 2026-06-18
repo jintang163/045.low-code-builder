@@ -11,6 +11,7 @@ import WorkflowList from '@/pages/workflow/List'
 import WorkflowDesigner from '@/pages/workflow/Designer'
 import DataSourceList from '@/pages/dataSource/List'
 import AppList from '@/pages/app/List'
+import TemplateMarket from '@/pages/template/Market'
 import Login from '@/pages/Login'
 
 const routes = [
@@ -36,6 +37,15 @@ const routes = [
           {
             path: '',
             element: <AppList />,
+          },
+        ],
+      },
+      {
+        path: 'template',
+        children: [
+          {
+            path: '',
+            element: <TemplateMarket />,
           },
         ],
       },

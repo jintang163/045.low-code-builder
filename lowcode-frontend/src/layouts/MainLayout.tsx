@@ -12,6 +12,7 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   LogoutOutlined,
+  ShopOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAppStore } from '@/store/appStore'
@@ -34,6 +35,11 @@ const MainLayout: React.FC = ({ children }: { children?: React.ReactNode }) => {
       key: '/app',
       icon: <AppstoreOutlined />,
       label: '应用管理',
+    },
+    {
+      key: '/template',
+      icon: <ShopOutlined />,
+      label: '模板市场',
     },
     {
       key: '/dataSource',
@@ -98,6 +104,7 @@ const MainLayout: React.FC = ({ children }: { children?: React.ReactNode }) => {
     const pathMap: Record<string, string> = {
       '/dashboard': '仪表盘',
       '/app': '应用管理',
+      '/template': '模板市场',
       '/dataSource': '数据源',
       '/dataModel': '数据模型',
       '/dataModel/designer': '模型设计器',
@@ -174,7 +181,7 @@ const MainLayout: React.FC = ({ children }: { children?: React.ReactNode }) => {
           <Space>
             {currentApp && (
               <span style={{ color: '#1677ff', fontWeight: 500 }}>
-                当前应用: {currentApp.name}
+                当前应用: {currentApp.appName}
               </span>
             )}
             <Dropdown menu={userMenu}>

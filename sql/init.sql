@@ -348,6 +348,36 @@ CREATE TABLE IF NOT EXISTS sys_app_deploy (
     KEY idx_deploy_version (app_id, deploy_version)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应用部署表';
 
+CREATE TABLE IF NOT EXISTS sys_app_template (
+    id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    template_name VARCHAR(100) NOT NULL COMMENT '模板名称',
+    template_code VARCHAR(50) NOT NULL COMMENT '模板编码',
+    template_desc VARCHAR(500) COMMENT '模板描述',
+    icon VARCHAR(255) COMMENT '模板图标',
+    category VARCHAR(50) COMMENT '分类 oa/crm/inventory/business/system/other',
+    tags VARCHAR(255) COMMENT '标签，逗号分隔',
+    version VARCHAR(20) DEFAULT '1.0.0' COMMENT '版本号',
+    install_count INT DEFAULT 0 COMMENT '安装次数',
+    star_count INT DEFAULT 0 COMMENT '收藏/点赞数',
+    screenshot VARCHAR(500) COMMENT '截图URL，逗号分隔',
+    template_data LONGTEXT COMMENT '模板数据JSON（包含模型/页面/逻辑等完整快照）',
+    template_type TINYINT DEFAULT 1 COMMENT '模板类型 0官方 1用户 2团队',
+    publisher VARCHAR(50) COMMENT '发布者名称',
+    publisher_id BIGINT COMMENT '发布者ID',
+    status TINYINT DEFAULT 0 COMMENT '状态 0草稿 1已发布 2已下架',
+    publish_time DATETIME COMMENT '发布时间',
+    created_by BIGINT COMMENT '创建人',
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_by BIGINT COMMENT '更新人',
+    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    deleted TINYINT DEFAULT 0 COMMENT '删除标记 0未删除 1已删除',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_template_code (template_code),
+    KEY idx_category (category),
+    KEY idx_template_type (template_type),
+    KEY idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应用模板表';
+
 INSERT INTO sys_component_library (component_type, component_name, component_category, icon, description, default_props, default_style, prop_schema) VALUES
 ('Input', '输入框', '表单', 'FormOutlined', '文本输入框', '{"placeholder":"请输入","maxLength":100}', '{"width":"100%"}', '{}'),
 ('TextArea', '多行文本', '表单', 'FormOutlined', '多行文本输入框', '{"placeholder":"请输入","rows":4}', '{"width":"100%"}', '{}'),
