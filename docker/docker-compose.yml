@@ -89,79 +89,6 @@ services:
     networks:
       - lowcode-network
 
-  lowcode-model:
-    build:
-      context: ../
-      dockerfile: docker/lowcode-model/Dockerfile
-    container_name: lowcode-model
-    ports:
-      - "8081:8081"
-    environment:
-      SPRING_PROFILES_ACTIVE: docker
-      NACOS_SERVER_ADDR: nacos:8848
-    depends_on:
-      - nacos
-      - redis
-      - mysql
-    restart: unless-stopped
-    networks:
-      - lowcode-network
-
-  lowcode-page:
-    build:
-      context: ../
-      dockerfile: docker/lowcode-page/Dockerfile
-    container_name: lowcode-page
-    ports:
-      - "8082:8082"
-    environment:
-      SPRING_PROFILES_ACTIVE: docker
-      NACOS_SERVER_ADDR: nacos:8848
-    depends_on:
-      - nacos
-      - redis
-      - mysql
-    restart: unless-stopped
-    networks:
-      - lowcode-network
-
-  lowcode-flow:
-    build:
-      context: ../
-      dockerfile: docker/lowcode-flow/Dockerfile
-    container_name: lowcode-flow
-    ports:
-      - "8083:8083"
-    environment:
-      SPRING_PROFILES_ACTIVE: docker
-      NACOS_SERVER_ADDR: nacos:8848
-    depends_on:
-      - nacos
-      - redis
-      - mysql
-    restart: unless-stopped
-    networks:
-      - lowcode-network
-
-  lowcode-oss:
-    build:
-      context: ../
-      dockerfile: docker/lowcode-oss/Dockerfile
-    container_name: lowcode-oss
-    ports:
-      - "8084:8084"
-    environment:
-      SPRING_PROFILES_ACTIVE: docker
-      NACOS_SERVER_ADDR: nacos:8848
-    depends_on:
-      - nacos
-      - redis
-      - mysql
-      - minio
-    restart: unless-stopped
-    networks:
-      - lowcode-network
-
   lowcode-auth:
     build:
       context: ../
@@ -180,13 +107,86 @@ services:
     networks:
       - lowcode-network
 
+  lowcode-model:
+    build:
+      context: ../
+      dockerfile: docker/lowcode-model/Dockerfile
+    container_name: lowcode-model
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      NACOS_SERVER_ADDR: nacos:8848
+    depends_on:
+      - nacos
+      - redis
+      - mysql
+    restart: unless-stopped
+    networks:
+      - lowcode-network
+
+  lowcode-page:
+    build:
+      context: ../
+      dockerfile: docker/lowcode-page/Dockerfile
+    container_name: lowcode-page
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      NACOS_SERVER_ADDR: nacos:8848
+    depends_on:
+      - nacos
+      - redis
+      - mysql
+    restart: unless-stopped
+    networks:
+      - lowcode-network
+
+  lowcode-flow:
+    build:
+      context: ../
+      dockerfile: docker/lowcode-flow/Dockerfile
+    container_name: lowcode-flow
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      NACOS_SERVER_ADDR: nacos:8848
+    depends_on:
+      - nacos
+      - redis
+      - mysql
+    restart: unless-stopped
+    networks:
+      - lowcode-network
+
+  lowcode-oss:
+    build:
+      context: ../
+      dockerfile: docker/lowcode-oss/Dockerfile
+    container_name: lowcode-oss
+    ports:
+      - "8085:8085"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      NACOS_SERVER_ADDR: nacos:8848
+    depends_on:
+      - nacos
+      - redis
+      - mysql
+      - minio
+    restart: unless-stopped
+    networks:
+      - lowcode-network
+
   lowcode-generator:
     build:
       context: ../
       dockerfile: docker/lowcode-generator/Dockerfile
     container_name: lowcode-generator
     ports:
-      - "8085:8085"
+      - "8086:8086"
     environment:
       SPRING_PROFILES_ACTIVE: docker
       NACOS_SERVER_ADDR: nacos:8848

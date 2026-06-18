@@ -61,13 +61,13 @@ export const pageApi = {
 }
 
 export const componentApi = {
-  tree: () => request.get<Record<string, ComponentLibrary[]>>('/componentLibrary/tree'),
+  tree: () => request.get<Record<string, ComponentLibrary[]>>('/component/tree'),
   list: (category?: string) =>
-    request.get<ComponentLibrary[]>('/componentLibrary/list', { params: { category } }),
+    request.get<ComponentLibrary[]>('/component/list', { params: { category } }),
   page: (category?: string, current = 1, size = 10) =>
-    request.get(`/componentLibrary/page`, { params: { category, current, size } }),
-  get: (id: number) => request.get<ComponentLibrary>(`/componentLibrary/${id}`),
-  save: (data: ComponentLibrary) => request.post<ComponentLibrary>('/componentLibrary', data),
-  update: (data: ComponentLibrary) => request.put<ComponentLibrary>('/componentLibrary', data),
-  delete: (id: number) => request.delete(`/componentLibrary/${id}`),
+    request.get(`/component/page`, { params: { category, current, size } }),
+  get: (id: number) => request.get<ComponentLibrary>(`/component/${id}`),
+  save: (data: ComponentLibrary) => request.post<ComponentLibrary>('/component', data),
+  update: (data: ComponentLibrary) => request.put<ComponentLibrary>('/component', data),
+  delete: (id: number) => request.delete(`/component/${id}`),
 }

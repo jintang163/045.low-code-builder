@@ -12,7 +12,7 @@ import java.util.List;
 
 @Api(tags = "模型关联管理")
 @RestController
-@RequestMapping("/modelRelation")
+@RequestMapping("/api/relation")
 public class ModelRelationController {
 
     @Autowired

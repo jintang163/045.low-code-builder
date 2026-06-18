@@ -41,7 +41,7 @@ oss:
     bucketName: lowcode-1250000000
 
 server:
-  port: 8084
+  port: 8085
 
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml

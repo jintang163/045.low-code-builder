@@ -15,7 +15,7 @@ import java.util.Map;
 
 @Api(tags = "工作流管理")
 @RestController
-@RequestMapping("/workflow")
+@RequestMapping("/api/workflow")
 public class WorkflowController {
 
     @Autowired

@@ -15,7 +15,7 @@ import java.util.Map;
 
 @Api(tags = "业务逻辑编排")
 @RestController
-@RequestMapping("/businessLogic")
+@RequestMapping("/api/logic")
 public class BusinessLogicController {
 
     @Autowired

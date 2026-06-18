@@ -15,7 +15,7 @@ import java.util.List;
 
 @Api(tags = "代码生成")
 @RestController
-@RequestMapping("/codeGenerator")
+@RequestMapping("/api/generator/code")
 public class CodeGeneratorController {
 
     @Autowired

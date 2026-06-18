@@ -371,18 +371,16 @@ const WorkflowDesigner: React.FC = () => {
     if (!id || id === 'undefined') {
       setWorkflow({
         appId: currentApp?.id || 1,
-        workflowName: '',
-        workflowCode: '',
-        description: '',
-        status: 'DRAFT',
+        processName: '',
+        processKey: '',
+        processDesc: '',
+        status: 0,
         version: 1,
-        category: 'default',
       })
       form.setFieldsValue({
-        workflowName: '',
-        workflowCode: '',
-        description: '',
-        category: 'default',
+        processName: '',
+        processKey: '',
+        processDesc: '',
       })
       setNodes([])
       setEdges([])
@@ -1148,21 +1146,13 @@ const WorkflowDesigner: React.FC = () => {
               返回
             </Button>
             <Form form={form} layout="inline">
-              <Form.Item name="workflowName" label="流程名称" rules={[{ required: true }]}>
+              <Form.Item name="processName" label="流程名称" rules={[{ required: true }]}>
                 <Input placeholder="请输入流程名称" style={{ width: 180 }} />
               </Form.Item>
-              <Form.Item name="workflowCode" label="流程编码" rules={[{ required: true }]}>
+              <Form.Item name="processKey" label="流程编码" rules={[{ required: true }]}>
                 <Input placeholder="请输入流程编码" style={{ width: 150 }} />
               </Form.Item>
-              <Form.Item name="category" label="流程分类">
-                <Select style={{ width: 120 }}>
-                  <Option value="default">默认分类</Option>
-                  <Option value="approval">审批流程</Option>
-                  <Option value="business">业务流程</Option>
-                  <Option value="system">系统流程</Option>
-                </Select>
-              </Form.Item>
-              <Form.Item name="description" label="描述">
+              <Form.Item name="processDesc" label="描述">
                 <Input placeholder="流程描述" style={{ width: 200 }} />
               </Form.Item>
             </Form>

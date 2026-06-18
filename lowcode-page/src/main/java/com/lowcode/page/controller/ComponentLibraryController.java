@@ -15,7 +15,7 @@ import java.util.Map;
 
 @Api(tags = "组件库管理")
 @RestController
-@RequestMapping("/componentLibrary")
+@RequestMapping("/api/component")
 public class ComponentLibraryController {
 
     @Autowired

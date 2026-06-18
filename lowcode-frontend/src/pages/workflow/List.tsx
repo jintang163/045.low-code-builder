@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { Table, Button, Space, Tag, Modal, Form, Input, Select, message, Popconfirm } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined, CloudUploadOutlined } from '@ant-design/icons'
+import { Table, Button, Space, Tag, Modal, Form, Input, message, Popconfirm, Card } from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined, CloudUploadOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { WorkflowDefinition, workflowApi } from '@/api/flow'
 import { useAppStore } from '@/store/appStore'
@@ -83,16 +83,16 @@ const WorkflowList: React.FC = () => {
   }
 
   const columns = [
-    { title: '流程名称', dataIndex: 'workflowName', key: 'workflowName' },
-    { title: '流程编码', dataIndex: 'workflowCode', key: 'workflowCode' },
-    { title: '分类', dataIndex: 'category', key: 'category' },
+    { title: '流程名称', dataIndex: 'processName', key: 'processName' },
+    { title: '流程编码', dataIndex: 'processKey', key: 'processKey' },
+    { title: '描述', dataIndex: 'processDesc', key: 'processDesc' },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      render: (status: string) => (
-        <Tag color={status === 'DEPLOYED' ? 'green' : 'orange'}>
-          {status === 'DEPLOYED' ? '已部署' : '草稿'}
+      render: (status: number) => (
+        <Tag color={status === 1 ? 'green' : 'orange'}>
+          {status === 1 ? '已部署' : '草稿'}
         </Tag>
       ),
     },
@@ -144,31 +144,20 @@ const WorkflowList: React.FC = () => {
       >
         <Form form={form} layout="vertical">
           <Form.Item
-            name="workflowName"
+            name="processName"
             label="流程名称"
             rules={[{ required: true, message: '请输入流程名称' }]}
           >
             <Input placeholder="请输入流程名称" />
           </Form.Item>
           <Form.Item
-            name="workflowCode"
+            name="processKey"
             label="流程编码"
             rules={[{ required: true, message: '请输入流程编码' }]}
           >
             <Input placeholder="请输入流程编码" />
           </Form.Item>
-          <Form.Item
-            name="category"
-            label="分类"
-            rules={[{ required: true, message: '请选择分类' }]}
-          >
-            <Select>
-              <Select.Option value="APPROVAL">审批流程</Select.Option>
-              <Select.Option value="BUSINESS">业务流程</Select.Option>
-              <Select.Option value="AUTO">自动化流程</Select.Option>
-            </Select>
-          </Form.Item>
-          <Form.Item name="description" label="描述">
+          <Form.Item name="processDesc" label="描述">
             <Input.TextArea rows={3} placeholder="请输入描述" />
           </Form.Item>
         </Form>

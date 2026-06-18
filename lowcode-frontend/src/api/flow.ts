@@ -44,28 +44,52 @@ export interface LogicEdge {
 export interface WorkflowDefinition {
   id?: number
   appId: number
-  workflowName: string
-  workflowCode: string
-  description?: string
+  processName: string
+  processKey: string
+  processDesc?: string
   bpmnXml?: string
-  flowableDefinitionId?: string
+  flowGraph?: string
+  flowableProcessDefId?: string
   flowableDeploymentId?: string
   version?: number
-  status?: string
-  category?: string
+  status?: number
+  deployTime?: string
+  nodes?: WorkflowNode[]
+  edges?: WorkflowEdge[]
+}
+
+export interface WorkflowNode {
+  nodeId: string
+  nodeName: string
+  nodeType: string
+  nodeCategory: string
+  nodeConfig?: string
+  positionX?: number
+  positionY?: number
+  width?: number
+  height?: number
+}
+
+export interface WorkflowEdge {
+  edgeId: string
+  sourceNodeId: string
+  targetNodeId: string
+  sourcePort?: string
+  targetPort?: string
+  conditionExpression?: string
 }
 
 export const logicApi = {
-  list: (appId: number) => request.get<BusinessLogic[]>(`/businessLogic/list/${appId}`),
+  list: (appId: number) => request.get<BusinessLogic[]>(`/logic/list/${appId}`),
   page: (appId: number, current = 1, size = 10) =>
-    request.get(`/businessLogic/page`, { params: { appId, current, size } }),
-  get: (id: number) => request.get<BusinessLogic>(`/businessLogic/${id}`),
-  save: (data: BusinessLogic) => request.post<BusinessLogic>('/businessLogic', data),
-  update: (data: BusinessLogic) => request.put<BusinessLogic>('/businessLogic', data),
-  delete: (id: number) => request.delete(`/businessLogic/${id}`),
-  generateCode: (id: number) => request.get<string>(`/businessLogic/${id}/generateCode`),
-  publish: (id: number) => request.post<BusinessLogic>(`/businessLogic/${id}/publish`),
-  nodeTypes: () => request.get('/businessLogic/nodeTypes'),
+    request.get(`/logic/page`, { params: { appId, current, size } }),
+  get: (id: number) => request.get<BusinessLogic>(`/logic/${id}`),
+  save: (data: BusinessLogic) => request.post<BusinessLogic>('/logic', data),
+  update: (data: BusinessLogic) => request.put<BusinessLogic>('/logic', data),
+  delete: (id: number) => request.delete(`/logic/${id}`),
+  generateCode: (id: number) => request.get<string>(`/logic/${id}/generateCode`),
+  publish: (id: number) => request.post<BusinessLogic>(`/logic/${id}/publish`),
+  nodeTypes: () => request.get('/logic/nodeTypes'),
 }
 
 export const workflowApi = {
@@ -94,16 +118,16 @@ export const workflowApi = {
 
 export const debugApi = {
   start: (logicId: number, inputParams?: Record<string, any>) =>
-    request.post('/logicDebug/start', inputParams, { params: { logicId } }),
+    request.post('/debug/start', inputParams, { params: { logicId } }),
   stepForward: (sessionId: string) =>
-    request.post('/logicDebug/stepForward', null, { params: { sessionId } }),
+    request.post('/debug/stepForward', null, { params: { sessionId } }),
   status: (sessionId: string) =>
-    request.get('/logicDebug/status', { params: { sessionId } }),
+    request.get('/debug/status', { params: { sessionId } }),
   stop: (sessionId: string) =>
-    request.post('/logicDebug/stop', null, { params: { sessionId } }),
+    request.post('/debug/stop', null, { params: { sessionId } }),
   setBreakpoint: (sessionId: string, nodeId: string) =>
-    request.post('/logicDebug/breakpoint/set', null, { params: { sessionId, nodeId } }),
+    request.post('/debug/breakpoint/set', null, { params: { sessionId, nodeId } }),
   removeBreakpoint: (sessionId: string, nodeId: string) =>
-    request.post('/logicDebug/breakpoint/remove', null, { params: { sessionId, nodeId } }),
-  history: (logicId: number) => request.get(`/logicDebug/history/${logicId}`),
+    request.post('/debug/breakpoint/remove', null, { params: { sessionId, nodeId } }),
+  history: (logicId: number) => request.get(`/debug/history/${logicId}`),
 }

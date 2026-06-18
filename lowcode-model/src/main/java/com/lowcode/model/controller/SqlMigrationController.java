@@ -12,7 +12,7 @@ import java.util.List;
 
 @Api(tags = "SQL迁移管理")
 @RestController
-@RequestMapping("/sqlMigration")
+@RequestMapping("/api/migration")
 public class SqlMigrationController {
 
     @Autowired

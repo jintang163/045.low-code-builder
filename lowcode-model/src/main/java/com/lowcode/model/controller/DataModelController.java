@@ -16,7 +16,7 @@ import java.util.Map;
 
 @Api(tags = "数据模型管理")
 @RestController
-@RequestMapping("/dataModel")
+@RequestMapping("/api/model")
 public class DataModelController {
 
     @Autowired

@@ -14,7 +14,7 @@ import java.util.Map;
 
 @Api(tags = "页面管理")
 @RestController
-@RequestMapping("/page")
+@RequestMapping("/api/page")
 public class PageController {
 
     @Autowired

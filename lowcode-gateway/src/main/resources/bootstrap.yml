@@ -25,7 +25,7 @@ spring:
         - id: lowcode-model
           uri: lb://lowcode-model
           predicates:
-            - Path=/api/model/**,/api/datasource/**,/api/generator/**,/api/migration/**,/api/relation/**
+            - Path=/api/model/**,/api/datasource/**,/api/migration/**,/api/relation/**,/api/generator/code/**
         - id: lowcode-page
           uri: lb://lowcode-page
           predicates:
@@ -38,6 +38,10 @@ spring:
           uri: lb://lowcode-oss
           predicates:
             - Path=/api/oss/**
+        - id: lowcode-generator
+          uri: lb://lowcode-generator
+          predicates:
+            - Path=/api/app/**
       globalcors:
         corsConfigurations:
           '[/**]':

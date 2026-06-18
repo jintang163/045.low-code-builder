@@ -14,7 +14,7 @@ import java.util.List;
 
 @Api(tags = "数据源管理")
 @RestController
-@RequestMapping("/dataSource")
+@RequestMapping("/api/datasource")
 public class DataSourceController {
 
     @Autowired

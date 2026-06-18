@@ -2,18 +2,29 @@ import React from 'react'
 import { Form, Input, Button, Card, message } from 'antd'
 import { UserOutlined, LockOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
+import { authApi, LoginDTO } from '@/api'
 
 const Login: React.FC = () => {
   const navigate = useNavigate()
   const [form] = Form.useForm()
+  const [loading, setLoading] = React.useState(false)
 
-  const onFinish = (values: any) => {
-    if (values.username === 'admin' && values.password === 'admin123') {
-      localStorage.setItem('token', 'mock-token-' + Date.now())
-      message.success('登录成功')
-      navigate('/dashboard')
-    } else {
-      message.error('用户名或密码错误 (admin / admin123)')
+  const onFinish = async (values: LoginDTO) => {
+    try {
+      setLoading(true)
+      const res: any = await authApi.login(values)
+      if (res.code === 0 || res.code === 200) {
+        const data = res.data
+        localStorage.setItem('token', data.token)
+        localStorage.setItem('userInfo', JSON.stringify(data.userInfo))
+        message.success('登录成功')
+        navigate('/dashboard')
+      }
+    } catch (e: any) {
+      console.error(e)
+      message.error(e.message || '登录失败，请检查用户名和密码')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -44,7 +55,7 @@ const Login: React.FC = () => {
           >
             <Input
               prefix={<UserOutlined />}
-              placeholder="用户名"
+              placeholder="用户名 (admin)"
               size="large"
               autoComplete="username"
             />
@@ -55,17 +66,20 @@ const Login: React.FC = () => {
           >
             <Input.Password
               prefix={<LockOutlined />}
-              placeholder="密码"
+              placeholder="密码 (123456)"
               size="large"
               autoComplete="current-password"
             />
           </Form.Item>
           <Form.Item>
-            <Button type="primary" htmlType="submit" size="large" block>
+            <Button type="primary" htmlType="submit" size="large" block loading={loading}>
               登录
             </Button>
           </Form.Item>
         </Form>
+        <div style={{ textAlign: 'center', color: '#999', fontSize: 12 }}>
+          默认账号: admin / 123456
+        </div>
       </Card>
     </div>
   )

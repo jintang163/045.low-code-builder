@@ -13,7 +13,7 @@ import java.util.Map;
 
 @Api(tags = "逻辑调试")
 @RestController
-@RequestMapping("/logicDebug")
+@RequestMapping("/api/debug")
 public class LogicDebugController {
 
     @Autowired
