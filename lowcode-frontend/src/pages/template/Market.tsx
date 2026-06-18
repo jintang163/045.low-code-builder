@@ -19,7 +19,10 @@ import {
   Badge,
   Spin,
   Upload,
-  Tooltip
+  Tooltip,
+  List,
+  Select,
+  Alert
 } from 'antd'
 import {
   SearchOutlined,
@@ -31,10 +34,12 @@ import {
   ExportOutlined,
   PlusOutlined,
   RocketOutlined,
-  ShareAltOutlined
+  ShareAltOutlined,
+  HistoryOutlined,
+  ClockCircleOutlined
 } from '@ant-design/icons'
 import TemplateCard from '@/components/TemplateCard'
-import { AppTemplate, templateApi } from '@/api/template'
+import { AppTemplate, TemplateVersion, templateApi } from '@/api/template'
 import { useAppStore } from '@/store/appStore'
 import { useNavigate } from 'react-router-dom'
 import type { UploadProps } from 'antd'
@@ -52,12 +57,11 @@ const TemplateMarket: React.FC = () => {
   const [pageSize, setPageSize] = useState(12)
   const [keyword, setKeyword] = useState('')
   const [activeCategory, setActiveCategory] = useState<string>('')
-  const [categories, setCategories] = useState<{ key: string; name: string }[]>([])
+  const [categories, setCategories] = useState<string[]>([])
   const [stats, setStats] = useState<any>({})
 
-  const [installModalVisible, setInstallModalVisible] = useState(false)
+const [installModalVisible, setInstallModalVisible] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<AppTemplate | null>(null)
-  const [installForm] = Form.useForm()
   const [installing, setInstalling] = useState(false)
 
   const [detailVisible, setDetailVisible] = useState(false)
@@ -67,6 +71,10 @@ const TemplateMarket: React.FC = () => {
   const [publishModalVisible, setPublishModalVisible] = useState(false)
   const [publishForm] = Form.useForm()
   const [publishing, setPublishing] = useState(false)
+
+  const [versionModalVisible, setVersionModalVisible] = useState(false)
+  const [versionList, setVersionList] = useState<TemplateVersion[]>([])
+  const [versionLoading, setVersionLoading] = useState(false)
 
   useEffect(() => {
     loadCategories()
@@ -81,7 +89,7 @@ const TemplateMarket: React.FC = () => {
     try {
       const res = await templateApi.categories()
       if (res.code === 0 || res.code === 200) {
-        setCategories(res.data || [])
+        setCategories(res.data || ['全部'])
       }
     } catch (e) {
       console.error(e)
@@ -120,28 +128,40 @@ const TemplateMarket: React.FC = () => {
 
   const handleInstall = (template: AppTemplate) => {
     setSelectedTemplate(template)
-    installForm.setFieldsValue({
-      appName: template.templateName,
-      appCode: template.templateCode + '_' + Date.now().toString().slice(-6),
-    })
     setInstallModalVisible(true)
   }
 
   const handleInstallSubmit = async () => {
     if (!selectedTemplate) return
     try {
-      const values = await installForm.validateFields()
       setInstalling(true)
-      const res = await templateApi.install(selectedTemplate.id!, values)
+      const res: any = await templateApi.install(selectedTemplate.id!)
       if (res.code === 0 || res.code === 200) {
-        message.success(`安装成功！已创建应用：${values.appName}`)
+        const data = res.data || {}
+        message.success(`安装成功！已创建应用：${data.appName || selectedTemplate.templateName}`)
         setInstallModalVisible(false)
+        loadTemplates()
         navigate('/app')
       }
     } catch (e: any) {
       message.error(e.message || '安装失败')
     } finally {
       setInstalling(false)
+    }
+  }
+
+  const handleViewVersions = async (template: AppTemplate) => {
+    setVersionModalVisible(true)
+    setVersionLoading(true)
+    try {
+      const res: any = await templateApi.versions(template.id!)
+      if (res.code === 0 || res.code === 200) {
+        setVersionList(res.data || [])
+      }
+    } catch (e: any) {
+      message.error(e.message || '获取版本历史失败')
+    } finally {
+      setVersionLoading(false)
     }
   }
 
@@ -182,13 +202,13 @@ const TemplateMarket: React.FC = () => {
     try {
       const values = await publishForm.validateFields()
       setPublishing(true)
-      const res = await templateApi.publish({
+      const res: any = await templateApi.publish({
         appId: currentApp.id!,
         ...values,
-        templateType: 1,
       })
       if (res.code === 0 || res.code === 200) {
-        message.success('发布为模板成功！')
+        const data = res.data || {}
+        message.success(`${data.message || '发布为模板成功！'} ${data.version ? `版本：${data.version}` : ''}`)
         setPublishModalVisible(false)
         loadTemplates()
       }
@@ -232,9 +252,9 @@ const TemplateMarket: React.FC = () => {
     }
   }
 
-  const categoryTabs = categories.map(cat => ({
-    key: cat.key,
-    label: cat.name,
+  const categoryTabs = categories.map((cat, idx) => ({
+    key: idx === 0 ? '' : cat,
+    label: cat,
   }))
 
   const tagList = (tags?: string) => {
@@ -266,12 +286,17 @@ const TemplateMarket: React.FC = () => {
           <Space size={16}>
             <Statistic
               title={<span style={{ color: 'rgba(255,255,255,0.85)' }}>模板总数</span>}
-              value={stats.totalTemplates || 0}
+              value={stats.templateCount || 0}
               valueStyle={{ color: '#fff', fontSize: 24 }}
             />
             <Statistic
               title={<span style={{ color: 'rgba(255,255,255,0.85)' }}>累计安装</span>}
-              value={stats.totalInstalls || 0}
+              value={stats.installCount || 0}
+              valueStyle={{ color: '#fff', fontSize: 24 }}
+            />
+            <Statistic
+              title={<span style={{ color: 'rgba(255,255,255,0.85)' }}>应用总数</span>}
+              value={stats.appCount || 0}
               valueStyle={{ color: '#fff', fontSize: 24 }}
             />
           </Space>
@@ -386,37 +411,33 @@ const TemplateMarket: React.FC = () => {
         okText="立即安装"
         width={520}
       >
-        <Form form={installForm} layout="vertical">
-          <Form.Item
-            name="appName"
-            label="应用名称"
-            rules={[{ required: true, message: '请输入应用名称' }]}
-          >
-            <Input placeholder="请输入应用名称" />
-          </Form.Item>
-          <Form.Item
-            name="appCode"
-            label="应用编码"
-            rules={[{ required: true, message: '请输入应用编码' }]}
-          >
-            <Input placeholder="请输入应用编码" />
-          </Form.Item>
-          <div style={{
-            padding: '12px 16px',
-            background: '#e6f7ff',
-            border: '1px solid #91d5ff',
-            borderRadius: 6,
-            fontSize: 13,
-            color: '#0050b3'
-          }}>
-            <div style={{ fontWeight: 600, marginBottom: 6 }}>模板包含内容：</div>
-            <ul style={{ margin: 0, paddingLeft: 18 }}>
-              <li>预置数据模型（数据表+字段）</li>
-              <li>标准业务流程</li>
-              <li>预置角色权限</li>
-            </ul>
+        {selectedTemplate && (
+          <div>
+            <Alert
+              type="info"
+              showIcon
+              message={`将创建应用：${selectedTemplate.templateName}`}
+              description="系统将根据模板自动创建完整的应用，包括数据模型、页面、业务逻辑等，安装完成后可在应用管理中查看。"
+              style={{ marginBottom: 16 }}
+            />
+            <div style={{
+              padding: '12px 16px',
+              background: '#f6ffed',
+              border: '1px solid #b7eb8f',
+              borderRadius: 6,
+              fontSize: 13,
+              color: '#389e0d'
+            }}>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>模板包含内容：</div>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                <li>数据源配置</li>
+                <li>预置数据模型（数据表+字段）</li>
+                <li>基础页面配置（列表/表单/详情）</li>
+                <li>业务逻辑与工作流</li>
+              </ul>
+            </div>
           </div>
-        </Form>
+        )}
       </Modal>
 
       <Drawer
@@ -431,6 +452,12 @@ const TemplateMarket: React.FC = () => {
         onClose={() => setDetailVisible(false)}
         extra={
           <Space>
+            <Tooltip title="版本历史">
+              <Button
+                icon={<HistoryOutlined />}
+                onClick={() => detailTemplate && handleViewVersions(detailTemplate)}
+              />
+            </Tooltip>
             <Tooltip title="导出">
               <Button
                 icon={<ExportOutlined />}
@@ -602,14 +629,15 @@ const TemplateMarket: React.FC = () => {
                 label="分类"
                 rules={[{ required: true, message: '请选择分类' }]}
               >
-                <select style={{ width: '100%', height: 32, borderRadius: 6, border: '1px solid #d9d9d9' }}>
-                  <option value="oa">OA办公</option>
-                  <option value="crm">CRM客户</option>
-                  <option value="inventory">进销存</option>
-                  <option value="business">业务系统</option>
-                  <option value="system">系统工具</option>
-                  <option value="other">其他</option>
-                </select>
+                <Select placeholder="请选择分类">
+                  <Select.Option value="enterprise">企业管理</Select.Option>
+                  <Select.Option value="business">业务系统</Select.Option>
+                  <Select.Option value="retail">零售电商</Select.Option>
+                  <Select.Option value="finance">财务管理</Select.Option>
+                  <Select.Option value="education">教育培训</Select.Option>
+                  <Select.Option value="system">系统工具</Select.Option>
+                  <Select.Option value="other">其他</Select.Option>
+                </Select>
               </Form.Item>
             </Col>
             <Col span={12}>
@@ -623,6 +651,12 @@ const TemplateMarket: React.FC = () => {
             </Col>
           </Row>
           <Form.Item
+            name="changeLog"
+            label="更新说明"
+          >
+            <TextArea rows={2} placeholder="描述此版本的更新内容" />
+          </Form.Item>
+          <Form.Item
             name="tags"
             label="标签"
             extra="多个标签用逗号分隔"
@@ -630,6 +664,53 @@ const TemplateMarket: React.FC = () => {
             <Input placeholder="如：OA,审批,考勤" />
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        title={
+          <Space>
+            <HistoryOutlined style={{ color: '#722ed1' }} />
+            版本历史
+          </Space>
+        }
+        open={versionModalVisible}
+        onCancel={() => setVersionModalVisible(false)}
+        footer={null}
+        width={600}
+      >
+        <Spin spinning={versionLoading}>
+          {versionList.length > 0 ? (
+            <List
+              itemLayout="vertical"
+              dataSource={versionList}
+              renderItem={(item) => (
+                <List.Item key={item.id}>
+                  <List.Item.Meta
+                    title={
+                      <Space>
+                        <Tag color="blue">v{item.version}</Tag>
+                        <span style={{ color: '#8c8c8c', fontSize: 12 }}>
+                          <ClockCircleOutlined style={{ marginRight: 4 }} />
+                          {item.publishTime}
+                        </span>
+                      </Space>
+                    }
+                    description={
+                      <div style={{ color: '#595959', marginTop: 4 }}>
+                        {item.changeLog || '暂无更新说明'}
+                      </div>
+                    }
+                  />
+                </List.Item>
+              )}
+            />
+          ) : (
+            <div style={{ textAlign: 'center', padding: 40, color: '#8c8c8c' }}>
+              <HistoryOutlined style={{ fontSize: 32, marginBottom: 8 }} />
+              <p>暂无版本记录</p>
+            </div>
+          )}
+        </Spin>
       </Modal>
     </div>
   )

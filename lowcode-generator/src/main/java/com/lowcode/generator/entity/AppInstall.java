@@ -10,39 +10,33 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("sys_app")
-public class AppInfo implements Serializable {
+@TableName("sys_app_install")
+public class AppInstall implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    private String appName;
-
-    private String appCode;
-
-    private String appDesc;
-
-    private String icon;
-
-    private Integer status;
-
-    private String version;
-
-    private String deployConfig;
-
     private Long templateId;
 
     private String templateVersion;
 
-    private Long createdBy;
+    private Long appId;
 
-    private LocalDateTime createdTime;
+    private Long userId;
 
-    private Long updatedBy;
+    private LocalDateTime installTime;
 
-    private LocalDateTime updatedTime;
+    private LocalDateTime lastUpdateTime;
+
+    private String currentVersion;
+
+    private String latestVersion;
+
+    private Integer hasUpdate;
+
+    private String updateDiff;
 
     @TableLogic
     private Integer deleted;

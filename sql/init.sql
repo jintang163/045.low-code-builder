@@ -585,3 +585,52 @@ INSERT INTO sys_role_permission (role_id, permission_id) VALUES
 (1, 41), (1, 42), (1, 43), (1, 44), (1, 45),
 (2, 1), (2, 2), (2, 5), (2, 6), (2, 7), (2, 8), (2, 9), (2, 10), (2, 11), (2, 12), (2, 13), (2, 14), (2, 15), (2, 16),
 (3, 5), (3, 8), (3, 11), (3, 14);
+
+ALTER TABLE sys_app ADD COLUMN IF NOT EXISTS template_id BIGINT COMMENT '来源模板ID' AFTER version;
+ALTER TABLE sys_app ADD COLUMN IF NOT EXISTS template_version VARCHAR(20) COMMENT '模板版本号' AFTER template_id;
+ALTER TABLE sys_app ADD KEY IF NOT EXISTS idx_template_id (template_id);
+
+CREATE TABLE IF NOT EXISTS sys_template_version (
+    id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    template_id BIGINT NOT NULL COMMENT '模板ID',
+    version VARCHAR(20) NOT NULL COMMENT '版本号',
+    change_log VARCHAR(500) COMMENT '更新说明',
+    template_data LONGTEXT COMMENT '该版本模板数据快照',
+    md5 VARCHAR(32) COMMENT '模板数据MD5签名',
+    published_by BIGINT COMMENT '发布人ID',
+    publish_time DATETIME COMMENT '发布时间',
+    status TINYINT DEFAULT 1 COMMENT '状态 0历史 1当前',
+    created_by BIGINT COMMENT '创建人',
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_by BIGINT COMMENT '更新人',
+    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    deleted TINYINT DEFAULT 0 COMMENT '删除标记',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_template_version (template_id, version),
+    KEY idx_template_id (template_id),
+    KEY idx_publish_time (publish_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='模板版本历史表';
+
+CREATE TABLE IF NOT EXISTS sys_app_install (
+    id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    template_id BIGINT NOT NULL COMMENT '模板ID',
+    template_version VARCHAR(20) NOT NULL COMMENT '安装时模板版本',
+    app_id BIGINT NOT NULL COMMENT '安装生成的应用ID',
+    user_id BIGINT NOT NULL COMMENT '安装用户ID',
+    install_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '安装时间',
+    last_update_time DATETIME COMMENT '最后更新时间',
+    current_version VARCHAR(20) COMMENT '当前模板版本',
+    latest_version VARCHAR(20) COMMENT '最新模板版本',
+    has_update TINYINT DEFAULT 0 COMMENT '是否有更新 0否 1是',
+    update_diff TEXT COMMENT '更新差异JSON',
+    created_by BIGINT COMMENT '创建人',
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_by BIGINT COMMENT '更新人',
+    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    deleted TINYINT DEFAULT 0 COMMENT '删除标记',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_app_id (app_id),
+    KEY idx_template_id (template_id),
+    KEY idx_user_id (user_id),
+    KEY idx_has_update (has_update)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应用安装关联表';

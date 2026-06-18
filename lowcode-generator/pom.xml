@@ -20,6 +20,21 @@
             <version>1.0.0</version>
         </dependency>
         <dependency>
+            <groupId>com.lowcode</groupId>
+            <artifactId>lowcode-model</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.lowcode</groupId>
+            <artifactId>lowcode-page</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.lowcode</groupId>
+            <artifactId>lowcode-flow</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+        <dependency>
             <groupId>com.baomidou</groupId>
             <artifactId>mybatis-plus-generator</artifactId>
             <version>3.5.5</version>

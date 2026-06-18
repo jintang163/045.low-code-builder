@@ -1,11 +1,14 @@
 package com.lowcode.generator.controller;
 
+import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.lowcode.common.result.Result;
-import com.lowcode.generator.entity.AppInfo;
+import com.lowcode.common.util.UserContext;
 import com.lowcode.generator.entity.AppTemplate;
 import com.lowcode.generator.entity.TemplateData;
+import com.lowcode.generator.entity.TemplateVersion;
 import com.lowcode.generator.service.AppTemplateService;
+import com.lowcode.generator.service.TemplateUpgradeService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,23 +31,27 @@ public class AppTemplateController {
     @Autowired
     private AppTemplateService appTemplateService;
 
+    @Autowired
+    private TemplateUpgradeService upgradeService;
+
     @ApiOperation("分页查询模板")
     @GetMapping("/page")
     public Result<Page<AppTemplate>> getTemplatePage(
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "12") Integer size,
-            @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String category,
+            @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Integer templateType) {
-        return Result.success(appTemplateService.getTemplatePage(current, size, keyword, category, templateType));
+        return Result.success(appTemplateService.getTemplatePage(current, size, category, keyword, templateType));
     }
 
     @ApiOperation("获取模板列表")
     @GetMapping("/list")
     public Result<List<AppTemplate>> getTemplateList(
             @RequestParam(required = false) String category,
-            @RequestParam(required = false) Integer limit) {
-        return Result.success(appTemplateService.getTemplateList(category, limit));
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Integer templateType) {
+        return Result.success(appTemplateService.getTemplateList(category, keyword, templateType));
     }
 
     @ApiOperation("获取模板详情")
@@ -61,35 +68,23 @@ public class AppTemplateController {
 
     @ApiOperation("发布应用为模板")
     @PostMapping("/publish")
-    public Result<AppTemplate> publishAsTemplate(
-            @RequestParam Long appId,
-            @RequestParam String templateName,
-            @RequestParam String templateCode,
-            @RequestParam(required = false) String templateDesc,
-            @RequestParam(required = false) String icon,
-            @RequestParam(required = false) String category,
-            @RequestParam(required = false) String tags,
-            @RequestParam(defaultValue = "1.0.0") String version,
-            @RequestParam(defaultValue = "1") Integer templateType) {
-        return Result.success(appTemplateService.publishAsTemplate(
-                appId, templateName, templateCode, templateDesc, icon, category, tags, version, templateType));
+    public Result<Map<String, Object>> publishAsTemplate(@RequestBody Map<String, Object> params) {
+        return Result.success(appTemplateService.publishAsTemplate(params));
     }
 
     @ApiOperation("一键安装模板")
     @PostMapping("/{id}/install")
-    public Result<AppInfo> installTemplate(
-            @PathVariable Long id,
-            @RequestParam String appName,
-            @RequestParam String appCode,
-            @RequestParam(required = false) Long userId) {
-        return Result.success(appTemplateService.installTemplate(id, appName, appCode, userId));
+    public Result<Map<String, Object>> installTemplate(@PathVariable Long id) {
+        Long userId = UserContext.getCurrentUserId();
+        return Result.success(appTemplateService.installTemplate(id, userId));
     }
 
     @ApiOperation("导出模板")
     @GetMapping("/{id}/export")
     public ResponseEntity<byte[]> exportTemplate(@PathVariable Long id) {
         AppTemplate template = appTemplateService.getTemplateDetail(id);
-        byte[] data = appTemplateService.exportTemplate(id);
+        String jsonStr = appTemplateService.exportTemplate(id);
+        byte[] data = jsonStr.getBytes(StandardCharsets.UTF_8);
 
         String fileName = URLEncoder.encode(template.getTemplateCode() + "-template.json", StandardCharsets.UTF_8);
 
@@ -104,21 +99,22 @@ public class AppTemplateController {
 
     @ApiOperation("导入模板")
     @PostMapping("/import")
-    public Result<AppTemplate> importTemplate(@RequestParam("file") MultipartFile file) throws Exception {
-        return Result.success(appTemplateService.importTemplate(file.getBytes()));
+    public Result<Map<String, Object>> importTemplate(@RequestParam("file") MultipartFile file) throws Exception {
+        String templateJson = new String(file.getBytes(), StandardCharsets.UTF_8);
+        Long userId = UserContext.getCurrentUserId();
+        return Result.success(appTemplateService.importTemplate(templateJson, userId));
     }
 
     @ApiOperation("更新模板")
     @PutMapping
-    public Result<AppTemplate> updateTemplate(@RequestBody AppTemplate template) {
+    public Result<Boolean> updateTemplate(@RequestBody AppTemplate template) {
         return Result.success(appTemplateService.updateTemplate(template));
     }
 
     @ApiOperation("删除模板")
     @DeleteMapping("/{id}")
-    public Result<Void> deleteTemplate(@PathVariable Long id) {
-        appTemplateService.deleteTemplate(id);
-        return Result.success();
+    public Result<Boolean> deleteTemplate(@PathVariable Long id) {
+        return Result.success(appTemplateService.deleteTemplate(id));
     }
 
     @ApiOperation("获取模板统计数据")
@@ -136,16 +132,33 @@ public class AppTemplateController {
 
     @ApiOperation("获取模板分类列表")
     @GetMapping("/categories")
-    public Result<List<Map<String, String>>> getCategories() {
-        List<Map<String, String>> categories = List.of(
-                Map.of("key", "", "name", "全部"),
-                Map.of("key", "oa", "name", "OA办公"),
-                Map.of("key", "crm", "name", "CRM客户"),
-                Map.of("key", "inventory", "name", "进销存"),
-                Map.of("key", "business", "name", "业务系统"),
-                Map.of("key", "system", "name", "系统工具"),
-                Map.of("key", "other", "name", "其他")
-        );
-        return Result.success(categories);
+    public Result<List<String>> getCategories() {
+        return Result.success(appTemplateService.getCategoryList());
+    }
+
+    @ApiOperation("模板点赞/收藏")
+    @PostMapping("/{id}/star")
+    public Result<Boolean> starTemplate(@PathVariable Long id) {
+        return Result.success(appTemplateService.starTemplate(id));
+    }
+
+    @ApiOperation("获取模板版本历史")
+    @GetMapping("/{id}/versions")
+    public Result<List<TemplateVersion>> getTemplateVersions(@PathVariable Long id) {
+        return Result.success(upgradeService.getTemplateVersions(id));
+    }
+
+    @ApiOperation("检查应用是否有模板更新")
+    @GetMapping("/app/{appId}/check-update")
+    public Result<Map<String, Object>> checkUpdate(@PathVariable Long appId) {
+        return Result.success(upgradeService.checkUpdate(appId));
+    }
+
+    @ApiOperation("从模板更新应用")
+    @PostMapping("/app/{appId}/update")
+    public Result<Map<String, Object>> updateAppFromTemplate(
+            @PathVariable Long appId,
+            @RequestParam(defaultValue = "incremental") String updateMode) {
+        return Result.success(upgradeService.updateAppFromTemplate(appId, updateMode));
     }
 }

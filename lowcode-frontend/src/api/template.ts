@@ -24,6 +24,18 @@ export interface AppTemplate {
   updatedTime?: string
 }
 
+export interface TemplateVersion {
+  id?: number
+  templateId: number
+  version: string
+  changeLog?: string
+  templateData?: string
+  md5?: string
+  publishedBy?: number
+  publishTime?: string
+  status?: number
+}
+
 export interface TemplateData {
   dataSources?: any[]
   dataModels?: any[]
@@ -31,6 +43,27 @@ export interface TemplateData {
   businessLogics?: any[]
   workflows?: any[]
   components?: any[]
+}
+
+export interface UpdateCheckResult {
+  hasUpdate: number
+  currentVersion?: string
+  latestVersion?: string
+  templateId?: number
+  templateName?: string
+  message?: string
+  newerVersions?: TemplateVersion[]
+  changeLogs?: string[]
+  diff?: any
+}
+
+export interface UpdateResult {
+  message: string
+  updateMode: string
+  added?: number
+  updated?: number
+  skipped?: number
+  newVersion?: string
 }
 
 export const templateApi = {
@@ -61,17 +94,16 @@ export const templateApi = {
     templateName: string
     templateCode: string
     templateDesc?: string
-    icon?: string
     category?: string
     tags?: string
     version?: string
-    templateType?: number
+    changeLog?: string
   }) => {
-    return request.post('/template/publish', null, { params })
+    return request.post('/template/publish', params)
   },
 
-  install: (id: number, params: { appName: string; appCode: string; userId?: number }) => {
-    return request.post(`/template/${id}/install`, null, { params })
+  install: (id: number) => {
+    return request.post(`/template/${id}/install`)
   },
 
   export: (id: number) => {
@@ -104,5 +136,23 @@ export const templateApi = {
 
   categories: () => {
     return request.get('/template/categories')
+  },
+
+  star: (id: number) => {
+    return request.post(`/template/${id}/star`)
+  },
+
+  versions: (id: number) => {
+    return request.get(`/template/${id}/versions`)
+  },
+
+  checkUpdate: (appId: number) => {
+    return request.get(`/template/app/${appId}/check-update`)
+  },
+
+  updateApp: (appId: number, updateMode: 'incremental' | 'full') => {
+    return request.post(`/template/app/${appId}/update`, null, {
+      params: { updateMode }
+    })
   }
 }
