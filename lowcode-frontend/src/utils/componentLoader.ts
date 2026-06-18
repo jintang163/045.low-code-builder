@@ -20,6 +20,10 @@ interface LoadedComponent {
     defaultProps?: any
     defaultStyle?: any
   }
+  versionInfo?: {
+    version: string
+    deprecated?: boolean
+  }
 }
 
 const componentCache = new Map<string, LoadedComponent>()
@@ -41,9 +45,9 @@ export const loadCustomComponent = async (
 
   const loadPromise = (async () => {
     try {
-      const componentRes = await customComponentApi.getByType(componentType)
+      const componentRes = await customComponentApi.getByType(componentType, version)
       if (!componentRes.data) {
-        throw new Error(`Component ${componentType} not found`)
+        throw new Error(`Component ${componentType}@${version || 'latest'} not found`)
       }
 
       const componentConfig = componentRes.data
@@ -52,7 +56,7 @@ export const loadCustomComponent = async (
       if (!bundleUrl) {
         const urlRes = await customComponentApi.getBundleUrl(componentConfig.id!, version)
         if (!urlRes.data) {
-          throw new Error(`Failed to get bundle URL for ${componentType}`)
+          throw new Error(`Failed to get bundle URL for ${componentType}@${version || 'latest'}`)
         }
         return await loadComponentFromUrl(urlRes.data, componentConfig, cacheKey)
       }
@@ -109,6 +113,10 @@ const loadComponentFromUrl = async (
         exposedEvents: componentJson.exposedEvents || (versionInfo?.exposedEvents ? JSON.parse(versionInfo.exposedEvents) : []),
         defaultProps: componentJson.defaultProps || (versionInfo?.defaultProps ? JSON.parse(versionInfo.defaultProps) : {}),
         defaultStyle: componentJson.defaultStyle || (versionInfo?.defaultStyle ? JSON.parse(versionInfo.defaultStyle) : {}),
+      },
+      versionInfo: {
+        version: versionInfo?.version || '1.0.0',
+        deprecated: versionInfo?.isDeprecated === 1 || versionInfo?.deprecated === true,
       },
     }
 

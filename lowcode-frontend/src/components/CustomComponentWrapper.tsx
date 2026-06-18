@@ -1,21 +1,27 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Spin, Alert } from 'antd'
+import { Spin, Alert, message } from 'antd'
 import { loadCustomComponent, getComponentSchema } from '@/utils/componentLoader'
 import { PageComponent } from '@/api/page'
+import { executeComponentEvents } from '@/utils/eventExecutor'
 
 interface CustomComponentWrapperProps {
   component: PageComponent
   onEvent?: (eventName: string, data: any) => void
+  executeActions?: boolean
+  eventContext?: any
 }
 
 const CustomComponentWrapper: React.FC<CustomComponentWrapperProps> = ({
   component,
   onEvent,
+  executeActions = false,
+  eventContext,
 }) => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [LoadedComponent, setLoadedComponent] = useState<React.ComponentType<any> | null>(null)
   const [schema, setSchema] = useState<any>(null)
+  const [versionDeprecated, setVersionDeprecated] = useState(false)
   const componentRef = useRef<any>(null)
 
   useEffect(() => {
@@ -23,7 +29,17 @@ const CustomComponentWrapper: React.FC<CustomComponentWrapperProps> = ({
       try {
         setLoading(true)
         setError(null)
-        const result = await loadCustomComponent(component.componentType)
+        setVersionDeprecated(false)
+
+        const result = await loadCustomComponent(component.componentType, component.componentVersion)
+
+        if (result.versionInfo?.deprecated) {
+          setVersionDeprecated(true)
+          setError(`组件版本 ${component.componentVersion} 已被废弃`)
+          setLoading(false)
+          return
+        }
+
         setLoadedComponent(() => result.component)
         setSchema(result.schema)
       } catch (e: any) {
@@ -35,15 +51,24 @@ const CustomComponentWrapper: React.FC<CustomComponentWrapperProps> = ({
     }
 
     loadComponent()
-  }, [component.componentType])
+  }, [component.componentType, component.componentVersion])
 
   const handleEvent = useCallback(
-    (eventName: string, data: any) => {
+    async (eventName: string, data: any) => {
       if (onEvent) {
         onEvent(eventName, data)
       }
+
+      if (executeActions) {
+        await executeComponentEvents(
+          component.eventConfig,
+          eventName,
+          data,
+          eventContext
+        )
+      }
     },
-    [onEvent]
+    [onEvent, executeActions, component.eventConfig, eventContext]
   )
 
   const wrapEventHandlers = useCallback(

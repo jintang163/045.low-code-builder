@@ -135,6 +135,7 @@ const ComponentItem: React.FC<ComponentItemProps> = ({ component }) => {
       componentName: component.componentName,
       defaultProps,
       isCustom,
+      currentVersion: isCustom ? (component as CustomComponent).currentVersion : undefined,
     },
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
@@ -345,6 +346,7 @@ const PageDesigner: React.FC = () => {
   const [codeContent, setCodeContent] = useState('')
   const [componentLibrary, setComponentLibrary] = useState<Record<string, ComponentLibrary[]>>({})
   const [customComponents, setCustomComponents] = useState<Record<string, CustomComponent[]>>({})
+  const [customComponentSchemas, setCustomComponentSchemas] = useState<Record<string, any>>({})
   const [mergedComponentLibrary, setMergedComponentLibrary] = useState<Record<string, (ComponentLibrary | CustomComponent)[]>>({})
   const [expandedCategory, setExpandedCategory] = useState<string[]>(['basic', 'form', 'custom'])
   const [dataModels, setDataModels] = useState<any[]>([])
@@ -408,6 +410,20 @@ const PageDesigner: React.FC = () => {
         }
       })
       setMergedComponentLibrary(merged)
+
+      const schemas: Record<string, any> = {}
+      const allCustomComponents = Object.values(customRes.data || {}).flat()
+      await Promise.all(
+        allCustomComponents.map(async (comp: any) => {
+          try {
+            const result = await loadCustomComponent(comp.componentType, comp.currentVersion)
+            schemas[comp.componentType] = result.schema
+          } catch (e) {
+            console.error(`Failed to load schema for ${comp.componentType}:`, e)
+          }
+        })
+      )
+      setCustomComponentSchemas(schemas)
     } catch (e) {
       console.error(e)
     }
@@ -541,6 +557,7 @@ const PageDesigner: React.FC = () => {
       componentId: `comp_${Date.now()}`,
       componentName: item.componentName,
       componentType: item.componentType,
+      componentVersion: item.isCustom ? item.currentVersion : undefined,
       parentId: parentId,
       sortOrder: (page.components?.length || 0) + 1,
       propsConfig: item.defaultProps || '{}',
@@ -679,14 +696,27 @@ const PageDesigner: React.FC = () => {
 
   const CustomComponentPropsPanel: React.FC<{ componentType: string }> = ({ componentType }) => {
     const { schema, loading, error } = useCustomComponentSchema(componentType)
-    const [form] = Form.useForm()
+    const [formilyForm] = useState(() => createForm())
 
     useEffect(() => {
-      if (selectedComponent) {
+      if (selectedComponent && schema?.propSchema) {
         const props = selectedComponent.propsConfig ? JSON.parse(selectedComponent.propsConfig) : {}
-        form.setFieldsValue(props)
+        formilyForm.setInitialValues(props)
+        formilyForm.reset()
       }
-    }, [selectedComponent, schema])
+    }, [selectedComponent, schema, formilyForm])
+
+    const handleCustomPropsSave = async () => {
+      try {
+        await formilyForm.submit()
+        const values = formilyForm.getValues()
+        updateSelectedComponent({ propsConfig: JSON.stringify(values) })
+        message.success('属性更新成功')
+      } catch (e: any) {
+        console.error('Save props error:', e)
+        message.error('属性保存失败: ' + (e.message || e))
+      }
+    }
 
     if (loading) {
       return <div style={{ padding: 16, textAlign: 'center' }}><Spin size="small" /> 加载属性配置中...</div>
@@ -700,7 +730,6 @@ const PageDesigner: React.FC = () => {
       return <Alert type="info" message="该组件没有定义属性配置" showIcon />
     }
 
-    const formilyForm = createForm()
     const renderSchemaField = () => {
       try {
         return <SchemaField schema={schema.propSchema} />
@@ -713,7 +742,7 @@ const PageDesigner: React.FC = () => {
     return (
       <FormProvider form={formilyForm}>
         {renderSchemaField()}
-        <Button type="primary" block onClick={handlePropsChange} style={{ marginTop: 16 }}>
+        <Button type="primary" block onClick={handleCustomPropsSave} style={{ marginTop: 16 }}>
           保存属性
         </Button>
       </FormProvider>
@@ -994,10 +1023,28 @@ const PageDesigner: React.FC = () => {
     )
   }
 
-  const renderEventPanel = () => {
-    if (!selectedComponent) return null
+  const getAvailableEvents = () => {
+    if (!selectedComponent) return []
 
-    const eventTypes = [
+    const type = selectedComponent.componentType
+    const systemTypes = ['INPUT', 'TEXTAREA', 'NUMBER', 'SELECT', 'DATE', 'DATETIME', 'TIME', 'SWITCH', 'CHECKBOX', 'RADIO', 'UPLOAD', 'RICHTEXT', 'TABLE', 'BUTTON', 'LINK', 'IMAGE', 'TEXT', 'TITLE', 'ICON', 'DIVIDER', 'TABS', 'CARD', 'GRID', 'FLEX', 'MODAL', 'FORM', 'STEPS', 'TIMELINE', 'PROGRESS', 'RATE', 'SLIDER', 'LINECHART', 'BARCHART', 'PIECHART', 'AREACHART', 'SCATTERCHART', 'RADARCHART']
+
+    if (type && !systemTypes.includes(type)) {
+      const customSchema = customComponentSchemas[type]
+      if (customSchema?.exposedEvents && customSchema.exposedEvents.length > 0) {
+        return customSchema.exposedEvents.map((eventName: string) => ({
+          value: eventName,
+          label: customSchema.eventSchema?.[eventName]?.title || eventName,
+          icon: customSchema.eventSchema?.[eventName] ? '⚡' : '📢',
+        }))
+      }
+      return [
+        { value: 'onClick', label: '点击事件', icon: '👆' },
+        { value: 'onChange', label: '值改变', icon: '🔄' },
+      ]
+    }
+
+    return [
       { value: 'onClick', label: '点击事件', icon: '👆' },
       { value: 'onChange', label: '值改变', icon: '🔄' },
       { value: 'onLoad', label: '加载完成', icon: '📥' },
@@ -1006,7 +1053,12 @@ const PageDesigner: React.FC = () => {
       { value: 'onMouseEnter', label: '鼠标移入', icon: '🖱️' },
       { value: 'onMouseLeave', label: '鼠标移出', icon: '🖱️' },
     ]
+  }
 
+  const renderEventPanel = () => {
+    if (!selectedComponent) return null
+
+    const eventTypes = getAvailableEvents()
     const actionTypes = [
       { value: 'navigate', label: '页面跳转', icon: '🔗' },
       { value: 'api', label: 'API调用', icon: '🌐' },
@@ -1022,6 +1074,14 @@ const PageDesigner: React.FC = () => {
 
     return (
       <Form form={eventForm} layout="vertical" onFinish={handleEventChange}>
+        {selectedComponent.componentVersion && (
+          <Alert 
+            type="info" 
+            message={`组件版本: ${selectedComponent.componentVersion}`} 
+            showIcon 
+            style={{ marginBottom: 12 }} 
+          />
+        )}
         <Form.List name="events">
           {(fields, { add, remove }) => (
             <>
@@ -1613,8 +1673,19 @@ const PageDesigner: React.FC = () => {
                           </tbody>
                         </table>
                       )
-                    default:
+                    default: {
+                      const systemTypes = ['INPUT', 'TEXTAREA', 'NUMBER', 'SELECT', 'DATE', 'DATETIME', 'TIME', 'SWITCH', 'CHECKBOX', 'RADIO', 'UPLOAD', 'RICHTEXT', 'TABLE', 'BUTTON', 'LINK', 'IMAGE', 'TEXT', 'TITLE', 'ICON', 'DIVIDER', 'TABS', 'CARD', 'GRID', 'FLEX', 'MODAL', 'FORM', 'STEPS', 'TIMELINE', 'PROGRESS', 'RATE', 'SLIDER', 'LINECHART', 'BARCHART', 'PIECHART', 'AREACHART', 'SCATTERCHART', 'RADARCHART']
+                      if (!systemTypes.includes(component.componentType)) {
+                        return (
+                          <CustomComponentWrapper
+                            component={component}
+                            executeActions={true}
+                            eventContext={{ navigate }}
+                          />
+                        )
+                      }
                       return <div style={{ padding: 16, background: '#f5f5f5', borderRadius: 4, textAlign: 'center', color: '#999' }}>{component.componentName}</div>
+                    }
                   }
                 })()}
               </div>

@@ -63,8 +63,10 @@ public class CustomComponentController {
 
     @ApiOperation("根据组件类型获取组件信息")
     @GetMapping("/type/{componentType}")
-    public Result<CustomComponentVO> getByType(@PathVariable String componentType) {
-        return Result.success(customComponentService.getByType(componentType));
+    public Result<CustomComponentVO> getByType(
+            @PathVariable String componentType,
+            @RequestParam(required = false) String version) {
+        return Result.success(customComponentService.getByType(componentType, version));
     }
 
     @ApiOperation("获取组件包下载地址")

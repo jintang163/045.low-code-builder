@@ -203,7 +203,7 @@ public class CustomComponentService extends ServiceImpl<CustomComponentMapper, C
         return convertToVO(component);
     }
 
-    public CustomComponentVO getByType(String componentType) {
+    public CustomComponentVO getByType(String componentType, String version) {
         LambdaQueryWrapper<CustomComponent> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(CustomComponent::getComponentType, componentType);
         wrapper.eq(CustomComponent::getStatus, 1);
@@ -214,11 +214,23 @@ public class CustomComponentService extends ServiceImpl<CustomComponentMapper, C
 
         LambdaQueryWrapper<CustomComponentVersion> versionWrapper = new LambdaQueryWrapper<>();
         versionWrapper.eq(CustomComponentVersion::getComponentId, component.getId());
-        versionWrapper.eq(CustomComponentVersion::getStatus, 1);
-        CustomComponentVersion version = versionService.getOne(versionWrapper);
-        component.setCurrentVersionInfo(version);
+        if (version != null && !version.isEmpty()) {
+            versionWrapper.eq(CustomComponentVersion::getVersion, version);
+        } else {
+            versionWrapper.eq(CustomComponentVersion::getStatus, 1);
+        }
+        CustomComponentVersion componentVersion = versionService.getOne(versionWrapper);
+        if (componentVersion == null) {
+            return null;
+        }
+        component.setCurrentVersionInfo(componentVersion);
+        component.setCurrentVersion(componentVersion.getVersion());
 
         return convertToVO(component);
+    }
+
+    public CustomComponentVO getByType(String componentType) {
+        return getByType(componentType, null);
     }
 
     public String getComponentBundleUrl(Long componentId, String version) throws Exception {

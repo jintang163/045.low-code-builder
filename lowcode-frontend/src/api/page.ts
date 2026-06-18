@@ -21,6 +21,7 @@ export interface PageComponent {
   componentId: string
   componentName: string
   componentType: string
+  componentVersion?: string
   parentId?: string
   sortOrder?: number
   positionX?: number
@@ -138,8 +139,8 @@ export const customComponentApi = {
     request.get(`/custom-component/page`, { params: { current, size, category, keyword } }),
   tree: () => request.get<Record<string, CustomComponent[]>>('/custom-component/tree'),
   get: (id: number) => request.get<CustomComponent>(`/custom-component/${id}`),
-  getByType: (componentType: string) =>
-    request.get<CustomComponent>(`/custom-component/type/${componentType}`),
+  getByType: (componentType: string, version?: string) =>
+    request.get<CustomComponent>(`/custom-component/type/${componentType}`, { params: { version } }),
   getBundleUrl: (id: number, version?: string) =>
     request.get<string>(`/custom-component/${id}/bundle-url`, { params: { version } }),
   download: (componentType: string, version?: string) =>
