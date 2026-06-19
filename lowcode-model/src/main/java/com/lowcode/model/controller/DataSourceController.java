@@ -4,13 +4,17 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.lowcode.common.result.Result;
 import com.lowcode.model.entity.DataSource;
+import com.lowcode.model.entity.VirtualView;
+import com.lowcode.model.service.CrossDataSourceQueryService;
 import com.lowcode.model.service.DataSourceService;
+import com.lowcode.model.service.VirtualViewService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @Api(tags = "数据源管理")
 @RestController
@@ -19,6 +23,12 @@ public class DataSourceController {
 
     @Autowired
     private DataSourceService dataSourceService;
+
+    @Autowired
+    private VirtualViewService virtualViewService;
+
+    @Autowired
+    private CrossDataSourceQueryService crossDataSourceQueryService;
 
     @ApiOperation("测试连接")
     @PostMapping("/testConnection")
@@ -51,6 +61,7 @@ public class DataSourceController {
         DataSource dataSource = dataSourceService.getById(id);
         if (dataSource != null) {
             dataSource.setPassword(null);
+            dataSource.setRestApiAuthToken(null);
         }
         return Result.success(dataSource);
     }
@@ -64,6 +75,7 @@ public class DataSourceController {
         List<DataSource> list = dataSourceService.list(wrapper);
         for (DataSource ds : list) {
             ds.setPassword(null);
+            ds.setRestApiAuthToken(null);
         }
         return Result.success(list);
     }
@@ -79,6 +91,7 @@ public class DataSourceController {
         Page<DataSource> page = dataSourceService.page(new Page<>(current, size), wrapper);
         for (DataSource ds : page.getRecords()) {
             ds.setPassword(null);
+            ds.setRestApiAuthToken(null);
         }
         return Result.success(page);
     }
@@ -87,5 +100,82 @@ public class DataSourceController {
     @GetMapping("/{id}/tables")
     public Result<List<String>> getTableNames(@PathVariable Long id) {
         return Result.success(dataSourceService.getTableNames(id));
+    }
+
+    @ApiOperation("获取表字段信息")
+    @GetMapping("/{id}/tables/{tableName}/columns")
+    public Result<List<Map<String, Object>>> getTableColumns(@PathVariable Long id,
+                                                              @PathVariable String tableName) {
+        return Result.success(dataSourceService.getTableColumns(id, tableName));
+    }
+
+    @ApiOperation("获取表主键信息")
+    @GetMapping("/{id}/tables/{tableName}/primaryKeys")
+    public Result<List<Map<String, Object>>> getTablePrimaryKeys(@PathVariable Long id,
+                                                                   @PathVariable String tableName) {
+        return Result.success(dataSourceService.getTablePrimaryKeys(id, tableName));
+    }
+
+    @ApiOperation("调用REST API")
+    @PostMapping("/{id}/restApi")
+    public Result<List<Map<String, Object>>> callRestApi(@PathVariable Long id,
+                                                          @RequestBody(required = false) Map<String, Object> params) {
+        return Result.success(dataSourceService.callRestApi(id, params));
+    }
+
+    @ApiOperation("获取连接池状态")
+    @GetMapping("/{id}/poolStatus")
+    public Result<Map<String, Object>> getPoolStatus(@PathVariable Long id) {
+        return Result.success(dataSourceService.getPoolStatus(id));
+    }
+
+    @ApiOperation("数据源健康检查")
+    @PostMapping("/{id}/healthCheck")
+    public Result<Map<String, Object>> healthCheck(@PathVariable Long id) {
+        return Result.success(dataSourceService.healthCheck(id));
+    }
+
+    @ApiOperation("刷新连接池")
+    @PostMapping("/{id}/refreshPool")
+    public Result<Void> refreshPool(@PathVariable Long id) {
+        dataSourceService.refreshPool(id);
+        return Result.success();
+    }
+
+    @ApiOperation("保存虚拟视图")
+    @PostMapping("/virtualView")
+    public Result<VirtualView> saveVirtualView(@RequestBody VirtualView virtualView) {
+        return Result.success(virtualViewService.saveVirtualView(virtualView));
+    }
+
+    @ApiOperation("更新虚拟视图")
+    @PutMapping("/virtualView")
+    public Result<VirtualView> updateVirtualView(@RequestBody VirtualView virtualView) {
+        return Result.success(virtualViewService.updateVirtualView(virtualView));
+    }
+
+    @ApiOperation("删除虚拟视图")
+    @DeleteMapping("/virtualView/{id}")
+    public Result<Void> deleteVirtualView(@PathVariable Long id) {
+        virtualViewService.deleteVirtualView(id);
+        return Result.success();
+    }
+
+    @ApiOperation("获取虚拟视图列表")
+    @GetMapping("/virtualView/list/{appId}")
+    public Result<List<VirtualView>> listVirtualViews(@PathVariable Long appId) {
+        return Result.success(virtualViewService.listByAppId(appId));
+    }
+
+    @ApiOperation("获取虚拟视图详情")
+    @GetMapping("/virtualView/{id}")
+    public Result<VirtualView> getVirtualView(@PathVariable Long id) {
+        return Result.success(virtualViewService.getById(id));
+    }
+
+    @ApiOperation("执行虚拟视图查询")
+    @PostMapping("/virtualView/{viewId}/query")
+    public Result<List<Map<String, Object>>> queryVirtualView(@PathVariable Long viewId) {
+        return Result.success(crossDataSourceQueryService.queryVirtualView(viewId));
     }
 }

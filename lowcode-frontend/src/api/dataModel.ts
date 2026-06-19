@@ -73,13 +73,80 @@ export interface DataSource {
   appId: number
   sourceName: string
   sourceCode: string
+  sourceType?: string
   dbType: string
-  host: string
-  port: number
-  database: string
-  username: string
+  host?: string
+  port?: number
+  database?: string
+  username?: string
   password?: string
-  status?: string
+  driverClass?: string
+  connectionParams?: string
+  initialSize?: number
+  minIdle?: number
+  maxActive?: number
+  maxWait?: number
+  timeBetweenEvictionRunsMillis?: number
+  minEvictableIdleTimeMillis?: number
+  maxLifetime?: number
+  connectionTimeout?: number
+  validationQuery?: string
+  testWhileIdle?: boolean
+  testOnBorrow?: boolean
+  testOnReturn?: boolean
+  restApiUrl?: string
+  restApiMethod?: string
+  restApiHeaders?: string
+  restApiBody?: string
+  restApiAuthType?: string
+  restApiAuthToken?: string
+  connectTimeout?: number
+  readTimeout?: number
+  status?: number | string
+  lastHealthCheckTime?: string
+  healthCheckStatus?: string
+}
+
+export interface TableColumnInfo {
+  columnName: string
+  dataType: number
+  typeName: string
+  columnSize: number
+  nullable: boolean
+  remarks: string
+  defaultValue: string
+}
+
+export interface PoolStatus {
+  activeConnections: number
+  idleConnections: number
+  totalConnections: number
+  threadsAwaitingConnection: number
+  poolName: string
+  closed: boolean
+}
+
+export interface VirtualView {
+  id?: number
+  appId: number
+  viewName: string
+  viewCode: string
+  viewSql?: string
+  viewConfig?: string
+  joinConfig?: string
+  status?: number
+}
+
+export interface VirtualViewJoin {
+  leftDataSourceId: number
+  leftTable: string
+  leftAlias: string
+  leftColumn: string
+  rightDataSourceId: number
+  rightTable: string
+  rightAlias: string
+  rightColumn: string
+  joinType: string
 }
 
 export const dataSourceApi = {
@@ -92,6 +159,27 @@ export const dataSourceApi = {
   update: (data: DataSource) => request.put<DataSource>('/datasource', data),
   delete: (id: number) => request.delete(`/datasource/${id}`),
   getTables: (id: number) => request.get<string[]>(`/datasource/${id}/tables`),
+  getTableColumns: (id: number, tableName: string) =>
+    request.get<TableColumnInfo[]>(`/datasource/${id}/tables/${tableName}/columns`),
+  getTablePrimaryKeys: (id: number, tableName: string) =>
+    request.get(`/datasource/${id}/tables/${tableName}/primaryKeys`),
+  callRestApi: (id: number, params?: Record<string, any>) =>
+    request.post<any[]>(`/datasource/${id}/restApi`, params),
+  getPoolStatus: (id: number) =>
+    request.get<PoolStatus>(`/datasource/${id}/poolStatus`),
+  healthCheck: (id: number) =>
+    request.post<Record<string, any>>(`/datasource/${id}/healthCheck`),
+  refreshPool: (id: number) =>
+    request.post(`/datasource/${id}/refreshPool`),
+}
+
+export const virtualViewApi = {
+  list: (appId: number) => request.get<VirtualView[]>(`/datasource/virtualView/list/${appId}`),
+  get: (id: number) => request.get<VirtualView>(`/datasource/virtualView/${id}`),
+  save: (data: VirtualView) => request.post<VirtualView>('/datasource/virtualView', data),
+  update: (data: VirtualView) => request.put<VirtualView>('/datasource/virtualView', data),
+  delete: (id: number) => request.delete(`/datasource/virtualView/${id}`),
+  query: (viewId: number) => request.post<any[]>(`/datasource/virtualView/${viewId}/query`),
 }
 
 export const migrationApi = {

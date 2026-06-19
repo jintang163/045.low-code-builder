@@ -7,10 +7,15 @@ public enum DbTypeEnum {
 
     MYSQL("mysql", "MySQL", "com.mysql.cj.jdbc.Driver",
             "jdbc:mysql://{host}:{port}/{dbName}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true"),
+    ORACLE("oracle", "Oracle", "oracle.jdbc.OracleDriver",
+            "jdbc:oracle:thin:@//{host}:{port}/{dbName}"),
+    SQLSERVER("sqlserver", "SQL Server", "com.microsoft.sqlserver.jdbc.SQLServerDriver",
+            "jdbc:sqlserver://{host}:{port};databaseName={dbName};encrypt=false"),
     POSTGRESQL("postgresql", "PostgreSQL", "org.postgresql.Driver",
             "jdbc:postgresql://{host}:{port}/{dbName}?useUnicode=true&characterEncoding=utf8"),
     DM("dm", "达梦", "dm.jdbc.driver.DmDriver",
-            "jdbc:dm://{host}:{port}/{dbName}?useUnicode=true&characterEncoding=utf8");
+            "jdbc:dm://{host}:{port}/{dbName}?useUnicode=true&characterEncoding=utf8"),
+    REST_API("rest_api", "REST API", "", "");
 
     private final String code;
     private final String name;

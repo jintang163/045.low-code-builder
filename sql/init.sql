@@ -28,15 +28,38 @@ CREATE TABLE IF NOT EXISTS sys_data_source (
     app_id BIGINT NOT NULL COMMENT '应用ID',
     source_name VARCHAR(100) NOT NULL COMMENT '数据源名称',
     source_code VARCHAR(50) NOT NULL COMMENT '数据源编码',
-    db_type VARCHAR(20) NOT NULL COMMENT '数据库类型 mysql postgresql dm',
-    host VARCHAR(100) NOT NULL COMMENT '主机地址',
-    port INT NOT NULL COMMENT '端口',
-    db_name VARCHAR(100) NOT NULL COMMENT '数据库名',
-    username VARCHAR(50) NOT NULL COMMENT '用户名',
-    password VARCHAR(255) NOT NULL COMMENT '密码',
+    source_type VARCHAR(20) DEFAULT 'DATABASE' COMMENT '数据源类型 DATABASE REST_API',
+    db_type VARCHAR(20) NOT NULL COMMENT '数据库类型 mysql oracle sqlserver postgresql dm rest_api',
+    host VARCHAR(100) COMMENT '主机地址',
+    port INT COMMENT '端口',
+    db_name VARCHAR(100) COMMENT '数据库名',
+    username VARCHAR(50) COMMENT '用户名',
+    password VARCHAR(255) COMMENT '密码',
     driver_class VARCHAR(255) COMMENT '驱动类',
     connection_params TEXT COMMENT '连接参数',
+    initial_size INT DEFAULT 2 COMMENT '初始连接数',
+    min_idle INT DEFAULT 2 COMMENT '最小空闲连接数',
+    max_active INT DEFAULT 10 COMMENT '最大活跃连接数',
+    max_wait INT DEFAULT 60000 COMMENT '最大等待时间(ms)',
+    time_between_eviction_runs_millis INT DEFAULT 60000 COMMENT '检测间隔(ms)',
+    min_evictable_idle_time_millis INT DEFAULT 600000 COMMENT '最小空闲时间(ms)',
+    max_lifetime INT DEFAULT 1800000 COMMENT '连接最大生命周期(ms)',
+    connection_timeout INT DEFAULT 30000 COMMENT '连接超时(ms)',
+    validation_query VARCHAR(200) COMMENT '验证SQL',
+    test_while_idle TINYINT DEFAULT 1 COMMENT '空闲时检测 0否 1是',
+    test_on_borrow TINYINT DEFAULT 0 COMMENT '借用时检测 0否 1是',
+    test_on_return TINYINT DEFAULT 0 COMMENT '归还时检测 0否 1是',
+    rest_api_url VARCHAR(500) COMMENT 'REST API地址',
+    rest_api_method VARCHAR(10) DEFAULT 'GET' COMMENT 'REST API方法 GET POST PUT DELETE',
+    rest_api_headers TEXT COMMENT 'REST API请求头JSON',
+    rest_api_body TEXT COMMENT 'REST API请求体',
+    rest_api_auth_type VARCHAR(20) COMMENT 'REST API认证类型 NONE BASIC BEARER API_KEY',
+    rest_api_auth_token VARCHAR(500) COMMENT 'REST API认证Token(加密)',
+    connect_timeout INT DEFAULT 5000 COMMENT 'HTTP连接超时(ms)',
+    read_timeout INT DEFAULT 10000 COMMENT 'HTTP读取超时(ms)',
     status TINYINT DEFAULT 1 COMMENT '状态 0禁用 1启用',
+    last_health_check_time DATETIME COMMENT '最后健康检查时间',
+    health_check_status VARCHAR(20) COMMENT '健康检查状态 HEALTHY UNHEALTHY',
     created_by BIGINT COMMENT '创建人',
     created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_by BIGINT COMMENT '更新人',
@@ -682,3 +705,46 @@ CREATE TABLE IF NOT EXISTS sys_custom_component_version (
     KEY idx_component_id (component_id),
     KEY idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='自定义组件版本表';
+
+CREATE TABLE IF NOT EXISTS sys_virtual_view (
+    id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    app_id BIGINT NOT NULL COMMENT '应用ID',
+    view_name VARCHAR(100) NOT NULL COMMENT '视图名称',
+    view_code VARCHAR(50) NOT NULL COMMENT '视图编码',
+    view_sql TEXT COMMENT '视图SQL',
+    view_config TEXT COMMENT '视图配置JSON',
+    join_config TEXT COMMENT '关联配置JSON',
+    status TINYINT DEFAULT 1 COMMENT '状态 0禁用 1启用',
+    created_by BIGINT COMMENT '创建人',
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_by BIGINT COMMENT '更新人',
+    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    deleted TINYINT DEFAULT 0 COMMENT '删除标记 0未删除 1已删除',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_view_code (app_id, view_code),
+    KEY idx_app_id (app_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='虚拟视图表';
+
+ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS source_type VARCHAR(20) DEFAULT 'DATABASE' COMMENT '数据源类型 DATABASE REST_API' AFTER source_code;
+ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS initial_size INT DEFAULT 2 COMMENT '初始连接数' AFTER connection_params;
+ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS min_idle INT DEFAULT 2 COMMENT '最小空闲连接数' AFTER initial_size;
+ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS max_active INT DEFAULT 10 COMMENT '最大活跃连接数' AFTER min_idle;
+ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS max_wait INT DEFAULT 60000 COMMENT '最大等待时间(ms)' AFTER max_active;
+ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS time_between_eviction_runs_millis INT DEFAULT 60000 COMMENT '检测间隔(ms)' AFTER max_wait;
+ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS min_evictable_idle_time_millis INT DEFAULT 600000 COMMENT '最小空闲时间(ms)' AFTER time_between_eviction_runs_millis;
+ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS max_lifetime INT DEFAULT 1800000 COMMENT '连接最大生命周期(ms)' AFTER min_evictable_idle_time_millis;
+ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS connection_timeout INT DEFAULT 30000 COMMENT '连接超时(ms)' AFTER max_lifetime;
+ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS validation_query VARCHAR(200) COMMENT '验证SQL' AFTER connection_timeout;
+ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS test_while_idle TINYINT DEFAULT 1 COMMENT '空闲时检测' AFTER validation_query;
+ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS test_on_borrow TINYINT DEFAULT 0 COMMENT '借用时检测' AFTER test_while_idle;
+ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS test_on_return TINYINT DEFAULT 0 COMMENT '归还时检测' AFTER test_on_borrow;
+ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS rest_api_url VARCHAR(500) COMMENT 'REST API地址' AFTER test_on_return;
+ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS rest_api_method VARCHAR(10) DEFAULT 'GET' COMMENT 'REST API方法' AFTER rest_api_url;
+ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS rest_api_headers TEXT COMMENT 'REST API请求头JSON' AFTER rest_api_method;
+ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS rest_api_body TEXT COMMENT 'REST API请求体' AFTER rest_api_headers;
+ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS rest_api_auth_type VARCHAR(20) COMMENT 'REST API认证类型' AFTER rest_api_body;
+ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS rest_api_auth_token VARCHAR(500) COMMENT 'REST API认证Token(加密)' AFTER rest_api_auth_type;
+ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS connect_timeout INT DEFAULT 5000 COMMENT 'HTTP连接超时(ms)' AFTER rest_api_auth_token;
+ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS read_timeout INT DEFAULT 10000 COMMENT 'HTTP读取超时(ms)' AFTER connect_timeout;
+ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS last_health_check_time DATETIME COMMENT '最后健康检查时间' AFTER status;
+ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS health_check_status VARCHAR(20) COMMENT '健康检查状态' AFTER last_health_check_time;

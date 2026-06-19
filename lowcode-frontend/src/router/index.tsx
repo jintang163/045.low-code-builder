@@ -10,6 +10,7 @@ import LogicDesigner from '@/pages/logic/Designer'
 import WorkflowList from '@/pages/workflow/List'
 import WorkflowDesigner from '@/pages/workflow/Designer'
 import DataSourceList from '@/pages/dataSource/List'
+import DataSourceDesigner from '@/pages/dataSource/Designer'
 import AppList from '@/pages/app/List'
 import TemplateMarket from '@/pages/template/Market'
 import ComponentList from '@/pages/component/List'
@@ -57,6 +58,14 @@ const routes = [
           {
             path: '',
             element: <DataSourceList />,
+          },
+          {
+            path: 'designer',
+            element: <DataSourceDesigner />,
+          },
+          {
+            path: 'designer/:id',
+            element: <DataSourceDesigner />,
           },
         ],
       },

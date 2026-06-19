@@ -18,6 +18,10 @@ public enum ErrorCode {
     MODEL_EXISTS(10004, "数据模型已存在"),
     SQL_EXECUTE_ERROR(10005, "SQL执行错误"),
     FIELD_NOT_EXISTS(10006, "字段不存在"),
+    VIRTUAL_VIEW_EXISTS(10007, "虚拟视图已存在"),
+    REST_API_CALL_ERROR(10008, "REST API调用失败"),
+    DATASOURCE_POOL_ERROR(10009, "数据源连接池异常"),
+    DATASOURCE_HEALTH_CHECK_FAILED(10010, "数据源健康检查失败"),
 
     PAGE_EXISTS(20001, "页面已存在"),
     COMPONENT_EXISTS(20002, "组件已存在"),
