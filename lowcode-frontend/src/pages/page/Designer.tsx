@@ -591,7 +591,7 @@ const PageDesigner: React.FC = () => {
     setExtMappings(prev => prev.filter((_, i) => i !== index))
   }
 
-  const handleApplyExtMappings = () => {
+  const handleApplyExtMappings = async () => {
     if (!page) return
     const newComponents = page.components?.map(comp => {
       const compMappings = extMappings.filter(m => m.targetComponentId === comp.componentId)
@@ -610,11 +610,20 @@ const PageDesigner: React.FC = () => {
         dataSourceConfig: JSON.stringify({
           ...(comp.dataSourceConfig ? JSON.parse(comp.dataSourceConfig) : {}),
           ...dataSourceConfig,
+          conditionExpression: conditionExpr || undefined,
         }),
       }
     }) || []
     setPage({ ...page, components: newComponents })
     message.success('字段映射已应用到组件配置')
+    if (conditionExpr) {
+      try {
+        const res: any = await expressionApi.runtimeEvaluate(conditionExpr)
+        if ((res.code === 0 || res.code === 200) && res.data?.success) {
+          message.info(`条件表达式执行结果: ${JSON.stringify(res.data.result)} (${res.data.resultType})`)
+        }
+      } catch {}
+    }
   }
 
   useEffect(() => {
@@ -721,12 +730,60 @@ const PageDesigner: React.FC = () => {
     }
   }
 
+  const [exprEvalResults, setExprEvalResults] = useState<Record<string, { visible: boolean; mappingValue: any }>>({})
+
+  const evaluateComponentExpressions = useCallback(async () => {
+    if (!page?.components) return
+    const items: { id: string; expression: string; context: Record<string, any> }[] = []
+    for (const comp of page.components) {
+      if (!comp.dataSourceConfig) continue
+      try {
+        const config = JSON.parse(comp.dataSourceConfig)
+        if (config.conditionExpression) {
+          items.push({
+            id: `${comp.componentId}__condition`,
+            expression: config.conditionExpression,
+            context: config.context || {},
+          })
+        }
+        if (config.mappingExpression && config.type === 'expression') {
+          items.push({
+            id: `${comp.componentId}__mapping`,
+            expression: config.mappingExpression,
+            context: config.context || {},
+          })
+        }
+      } catch {}
+    }
+    if (items.length === 0) return
+    try {
+      const res: any = await expressionApi.executeBatch(items)
+      if (res.code === 0 || res.code === 200) {
+        const newResults: Record<string, { visible: boolean; mappingValue: any }> = {}
+        const results = res.data?.results || []
+        for (const r of results) {
+          const [compId, type] = r.id.split('__')
+          if (!newResults[compId]) newResults[compId] = { visible: true, mappingValue: undefined }
+          if (type === 'condition') {
+            newResults[compId].visible = r.success ? !!r.result : true
+          } else if (type === 'mapping') {
+            newResults[compId].mappingValue = r.success ? r.result : undefined
+          }
+        }
+        setExprEvalResults(newResults)
+      }
+    } catch (e) {
+      console.error('表达式批量执行失败:', e)
+    }
+  }, [page])
+
   const handlePreview = async () => {
     if (!page?.id) {
       message.warning('请先保存页面')
       return
     }
     setPreviewVisible(true)
+    evaluateComponentExpressions()
   }
 
   const handleViewCode = async () => {
@@ -885,7 +942,12 @@ const PageDesigner: React.FC = () => {
   const handleDataSourceChange = async () => {
     try {
       const values = await dataSourceForm.validateFields()
-      updateSelectedComponent({ dataSourceConfig: JSON.stringify(values) })
+      const config = {
+        ...values,
+        mappingExpression: mappingExpr,
+        conditionExpression: conditionExpr,
+      }
+      updateSelectedComponent({ dataSourceConfig: JSON.stringify(config) })
       message.success('数据源更新成功')
     } catch (e) {
       console.error(e)
@@ -915,6 +977,22 @@ const PageDesigner: React.FC = () => {
   }
 
   const selectedComponent = page?.components?.find(c => c.componentId === selectedComponentId)
+
+  useEffect(() => {
+    if (selectedComponent?.dataSourceConfig) {
+      try {
+        const config = JSON.parse(selectedComponent.dataSourceConfig)
+        setMappingExpr(config.mappingExpression || '')
+        setConditionExpr(config.conditionExpression || '')
+      } catch {
+        setMappingExpr('')
+        setConditionExpr('')
+      }
+    } else {
+      setMappingExpr('')
+      setConditionExpr('')
+    }
+  }, [selectedComponent?.componentId, selectedComponent?.dataSourceConfig])
 
   const CustomComponentPropsPanel: React.FC<{ componentType: string }> = ({ componentType }) => {
     const { schema, loading, error } = useCustomComponentSchema(componentType)
@@ -1374,6 +1452,13 @@ const PageDesigner: React.FC = () => {
                           return { valid: false, errors: ['校验失败'], warnings: [] }
                         } catch { return { valid: false, errors: ['校验失败'], warnings: [] } }
                       }}
+                      onExecute={async (expr, ctx) => {
+                        try {
+                          const res: any = await expressionApi.runtimeEvaluate(expr, ctx)
+                          if (res.code === 0 || res.code === 200) return res.data
+                          return { success: false, result: null, error: '执行失败', duration: 0, resultType: 'null' }
+                        } catch { return { success: false, result: null, error: '执行失败', duration: 0, resultType: 'null' } }
+                      }}
                       mode="condition"
                       placeholder='如: ${status} == 1 && ${age} >= 18'
                     />
@@ -1423,6 +1508,16 @@ const PageDesigner: React.FC = () => {
       }
     }
 
+    const handleExprExecute = async (expr: string, context: Record<string, any>) => {
+      try {
+        const res: any = await expressionApi.runtimeEvaluate(expr, context)
+        if (res.code === 0 || res.code === 200) return res.data
+        return { success: false, result: null, error: '执行请求失败', duration: 0, resultType: 'null' }
+      } catch {
+        return { success: false, result: null, error: '执行请求失败', duration: 0, resultType: 'null' }
+      }
+    }
+
     return (
       <Form form={dataSourceForm} layout="vertical" onFinish={handleDataSourceChange}>
         <Form.Item name="type" label="数据源类型" rules={[{ required: true, message: '请选择数据源类型' }]}>
@@ -1465,6 +1560,7 @@ const PageDesigner: React.FC = () => {
                       functions={exprFunctions}
                       categories={exprCategories}
                       onValidate={handleExprValidate}
+                      onExecute={handleExprExecute}
                       mode="mapping"
                       placeholder='如: ${userName} 或 CONCAT(${firstName}, " ", ${lastName})'
                     />
@@ -1510,6 +1606,7 @@ const PageDesigner: React.FC = () => {
                       functions={exprFunctions}
                       categories={exprCategories}
                       onValidate={handleExprValidate}
+                      onExecute={handleExprExecute}
                       mode="mapping"
                       placeholder='如: ${price} * ${quantity} 或 IF(${discount} > 0, ${price} * ${discount}, ${price})'
                     />
@@ -1522,6 +1619,7 @@ const PageDesigner: React.FC = () => {
                       functions={exprFunctions}
                       categories={exprCategories}
                       onValidate={handleExprValidate}
+                      onExecute={handleExprExecute}
                       mode="condition"
                       placeholder='如: ${status} == 1 && ${age} >= 18'
                     />
@@ -1811,6 +1909,13 @@ const PageDesigner: React.FC = () => {
                 if (res.code === 0 || res.code === 200) return res.data
                 return { valid: false, errors: ['校验失败'], warnings: [] }
               } catch { return { valid: false, errors: ['校验失败'], warnings: [] } }
+            }}
+            onExecute={async (expr, ctx) => {
+              try {
+                const res: any = await expressionApi.runtimeEvaluate(expr, ctx)
+                if (res.code === 0 || res.code === 200) return res.data
+                return { success: false, result: null, error: '执行失败', duration: 0, resultType: 'null' }
+              } catch { return { success: false, result: null, error: '执行失败', duration: 0, resultType: 'null' } }
             }}
             mode="condition"
             placeholder='如: ${status} == 1 && CONTAINS(${name}, "admin")'
@@ -2163,19 +2268,24 @@ const PageDesigner: React.FC = () => {
             </div>
           )}
           <div style={{ padding: 24 }}>
-            {page?.components?.filter(c => !c.parentId).map((component) => (
+            {page?.components?.filter(c => !c.parentId).map((component) => {
+              const evalResult = exprEvalResults[component.componentId]
+              if (evalResult && !evalResult.visible) return null
+              const props = component.propsConfig ? JSON.parse(component.propsConfig) : {}
+              const mappingValue = evalResult?.mappingValue
+              const resolvedProps = mappingValue !== undefined ? { ...props, value: mappingValue, text: mappingValue } : props
+              return (
               <div key={component.componentId} style={{ marginBottom: 16 }}>
                 {(() => {
-                  const props = component.propsConfig ? JSON.parse(component.propsConfig) : {}
                   switch (component.componentType) {
                     case 'INPUT':
-                      return <Input placeholder={props.placeholder || '请输入'} style={{ width: '100%' }} />
+                      return <Input placeholder={resolvedProps.placeholder || '请输入'} value={resolvedProps.value} style={{ width: '100%' }} />
                     case 'BUTTON':
-                      return <Button type={props.type || 'primary'}>{props.text || '按钮'}</Button>
+                      return <Button type={resolvedProps.type || 'primary'}>{resolvedProps.text || '按钮'}</Button>
                     case 'TITLE':
-                      return <h3>{props.text || '标题'}</h3>
+                      return <h3>{resolvedProps.text || '标题'}</h3>
                     case 'TEXT':
-                      return <p>{props.text || '文本内容'}</p>
+                      return <p>{resolvedProps.text || '文本内容'}</p>
                     case 'TABLE':
                       return (
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -2209,7 +2319,8 @@ const PageDesigner: React.FC = () => {
                   }
                 })()}
               </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       </Modal>

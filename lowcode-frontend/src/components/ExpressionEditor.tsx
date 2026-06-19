@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Input, Tag, Collapse, Tooltip, Alert, Spin, Empty, Button, Space, Popover, Tabs, Badge } from 'antd'
-import { FunctionOutlined, PlusOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, FieldNumberOutlined, FieldStringOutlined, FieldTimeOutlined, BugOutlined } from '@ant-design/icons'
+import { Input, Tag, Collapse, Tooltip, Alert, Spin, Empty, Button, Space, Popover, Tabs, Badge, Card } from 'antd'
+import { FunctionOutlined, PlusOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, FieldNumberOutlined, FieldStringOutlined, FieldTimeOutlined, BugOutlined, CalculatorOutlined, PlayCircleOutlined } from '@ant-design/icons'
 
 const { Panel } = Collapse
 
@@ -31,6 +31,14 @@ export interface FieldDef {
   dataSourceId?: number
 }
 
+export interface ExpressionRuntimeResult {
+  success: boolean
+  result: any
+  resultType?: string
+  error?: string
+  duration: number
+}
+
 interface ExpressionEditorProps {
   value?: string
   onChange?: (value: string) => void
@@ -38,6 +46,7 @@ interface ExpressionEditorProps {
   functions?: FunctionDef[]
   categories?: CategoryDef[]
   onValidate?: (expression: string) => Promise<ValidationResult>
+  onExecute?: (expression: string, context: Record<string, any>) => Promise<ExpressionRuntimeResult>
   placeholder?: string
   mode?: 'condition' | 'mapping'
   height?: number
@@ -110,6 +119,11 @@ const tokenizeExpression = (expr: string): { type: string; text: string }[] => {
   return tokens
 }
 
+const extractVariables = (expr: string): string[] => {
+  const matches = expr.matchAll(/\$\{([^}]+)\}/g)
+  return [...new Set([...matches].map(m => m[1]))]
+}
+
 const ExpressionEditor: React.FC<ExpressionEditorProps> = ({
   value = '',
   onChange,
@@ -117,6 +131,7 @@ const ExpressionEditor: React.FC<ExpressionEditorProps> = ({
   functions = [],
   categories = [],
   onValidate,
+  onExecute,
   placeholder = '输入表达式，如: ${price} * ${quantity}',
   mode = 'condition',
   height = 120,
@@ -132,9 +147,25 @@ const ExpressionEditor: React.FC<ExpressionEditorProps> = ({
   const debounceRef = useRef<any>(null)
   const highlightRef = useRef<HTMLDivElement>(null)
 
+  const [trialVisible, setTrialVisible] = useState(false)
+  const [trialContext, setTrialContext] = useState<Record<string, string>>({})
+  const [trialResult, setTrialResult] = useState<ExpressionRuntimeResult | null>(null)
+  const [trialLoading, setTrialLoading] = useState(false)
+
   useEffect(() => {
     setExpression(value)
   }, [value])
+
+  useEffect(() => {
+    if (trialVisible) {
+      const vars = extractVariables(expression)
+      const newContext: Record<string, string> = {}
+      for (const v of vars) {
+        newContext[v] = trialContext[v] ?? ''
+      }
+      setTrialContext(newContext)
+    }
+  }, [expression, trialVisible])
 
   const triggerValidate = useCallback(async (expr: string) => {
     if (!onValidate || !expr.trim()) {
@@ -321,6 +352,32 @@ const ExpressionEditor: React.FC<ExpressionEditorProps> = ({
       </Tooltip>
     )
   }
+
+  const handleTrialExecute = async () => {
+    if (!onExecute) return
+    setTrialLoading(true)
+    setTrialResult(null)
+    try {
+      const contextValue: Record<string, any> = {}
+      for (const [k, v] of Object.entries(trialContext)) {
+        contextValue[k] = v
+      }
+      const result = await onExecute(expression, contextValue)
+      setTrialResult(result)
+    } catch (err: any) {
+      setTrialResult({ success: false, result: null, error: err?.message || '执行失败', duration: 0 })
+    } finally {
+      setTrialLoading(false)
+    }
+  }
+
+  const trialVariables = trialVisible ? extractVariables(expression) : []
+
+  const resultColor = trialResult
+    ? trialResult.success
+      ? (trialResult.result === null || trialResult.result === undefined ? '#d9d9d9' : '#52c41a')
+      : '#ff4d4f'
+    : '#d9d9d9'
 
   return (
     <div className="expression-editor" style={{ border: '1px solid #d9d9d9', borderRadius: 6, overflow: 'hidden' }}>
@@ -561,7 +618,122 @@ const ExpressionEditor: React.FC<ExpressionEditorProps> = ({
         <span style={{ fontSize: 11, color: '#999' }}>
           变量: $&#123;field&#125; | 函数: SUM, IF, CONTAINS... | 运算: +, -, *, /, ==, &&, ||
         </span>
+        <Button
+          type="link"
+          size="small"
+          icon={<CalculatorOutlined />}
+          onClick={() => {
+            setTrialVisible(!trialVisible)
+            setTrialResult(null)
+          }}
+          disabled={!onExecute}
+        >
+          试算
+        </Button>
       </div>
+
+      {trialVisible && (
+        <Collapse
+          ghost
+          activeKey={['trial']}
+          style={{ borderTop: '1px solid #f0f0f0' }}
+        >
+          <Panel header="🧮 试算面板" key="trial">
+            {trialVariables.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                {trialVariables.map(v => (
+                  <div key={v} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ minWidth: 120, fontSize: 13, fontWeight: 500, color: '#e06c75' }}>${'{'}{v}{'}'}</span>
+                    <Input
+                      size="small"
+                      placeholder={`输入 ${v} 的测试值`}
+                      value={trialContext[v] ?? ''}
+                      onChange={e => setTrialContext(prev => ({ ...prev, [v]: e.target.value }))}
+                      style={{ flex: 1 }}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ color: '#999', fontSize: 12, marginBottom: 12 }}>表达式中未检测到变量引用</div>
+            )}
+            <Button
+              type="primary"
+              size="small"
+              icon={<PlayCircleOutlined />}
+              loading={trialLoading}
+              onClick={handleTrialExecute}
+              disabled={!expression.trim() || !onExecute}
+              style={{ marginBottom: 12 }}
+            >
+              执行
+            </Button>
+            {trialResult && (
+              trialResult.success ? (
+                <Card
+                  title="执行结果"
+                  size="small"
+                  style={{ borderColor: resultColor }}
+                  headStyle={{ color: resultColor, fontSize: 13 }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div>
+                      <span style={{ color: '#999', marginRight: 8 }}>结果:</span>
+                      <span style={{ color: resultColor, fontWeight: 600 }}>
+                        {trialResult.result === null || trialResult.result === undefined ? '(空)' : String(trialResult.result)}
+                      </span>
+                    </div>
+                    {trialResult.resultType && (
+                      <div>
+                        <span style={{ color: '#999', marginRight: 8 }}>类型:</span>
+                        <Tag color={TYPE_COLORS[trialResult.resultType] || 'default'}>{trialResult.resultType}</Tag>
+                      </div>
+                    )}
+                    <div>
+                      <span style={{ color: '#999', marginRight: 8 }}>耗时:</span>
+                      <span>{trialResult.duration}ms</span>
+                    </div>
+                  </div>
+                </Card>
+              ) : (
+                <>
+                  <Card
+                    title="执行结果"
+                    size="small"
+                    style={{ borderColor: '#ff4d4f' }}
+                    headStyle={{ color: '#ff4d4f', fontSize: 13 }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <div>
+                        <span style={{ color: '#999', marginRight: 8 }}>结果:</span>
+                        <span style={{ color: '#ff4d4f' }}>{String(trialResult.result)}</span>
+                      </div>
+                      {trialResult.resultType && (
+                        <div>
+                          <span style={{ color: '#999', marginRight: 8 }}>类型:</span>
+                          <Tag color={TYPE_COLORS[trialResult.resultType] || 'default'}>{trialResult.resultType}</Tag>
+                        </div>
+                      )}
+                      <div>
+                        <span style={{ color: '#999', marginRight: 8 }}>耗时:</span>
+                        <span>{trialResult.duration}ms</span>
+                      </div>
+                    </div>
+                  </Card>
+                  {trialResult.error && (
+                    <Alert type="error" message={trialResult.error} showIcon style={{ marginTop: 8, fontSize: 12 }} />
+                  )}
+                </>
+              )
+            )}
+            {!trialResult && !trialLoading && (
+              <Card title="执行结果" size="small" style={{ borderColor: '#d9d9d9' }} headStyle={{ color: '#999', fontSize: 13 }}>
+                <span style={{ color: '#d9d9d9' }}>尚未执行</span>
+              </Card>
+            )}
+          </Panel>
+        </Collapse>
+      )}
     </div>
   )
 }

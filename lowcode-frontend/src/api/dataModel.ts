@@ -262,6 +262,31 @@ export interface ExpressionCategoryDef {
   displayName: string
 }
 
+export interface ExpressionBatchItem {
+  id: string
+  expression: string
+  context?: Record<string, any>
+}
+
+export interface ExpressionBatchResult {
+  results: Array<{
+    id: string
+    success: boolean
+    result: any
+    error?: string
+    duration: number
+    resultType?: string
+  }>
+}
+
+export interface ExpressionRuntimeResult {
+  success: boolean
+  result: any
+  resultType?: string
+  error?: string
+  duration: number
+}
+
 export interface ExpressionValidationResult {
   valid: boolean
   errors: string[]
@@ -283,4 +308,8 @@ export const expressionApi = {
   validate: (expression: string) => request.post<ExpressionValidationResult>('/expression/validate', expression),
   execute: (expression: string, context?: Record<string, any>) =>
     request.post<ExpressionExecuteResult>('/expression/execute', { expression, context }),
+  executeBatch: (items: ExpressionBatchItem[]) =>
+    request.post<ExpressionBatchResult>('/expression/execute/batch', { items }),
+  runtimeEvaluate: (expression: string, context?: Record<string, any>) =>
+    request.post<ExpressionRuntimeResult>('/expression/runtime/evaluate', { expression, context }),
 }

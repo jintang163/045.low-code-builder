@@ -1,6 +1,8 @@
 package com.lowcode.model.controller;
 
 import com.lowcode.common.result.Result;
+import com.lowcode.model.expression.ExpressionBatchRequest;
+import com.lowcode.model.expression.ExpressionBatchResult;
 import com.lowcode.model.expression.ExpressionExecuteRequest;
 import com.lowcode.model.expression.ExpressionFunction;
 import com.lowcode.model.expression.ExpressionResult;
@@ -75,5 +77,51 @@ public class ExpressionController {
     @PostMapping("/execute")
     public Result<ExpressionResult> execute(@RequestBody ExpressionExecuteRequest request) {
         return Result.success(sandboxExecutor.execute(request.getExpression(), request.getContext()));
+    }
+
+    @ApiOperation("批量执行表达式")
+    @PostMapping("/execute/batch")
+    public Result<ExpressionBatchResult> executeBatch(@RequestBody ExpressionBatchRequest request) {
+        ExpressionBatchResult batchResult = new ExpressionBatchResult();
+        List<ExpressionBatchResult.ItemResult> itemResults = new java.util.ArrayList<>();
+        for (ExpressionBatchRequest.Item item : request.getItems()) {
+            long start = System.currentTimeMillis();
+            try {
+                ExpressionResult r = sandboxExecutor.execute(item.getExpression(), item.getContext());
+                ExpressionBatchResult.ItemResult ir = new ExpressionBatchResult.ItemResult();
+                ir.setId(item.getId());
+                ir.setSuccess(r.isSuccess());
+                ir.setResult(r.getResult());
+                ir.setError(r.getError());
+                ir.setDuration(r.getDuration());
+                ir.setResultType(r.getResultType());
+                itemResults.add(ir);
+            } catch (Exception e) {
+                ExpressionBatchResult.ItemResult ir = new ExpressionBatchResult.ItemResult();
+                ir.setId(item.getId());
+                ir.setSuccess(false);
+                ir.setError(e.getMessage());
+                ir.setDuration(System.currentTimeMillis() - start);
+                itemResults.add(ir);
+            }
+        }
+        batchResult.setResults(itemResults);
+        return Result.success(batchResult);
+    }
+
+    @ApiOperation("运行时执行组件表达式")
+    @PostMapping("/runtime/evaluate")
+    public Result<Map<String, Object>> runtimeEvaluate(@RequestBody Map<String, Object> payload) {
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        String expression = (String) payload.get("expression");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> context = (Map<String, Object>) payload.get("context");
+        ExpressionResult exprResult = sandboxExecutor.execute(expression, context);
+        result.put("success", exprResult.isSuccess());
+        result.put("result", exprResult.getResult());
+        result.put("resultType", exprResult.getResultType());
+        result.put("error", exprResult.getError());
+        result.put("duration", exprResult.getDuration());
+        return Result.success(result);
     }
 }
