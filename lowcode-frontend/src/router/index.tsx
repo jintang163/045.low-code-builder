@@ -16,6 +16,7 @@ import TemplateMarket from '@/pages/template/Market'
 import ComponentList from '@/pages/component/List'
 import ComponentDebugger from '@/pages/component/Debugger'
 import Login from '@/pages/Login'
+import PermissionList from '@/pages/permission/List'
 
 const routes = [
   {
@@ -147,6 +148,15 @@ const routes = [
           {
             path: 'designer',
             element: <WorkflowDesigner />,
+          },
+        ],
+      },
+      {
+        path: 'permission',
+        children: [
+          {
+            path: '',
+            element: <PermissionList />,
           },
         ],
       },

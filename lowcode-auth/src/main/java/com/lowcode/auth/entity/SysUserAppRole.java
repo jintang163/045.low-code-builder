@@ -7,13 +7,9 @@ import lombok.EqualsAndHashCode;
 
 @Data
 @EqualsAndHashCode(callSuper = true)
-@TableName("sys_role")
-public class SysRole extends BaseEntity {
+@TableName("sys_user_app_role")
+public class SysUserAppRole extends BaseEntity {
+    private Long userId;
     private Long appId;
-    private String roleName;
-    private String roleCode;
-    private String roleType;
-    private Integer roleSort;
-    private Integer status;
-    private String remark;
+    private Long roleId;
 }

@@ -7,13 +7,12 @@ import lombok.EqualsAndHashCode;
 
 @Data
 @EqualsAndHashCode(callSuper = true)
-@TableName("sys_role")
-public class SysRole extends BaseEntity {
+@TableName("sys_field_permission")
+public class SysFieldPermission extends BaseEntity {
     private Long appId;
-    private String roleName;
-    private String roleCode;
-    private String roleType;
-    private Integer roleSort;
-    private Integer status;
-    private String remark;
+    private Long roleId;
+    private Long modelId;
+    private Long fieldId;
+    private Integer canView;
+    private Integer canEdit;
 }

@@ -101,3 +101,27 @@ export const ossApi = {
   getUrl: (id: number) => request.get<string>(`/oss/url/${id}`),
   download: (id: number) => `/oss/download/${id}`,
 }
+
+export interface RoleInfo {
+  id?: number
+  appId?: number
+  roleName: string
+  roleCode: string
+  roleType: string
+  roleSort?: number
+  status?: number
+  remark?: string
+}
+
+export const userRoleApi = {
+  getRoles: (appId: number) =>
+    request.get<RoleInfo[]>('/role/list', { params: { appId } }),
+  getRole: (id: number) =>
+    request.get<RoleInfo>(`/role/${id}`),
+  createRole: (data: RoleInfo) =>
+    request.post<number>('/role', data),
+  updateRole: (id: number, data: RoleInfo) =>
+    request.put(`/role/${id}`, data),
+  deleteRole: (id: number) =>
+    request.delete(`/role/${id}`),
+}

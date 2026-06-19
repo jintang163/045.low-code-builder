@@ -15,6 +15,7 @@ import {
   ShopOutlined,
   CodeSandboxOutlined,
   BugOutlined,
+  SafetyOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAppStore } from '@/store/appStore'
@@ -86,6 +87,11 @@ const MainLayout: React.FC = ({ children }: { children?: React.ReactNode }) => {
       ],
     },
     {
+      key: '/permission',
+      icon: <SafetyOutlined />,
+      label: '权限管理',
+    },
+    {
       key: '/settings',
       icon: <SettingOutlined />,
       label: '系统设置',
@@ -135,6 +141,7 @@ const MainLayout: React.FC = ({ children }: { children?: React.ReactNode }) => {
       '/workflow/designer': '工作流设计器',
       '/component': '组件管理',
       '/component/debugger': '组件调试',
+      '/permission': '权限管理',
     }
     const parts = location.pathname.split('/').filter(Boolean)
     const items = []

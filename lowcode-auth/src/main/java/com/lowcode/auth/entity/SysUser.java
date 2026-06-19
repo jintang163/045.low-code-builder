@@ -22,6 +22,7 @@ public class SysUser extends BaseEntity {
     private Integer userType;
     private Long deptId;
     private String remark;
+    private String userAttributes;
     private LocalDateTime lastLoginTime;
     private String lastLoginIp;
 }

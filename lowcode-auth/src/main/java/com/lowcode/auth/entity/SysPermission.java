@@ -9,10 +9,14 @@ import lombok.EqualsAndHashCode;
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_permission")
 public class SysPermission extends BaseEntity {
+    private Long appId;
     private Long parentId;
     private String permissionName;
     private String permissionCode;
     private Integer permissionType;
+    private String resourceType;
+    private String resourceId;
+    private String action;
     private String path;
     private String component;
     private String icon;
