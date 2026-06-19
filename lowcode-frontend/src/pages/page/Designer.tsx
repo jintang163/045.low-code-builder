@@ -44,9 +44,8 @@ import {
   FormOutlined,
   RobotOutlined,
   DatabaseOutlined,
-  SaveOutlined,
   ArrowRightOutlined,
-  DeleteOutlined,
+  ExperimentOutlined,
 } from '@ant-design/icons'
 import { useParams, useNavigate } from 'react-router-dom'
 import { DndProvider, useDrag, useDrop } from 'react-dnd'
@@ -54,11 +53,12 @@ import { HTML5Backend } from 'react-dnd-html5-backend'
 import { createForm, Field } from '@formily/core'
 import { createSchemaField, FormProvider, FormItem, Input as FormilyInput, Select as FormilySelect, NumberPicker, Switch as FormilySwitch } from '@formily/antd'
 import { PageInfo, PageComponent, ComponentLibrary, pageApi, componentApi, customComponentApi, CustomComponent } from '@/api/page'
-import { dataModelApi, dataSourceApi, fieldMappingApi, DataSource, FieldMapping, TableColumnInfo } from '@/api/dataModel'
+import { dataModelApi, dataSourceApi, fieldMappingApi, expressionApi, DataSource, FieldMapping, TableColumnInfo, ExpressionFunctionDef, ExpressionCategoryDef } from '@/api/dataModel'
 import { useAppStore } from '@/store/appStore'
 import CustomComponentWrapper, { CustomComponentPreview, useCustomComponentSchema } from '@/components/CustomComponentWrapper'
 import { loadCustomComponent } from '@/utils/componentLoader'
 import AiPagePanel from '@/components/AiPagePanel'
+import ExpressionEditor from '@/components/ExpressionEditor'
 
 const { Header, Sider, Content } = Layout
 const { Option } = Select
@@ -371,6 +371,11 @@ const PageDesigner: React.FC = () => {
   const [extTablesLoading, setExtTablesLoading] = useState(false)
   const [extColumnsLoading, setExtColumnsLoading] = useState(false)
 
+  const [exprFunctions, setExprFunctions] = useState<ExpressionFunctionDef[]>([])
+  const [exprCategories, setExprCategories] = useState<ExpressionCategoryDef[]>([])
+  const [conditionExpr, setConditionExpr] = useState('')
+  const [mappingExpr, setMappingExpr] = useState('')
+
   const canvasRef = useRef<HTMLDivElement>(null)
 
   const loadPage = useCallback(async () => {
@@ -467,6 +472,23 @@ const PageDesigner: React.FC = () => {
       console.error('加载外部数据源失败:', e)
     }
   }, [currentApp])
+
+  const loadExprFunctions = useCallback(async () => {
+    try {
+      const [funcRes, catRes]: any[] = await Promise.all([
+        expressionApi.getFunctions(),
+        expressionApi.getCategories(),
+      ])
+      if (funcRes.code === 0 || funcRes.code === 200) {
+        setExprFunctions(funcRes.data || [])
+      }
+      if (catRes.code === 0 || catRes.code === 200) {
+        setExprCategories(catRes.data || [])
+      }
+    } catch (e) {
+      console.error('加载表达式函数失败:', e)
+    }
+  }, [])
 
   const loadExtTables = useCallback(async (dsId: number) => {
     try {
@@ -601,6 +623,7 @@ const PageDesigner: React.FC = () => {
     loadDataModels()
     loadExtDataSources()
     loadExtMappings()
+    loadExprFunctions()
     const createAiSession = async () => {
       try {
         const { aiPageApi } = await import('@/api/page')
@@ -611,7 +634,7 @@ const PageDesigner: React.FC = () => {
       }
     }
     createAiSession()
-  }, [loadPage, loadComponentLibrary, loadDataModels, loadExtDataSources, loadExtMappings])
+  }, [loadPage, loadComponentLibrary, loadDataModels, loadExtDataSources, loadExtMappings, loadExprFunctions])
 
   const buildComponentTree = (components: PageComponent[]): any[] => {
     const map = new Map()
@@ -1330,6 +1353,31 @@ const PageDesigner: React.FC = () => {
                   >
                     <Input.TextArea rows={3} placeholder="例如：{\"url\": \"/api/list\", \"method\": \"GET\"}" />
                   </Form.Item>
+                  <Form.Item
+                    {...restField}
+                    name={[name, 'condition']}
+                    label="执行条件"
+                    tooltip="满足条件时才执行此事件动作，留空则无条件执行"
+                  >
+                    <ExpressionEditor
+                      fields={extTableColumns.map(col => ({
+                        name: col.columnName,
+                        type: col.typeName,
+                        table: selectedExtTable || undefined,
+                      }))}
+                      functions={exprFunctions}
+                      categories={exprCategories}
+                      onValidate={async (expr) => {
+                        try {
+                          const res: any = await expressionApi.validate(expr)
+                          if (res.code === 0 || res.code === 200) return res.data
+                          return { valid: false, errors: ['校验失败'], warnings: [] }
+                        } catch { return { valid: false, errors: ['校验失败'], warnings: [] } }
+                      }}
+                      mode="condition"
+                      placeholder='如: ${status} == 1 && ${age} >= 18'
+                    />
+                  </Form.Item>
                 </Card>
               ))}
               <Button type="dashed" block icon={<PlusOutlined />} onClick={() => add()}>
@@ -1355,7 +1403,25 @@ const PageDesigner: React.FC = () => {
       { value: 'api', label: '自定义API', icon: '🌐' },
       { value: 'static', label: '静态数据', icon: '📋' },
       { value: 'variable', label: '页面变量', icon: '📦' },
+      { value: 'expression', label: '表达式', icon: '⚙️' },
     ]
+
+    const exprFields = extTableColumns.map(col => ({
+      name: col.columnName,
+      type: col.typeName,
+      table: selectedExtTable || undefined,
+      dataSourceId: selectedExtDataSourceId || undefined,
+    }))
+
+    const handleExprValidate = async (expr: string) => {
+      try {
+        const res: any = await expressionApi.validate(expr)
+        if (res.code === 0 || res.code === 200) return res.data
+        return { valid: false, errors: ['校验请求失败'], warnings: [] }
+      } catch {
+        return { valid: false, errors: ['校验请求失败'], warnings: [] }
+      }
+    }
 
     return (
       <Form form={dataSourceForm} layout="vertical" onFinish={handleDataSourceChange}>
@@ -1392,7 +1458,16 @@ const PageDesigner: React.FC = () => {
                     </Select>
                   </Form.Item>
                   <Form.Item name="fieldMapping" label="字段映射">
-                    <Input.TextArea rows={4} placeholder='例如：{"name": "userName", "age": "userAge"}' />
+                    <ExpressionEditor
+                      value={mappingExpr}
+                      onChange={(val) => setMappingExpr(val)}
+                      fields={exprFields}
+                      functions={exprFunctions}
+                      categories={exprCategories}
+                      onValidate={handleExprValidate}
+                      mode="mapping"
+                      placeholder='如: ${userName} 或 CONCAT(${firstName}, " ", ${lastName})'
+                    />
                   </Form.Item>
                 </>
               )
@@ -1422,6 +1497,36 @@ const PageDesigner: React.FC = () => {
                 <Form.Item name="staticData" label="静态数据" rules={[{ required: true }]}>
                   <Input.TextArea rows={6} placeholder='例如：[{"label": "选项1", "value": "1"}, {"label": "选项2", "value": "2"}]' />
                 </Form.Item>
+              )
+            }
+            if (type === 'expression') {
+              return (
+                <>
+                  <Form.Item name="expression" label="数据表达式">
+                    <ExpressionEditor
+                      value={mappingExpr}
+                      onChange={(val) => setMappingExpr(val)}
+                      fields={exprFields}
+                      functions={exprFunctions}
+                      categories={exprCategories}
+                      onValidate={handleExprValidate}
+                      mode="mapping"
+                      placeholder='如: ${price} * ${quantity} 或 IF(${discount} > 0, ${price} * ${discount}, ${price})'
+                    />
+                  </Form.Item>
+                  <Form.Item name="conditionExpression" label="条件表达式（可选）">
+                    <ExpressionEditor
+                      value={conditionExpr}
+                      onChange={(val) => setConditionExpr(val)}
+                      fields={exprFields}
+                      functions={exprFunctions}
+                      categories={exprCategories}
+                      onValidate={handleExprValidate}
+                      mode="condition"
+                      placeholder='如: ${status} == 1 && ${age} >= 18'
+                    />
+                  </Form.Item>
+                </>
               )
             }
             return null
@@ -1681,6 +1786,35 @@ const PageDesigner: React.FC = () => {
           >
             应用到组件
           </Button>
+        </div>
+
+        <Divider style={{ margin: '8px 0' }} />
+
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+            <ExperimentOutlined style={{ color: '#722ed1' }} />
+            <span style={{ fontWeight: 500 }}>条件渲染表达式</span>
+          </div>
+          <ExpressionEditor
+            value={conditionExpr}
+            onChange={(val) => setConditionExpr(val)}
+            fields={extTableColumns.map(col => ({
+              name: col.columnName,
+              type: col.typeName,
+              table: selectedExtTable || undefined,
+            }))}
+            functions={exprFunctions}
+            categories={exprCategories}
+            onValidate={async (expr) => {
+              try {
+                const res: any = await expressionApi.validate(expr)
+                if (res.code === 0 || res.code === 200) return res.data
+                return { valid: false, errors: ['校验失败'], warnings: [] }
+              } catch { return { valid: false, errors: ['校验失败'], warnings: [] } }
+            }}
+            mode="condition"
+            placeholder='如: ${status} == 1 && CONTAINS(${name}, "admin")'
+          />
         </div>
       </div>
     )

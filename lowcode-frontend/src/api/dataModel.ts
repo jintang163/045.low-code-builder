@@ -247,3 +247,40 @@ export const fieldTypeOptions = [
   { label: '关联', value: 'RELATION' },
   { label: 'JSON', value: 'JSON' },
 ]
+
+export interface ExpressionFunctionDef {
+  name: string
+  displayName: string
+  description: string
+  syntax: string
+  returnType: string
+  category: string
+}
+
+export interface ExpressionCategoryDef {
+  name: string
+  displayName: string
+}
+
+export interface ExpressionValidationResult {
+  valid: boolean
+  errors: string[]
+  warnings: string[]
+}
+
+export interface ExpressionExecuteResult {
+  success: boolean
+  result: any
+  error?: string
+  duration: number
+  resultType?: string
+}
+
+export const expressionApi = {
+  getFunctions: () => request.get<ExpressionFunctionDef[]>('/expression/functions'),
+  getFunctionsByCategory: (category: string) => request.get<ExpressionFunctionDef[]>(`/expression/functions/category/${category}`),
+  getCategories: () => request.get<ExpressionCategoryDef[]>('/expression/categories'),
+  validate: (expression: string) => request.post<ExpressionValidationResult>('/expression/validate', expression),
+  execute: (expression: string, context?: Record<string, any>) =>
+    request.post<ExpressionExecuteResult>('/expression/execute', { expression, context }),
+}
