@@ -15,6 +15,7 @@ public class UserPermissionVO {
     private Map<String, ComponentPermissionVO> componentPermissions;
     private Map<Long, FieldPermissionVO> fieldPermissions;
     private String rowLevelSqlFilter;
+    private Map<Long, String> modelRowLevelFilters;
 
     @Data
     public static class ComponentPermissionVO {

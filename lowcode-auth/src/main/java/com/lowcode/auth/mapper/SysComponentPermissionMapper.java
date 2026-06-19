@@ -12,7 +12,11 @@ import java.util.List;
 public interface SysComponentPermissionMapper extends BaseMapper<SysComponentPermission> {
 
     @Select("SELECT cp.* FROM sys_component_permission cp " +
-            "WHERE cp.role_id IN (SELECT role_id FROM sys_user_app_role WHERE user_id = #{userId} AND app_id = #{appId}) " +
+            "WHERE cp.role_id IN ( " +
+            "  SELECT role_id FROM sys_user_app_role WHERE user_id = #{userId} AND app_id = #{appId} AND deleted = 0 " +
+            "  UNION " +
+            "  SELECT role_id FROM sys_user_role WHERE user_id = #{userId} AND deleted = 0 " +
+            ") " +
             "AND cp.page_id = #{pageId} AND cp.deleted = 0")
     List<SysComponentPermission> selectComponentPermissions(@Param("userId") Long userId, @Param("appId") Long appId, @Param("pageId") Long pageId);
 

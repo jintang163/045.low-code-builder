@@ -46,6 +46,7 @@ import {
   DatabaseOutlined,
   ArrowRightOutlined,
   ExperimentOutlined,
+  SafetyOutlined,
 } from '@ant-design/icons'
 import { useParams, useNavigate } from 'react-router-dom'
 import { DndProvider, useDrag, useDrop } from 'react-dnd'
@@ -58,6 +59,7 @@ import { useAppStore } from '@/store/appStore'
 import CustomComponentWrapper, { CustomComponentPreview, useCustomComponentSchema } from '@/components/CustomComponentWrapper'
 import { loadCustomComponent } from '@/utils/componentLoader'
 import AiPagePanel from '@/components/AiPagePanel'
+import PermissionGuard from '@/components/PermissionGuard'
 import ExpressionEditor from '@/components/ExpressionEditor'
 
 const { Header, Sider, Content } = Layout
@@ -344,6 +346,7 @@ const PageDesigner: React.FC = () => {
   const [eventForm] = Form.useForm()
   const [dataSourceForm] = Form.useForm()
   const [validationForm] = Form.useForm()
+  const [permissionForm] = Form.useForm()
   const [componentTree, setComponentTree] = useState<any[]>([])
   const [activeTab, setActiveTab] = useState('props')
   const [previewVisible, setPreviewVisible] = useState(false)
@@ -901,12 +904,14 @@ const PageDesigner: React.FC = () => {
     const events = component.eventConfig ? JSON.parse(component.eventConfig) : []
     const dataSource = component.dataSourceConfig ? JSON.parse(component.dataSourceConfig) : {}
     const validation = component.validationConfig ? JSON.parse(component.validationConfig) : []
+    const permission = component.permissionConfig ? JSON.parse(component.permissionConfig) : {}
 
     propsForm.setFieldsValue(props)
     styleForm.setFieldsValue(style)
     eventForm.setFieldsValue({ events })
     dataSourceForm.setFieldsValue(dataSource)
     validationForm.setFieldsValue({ validation })
+    permissionForm.setFieldsValue(permission)
   }
 
   const handlePropsChange = async () => {
@@ -959,6 +964,16 @@ const PageDesigner: React.FC = () => {
       const values = await validationForm.validateFields()
       updateSelectedComponent({ validationConfig: JSON.stringify(values.validation || []) })
       message.success('校验规则更新成功')
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const handlePermissionChange = async () => {
+    try {
+      const values = await permissionForm.validateFields()
+      updateSelectedComponent({ permissionConfig: JSON.stringify(values) })
+      message.success('权限配置更新成功')
     } catch (e) {
       console.error(e)
     }
@@ -1317,6 +1332,58 @@ const PageDesigner: React.FC = () => {
         <Form.Item style={{ marginTop: 16 }}>
           <Button type="primary" htmlType="submit" block>
             保存样式
+          </Button>
+        </Form.Item>
+      </Form>
+    )
+  }
+
+  const renderPermissionPanel = () => {
+    if (!selectedComponent) return null
+
+    return (
+      <Form form={permissionForm} layout="vertical" onFinish={handlePermissionChange}>
+        <Alert
+          type="info"
+          message="组件权限配置"
+          description="配置组件的可见性和操作权限。不配置表示不限制。"
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
+        <Card size="small" title="可见性控制" style={{ marginBottom: 12 }}>
+          <Form.Item name="enablePermission" label="启用权限控制" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+          <Form.Item name="permissionCode" label="权限编码" tooltip="对应后端的权限编码，如 system:user:add">
+            <Input placeholder="例如：system:user:list" />
+          </Form.Item>
+          <Form.Item name="requiredRoles" label="需要角色" tooltip="多个角色用逗号分隔，满足任意一个即可">
+            <Input placeholder="例如：admin, editor" />
+          </Form.Item>
+          <Form.Item name="visibilityMode" label="控制方式">
+            <Select>
+              <Option value="hide">无权限时隐藏</Option>
+              <Option value="disable">无权限时禁用</Option>
+            </Select>
+          </Form.Item>
+        </Card>
+        <Card size="small" title="字段权限（表单字段）">
+          <Form.Item name="enableFieldPermission" label="启用字段级权限" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+          <Form.Item name="fieldId" label="绑定字段ID" tooltip="绑定到数据模型字段，从权限配置读取">
+            <Input placeholder="数据模型字段ID" />
+          </Form.Item>
+          <Form.Item name="fieldAction" label="字段操作">
+            <Select>
+              <Option value="view">查看权限</Option>
+              <Option value="edit">编辑权限</Option>
+            </Select>
+          </Form.Item>
+        </Card>
+        <Form.Item style={{ marginTop: 16 }}>
+          <Button type="primary" htmlType="submit" block>
+            保存权限配置
           </Button>
         </Form.Item>
       </Form>
@@ -2232,6 +2299,15 @@ const PageDesigner: React.FC = () => {
                       ),
                       children: renderFieldMappingPanel(),
                     },
+                    {
+                      key: 'permission',
+                      label: (
+                        <span>
+                          <SafetyOutlined /> 权限
+                        </span>
+                      ),
+                      children: renderPermissionPanel(),
+                    },
                   ]}
                 />
               </div>
@@ -2274,52 +2350,73 @@ const PageDesigner: React.FC = () => {
               const props = component.propsConfig ? JSON.parse(component.propsConfig) : {}
               const mappingValue = evalResult?.mappingValue
               const resolvedProps = mappingValue !== undefined ? { ...props, value: mappingValue, text: mappingValue } : props
-              return (
-              <div key={component.componentId} style={{ marginBottom: 16 }}>
-                {(() => {
-                  switch (component.componentType) {
-                    case 'INPUT':
-                      return <Input placeholder={resolvedProps.placeholder || '请输入'} value={resolvedProps.value} style={{ width: '100%' }} />
-                    case 'BUTTON':
-                      return <Button type={resolvedProps.type || 'primary'}>{resolvedProps.text || '按钮'}</Button>
-                    case 'TITLE':
-                      return <h3>{resolvedProps.text || '标题'}</h3>
-                    case 'TEXT':
-                      return <p>{resolvedProps.text || '文本内容'}</p>
-                    case 'TABLE':
-                      return (
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                          <thead>
-                            <tr style={{ background: '#f5f5f5' }}>
-                              <th style={{ border: '1px solid #e8e8e8', padding: 8 }}>列1</th>
-                              <th style={{ border: '1px solid #e8e8e8', padding: 8 }}>列2</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <tr>
-                              <td style={{ border: '1px solid #e8e8e8', padding: 8 }}>数据1</td>
-                              <td style={{ border: '1px solid #e8e8e8', padding: 8 }}>数据2</td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      )
-                    default: {
-                      const systemTypes = ['INPUT', 'TEXTAREA', 'NUMBER', 'SELECT', 'DATE', 'DATETIME', 'TIME', 'SWITCH', 'CHECKBOX', 'RADIO', 'UPLOAD', 'RICHTEXT', 'TABLE', 'BUTTON', 'LINK', 'IMAGE', 'TEXT', 'TITLE', 'ICON', 'DIVIDER', 'TABS', 'CARD', 'GRID', 'FLEX', 'MODAL', 'FORM', 'STEPS', 'TIMELINE', 'PROGRESS', 'RATE', 'SLIDER', 'LINECHART', 'BARCHART', 'PIECHART', 'AREACHART', 'SCATTERCHART', 'RADARCHART']
-                      if (!systemTypes.includes(component.componentType)) {
-                        return (
-                          <CustomComponentWrapper
-                            component={component}
-                            executeActions={true}
-                            eventContext={{ navigate }}
-                          />
-                        )
+              const permissionConfig = component.permissionConfig ? JSON.parse(component.permissionConfig) : {}
+              const { enablePermission, permissionCode, requiredRoles, visibilityMode } = permissionConfig
+
+              const renderComponent = () => {
+                const isDisabled = enablePermission && visibilityMode === 'disable'
+                return (
+                  <div key={component.componentId} style={{ marginBottom: 16 }}>
+                    {(() => {
+                      switch (component.componentType) {
+                        case 'INPUT':
+                          return <Input placeholder={resolvedProps.placeholder || '请输入'} value={resolvedProps.value} disabled={isDisabled} style={{ width: '100%' }} />
+                        case 'BUTTON':
+                          return <Button type={resolvedProps.type || 'primary'} disabled={isDisabled}>{resolvedProps.text || '按钮'}</Button>
+                        case 'TITLE':
+                          return <h3>{resolvedProps.text || '标题'}</h3>
+                        case 'TEXT':
+                          return <p>{resolvedProps.text || '文本内容'}</p>
+                        case 'TABLE':
+                          return (
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                              <thead>
+                                <tr style={{ background: '#f5f5f5' }}>
+                                  <th style={{ border: '1px solid #e8e8e8', padding: 8 }}>列1</th>
+                                  <th style={{ border: '1px solid #e8e8e8', padding: 8 }}>列2</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr>
+                                  <td style={{ border: '1px solid #e8e8e8', padding: 8 }}>数据1</td>
+                                  <td style={{ border: '1px solid #e8e8e8', padding: 8 }}>数据2</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          )
+                        default: {
+                          const systemTypes = ['INPUT', 'TEXTAREA', 'NUMBER', 'SELECT', 'DATE', 'DATETIME', 'TIME', 'SWITCH', 'CHECKBOX', 'RADIO', 'UPLOAD', 'RICHTEXT', 'TABLE', 'BUTTON', 'LINK', 'IMAGE', 'TEXT', 'TITLE', 'ICON', 'DIVIDER', 'TABS', 'CARD', 'GRID', 'FLEX', 'MODAL', 'FORM', 'STEPS', 'TIMELINE', 'PROGRESS', 'RATE', 'SLIDER', 'LINECHART', 'BARCHART', 'PIECHART', 'AREACHART', 'SCATTERCHART', 'RADARCHART']
+                          if (!systemTypes.includes(component.componentType)) {
+                            return (
+                              <CustomComponentWrapper
+                                component={component}
+                                executeActions={true}
+                                eventContext={{ navigate }}
+                              />
+                            )
+                          }
+                          return <div style={{ padding: 16, background: '#f5f5f5', borderRadius: 4, textAlign: 'center', color: '#999' }}>{component.componentName}</div>
+                        }
                       }
-                      return <div style={{ padding: 16, background: '#f5f5f5', borderRadius: 4, textAlign: 'center', color: '#999' }}>{component.componentName}</div>
-                    }
-                  }
-                })()}
-              </div>
-              )
+                    })()}
+                  </div>
+                )
+              }
+
+              if (enablePermission && (permissionCode || requiredRoles)) {
+                const roles = requiredRoles ? requiredRoles.split(',').map((r: string) => r.trim()).filter(Boolean) : undefined
+                return (
+                  <PermissionGuard
+                    key={component.componentId}
+                    permission={permissionCode || undefined}
+                    role={roles && roles.length > 0 ? roles : undefined}
+                  >
+                    {renderComponent()}
+                  </PermissionGuard>
+                )
+              }
+
+              return renderComponent()
             })}
           </div>
         </div>

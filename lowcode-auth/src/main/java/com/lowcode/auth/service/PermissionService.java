@@ -78,45 +78,94 @@ public class PermissionService {
         List<String> permissions = sysUserMapper.selectPermissionCodesByUserId(userId);
         vo.setPermissions(permissions);
 
-        List<Long> roleIds = sysUserAppRoleMapper.selectRoleIdsByUserAndApp(userId, appId);
-        if (roleIds.isEmpty()) {
-            roleIds = sysUserRoleMapper.selectObjs(
-                new LambdaQueryWrapper<SysUserRole>()
-                    .eq(SysUserRole::getUserId, userId)
-                    .select(SysUserRole::getRoleId)
-            );
-        }
+        List<Long> appRoleIds = sysUserAppRoleMapper.selectRoleIdsByUserAndApp(userId, appId);
+        List<Long> globalRoleIds = sysUserRoleMapper.selectObjs(
+            new LambdaQueryWrapper<SysUserRole>()
+                .eq(SysUserRole::getUserId, userId)
+                .select(SysUserRole::getRoleId)
+        );
+        Set<Long> roleIdSet = new HashSet<>();
+        roleIdSet.addAll(appRoleIds);
+        roleIdSet.addAll(globalRoleIds);
+        List<Long> roleIds = new ArrayList<>(roleIdSet);
 
         if (!roleIds.isEmpty()) {
-            List<SysPagePermission> pagePermissions = sysPagePermissionMapper.selectBatchIds(
-                sysPagePermissionMapper.selectObjs(
-                    new LambdaQueryWrapper<SysPagePermission>()
-                        .in(SysPagePermission::getRoleId, roleIds)
-                        .eq(SysPagePermission::getCanAccess, 1)
-                        .select(SysPagePermission::getId)
-                )
+            List<SysPagePermission> pagePermissions = sysPagePermissionMapper.selectList(
+                new LambdaQueryWrapper<SysPagePermission>()
+                    .in(SysPagePermission::getRoleId, roleIds)
+                    .eq(SysPagePermission::getCanAccess, 1)
             );
             List<Long> pageIds = pagePermissions.stream()
                     .map(SysPagePermission::getPageId)
+                    .distinct()
                     .collect(Collectors.toList());
             vo.setAccessiblePageIds(pageIds);
 
-            List<SysComponentPermission> compPermissions = sysComponentPermissionMapper.selectBatchIds(
-                sysComponentPermissionMapper.selectObjs(
-                    new LambdaQueryWrapper<SysComponentPermission>()
-                        .in(SysComponentPermission::getRoleId, roleIds)
-                        .select(SysComponentPermission::getId)
-                )
+            List<SysComponentPermission> compPermissions = sysComponentPermissionMapper.selectList(
+                new LambdaQueryWrapper<SysComponentPermission>()
+                    .in(SysComponentPermission::getRoleId, roleIds)
             );
             Map<String, UserPermissionVO.ComponentPermissionVO> compPermMap = new HashMap<>();
             for (SysComponentPermission cp : compPermissions) {
-                UserPermissionVO.ComponentPermissionVO cpVO = new UserPermissionVO.ComponentPermissionVO();
-                cpVO.setComponentId(cp.getComponentId());
-                cpVO.setVisible(cp.getCanVisible() == 1);
-                cpVO.setDisabled(cp.getCanDisabled() == 1);
+                UserPermissionVO.ComponentPermissionVO cpVO = compPermMap.get(cp.getComponentId());
+                if (cpVO == null) {
+                    cpVO = new UserPermissionVO.ComponentPermissionVO();
+                    cpVO.setComponentId(cp.getComponentId());
+                    cpVO.setVisible(true);
+                    cpVO.setDisabled(false);
+                }
+                if (cp.getCanVisible() == 0) {
+                    cpVO.setVisible(false);
+                }
+                if (cp.getCanDisabled() == 1) {
+                    cpVO.setDisabled(true);
+                }
                 compPermMap.put(cp.getComponentId(), cpVO);
             }
             vo.setComponentPermissions(compPermMap);
+
+            List<SysFieldPermission> fieldPermissions = sysFieldPermissionMapper.selectList(
+                new LambdaQueryWrapper<SysFieldPermission>()
+                    .in(SysFieldPermission::getRoleId, roleIds)
+            );
+            Map<Long, UserPermissionVO.FieldPermissionVO> fieldPermMap = new HashMap<>();
+            for (SysFieldPermission fp : fieldPermissions) {
+                UserPermissionVO.FieldPermissionVO fpVO = fieldPermMap.get(fp.getFieldId());
+                if (fpVO == null) {
+                    fpVO = new UserPermissionVO.FieldPermissionVO();
+                    fpVO.setFieldId(fp.getFieldId());
+                    fpVO.setCanView(true);
+                    fpVO.setCanEdit(true);
+                }
+                if (fp.getCanView() == 0) {
+                    fpVO.setCanView(false);
+                }
+                if (fp.getCanEdit() == 0) {
+                    fpVO.setCanEdit(false);
+                }
+                fieldPermMap.put(fp.getFieldId(), fpVO);
+            }
+            vo.setFieldPermissions(fieldPermMap);
+
+            List<SysRowPermission> rowPermissions = sysRowPermissionMapper.selectList(
+                new LambdaQueryWrapper<SysRowPermission>()
+                    .in(SysRowPermission::getRoleId, roleIds)
+                    .eq(SysRowPermission::getStatus, 1)
+                    .orderByAsc(SysRowPermission::getPriority)
+            );
+            String rowLevelSqlFilter = expressionEngine.generateSqlFilter(rowPermissions, user);
+            vo.setRowLevelSqlFilter(rowLevelSqlFilter);
+
+            Map<Long, String> modelRowFilters = new HashMap<>();
+            Map<Long, List<SysRowPermission>> groupedByModel = rowPermissions.stream()
+                    .collect(Collectors.groupingBy(SysRowPermission::getModelId));
+            for (Map.Entry<Long, List<SysRowPermission>> entry : groupedByModel.entrySet()) {
+                String sqlFilter = expressionEngine.generateSqlFilter(entry.getValue(), user);
+                if (sqlFilter != null && !sqlFilter.isEmpty()) {
+                    modelRowFilters.put(entry.getKey(), sqlFilter);
+                }
+            }
+            vo.setModelRowLevelFilters(modelRowFilters);
         }
 
         return vo;

@@ -43,6 +43,7 @@ public class CodeGeneratorService {
         }
         if (config.getGenerateApiJs()) {
             codes.add(generateApiJs(model, config));
+            codes.add(generatePermissionPage(model, config));
         }
 
         return codes;
@@ -268,12 +269,14 @@ public class CodeGeneratorService {
         sb.append("import ").append(voPackage).append(".").append(entityName).append("VO;\n");
         sb.append("import ").append(dtoPackage).append(".").append(entityName).append("DTO;\n");
         sb.append("import com.lowcode.common.result.Result;\n");
+        sb.append("import com.lowcode.common.util.UserContext;\n");
         sb.append("import io.swagger.annotations.Api;\n");
         sb.append("import io.swagger.annotations.ApiOperation;\n");
         sb.append("import org.springframework.beans.BeanUtils;\n");
         sb.append("import org.springframework.beans.factory.annotation.Autowired;\n");
         sb.append("import org.springframework.web.bind.annotation.*;\n\n");
         sb.append("import java.util.List;\n");
+        sb.append("import java.util.Map;\n");
         sb.append("import java.util.stream.Collectors;\n\n");
 
         String requestMapping = "/" + StrUtil.toSymbolCase(entityName, '-');
@@ -328,8 +331,15 @@ public class CodeGeneratorService {
 
         sb.append("    @ApiOperation(\"查询列表\")\n");
         sb.append("    @GetMapping(\"/list\")\n");
-        sb.append("    public Result<List<").append(entityName).append("VO>> list() {\n");
-        sb.append("        List<").append(entityName).append("> list = ").append(serviceField).append(".list();\n");
+        sb.append("    public Result<List<").append(entityName).append("VO>> list(@RequestParam(required = false) Map<String, Object> conditions) {\n");
+        sb.append("        Long userId = UserContext.getCurrentUserId();\n");
+        sb.append("        LambdaQueryWrapper<").append(entityName).append("> wrapper = new LambdaQueryWrapper<>();\n");
+        sb.append("        // TODO: 注入行级权限过滤条件\n");
+        sb.append("        // String rowFilter = permissionService.getRowLevelFilter(userId, appId, modelId);\n");
+        sb.append("        // if (rowFilter != null && !rowFilter.isEmpty()) {\n");
+        sb.append("        //     wrapper.apply(rowFilter);\n");
+        sb.append("        // }\n");
+        sb.append("        List<").append(entityName).append("> list = ").append(serviceField).append(".list(wrapper);\n");
         sb.append("        List<").append(entityName).append("VO> voList = list.stream()\n");
         sb.append("                .map(this::convertToVO)\n");
         sb.append("                .collect(Collectors.toList());\n");
@@ -340,9 +350,17 @@ public class CodeGeneratorService {
         sb.append("    @GetMapping(\"/page\")\n");
         sb.append("    public Result<Page<").append(entityName).append("VO>> page(\n");
         sb.append("            @RequestParam(defaultValue = \"1\") Integer current,\n");
-        sb.append("            @RequestParam(defaultValue = \"10\") Integer size) {\n");
+        sb.append("            @RequestParam(defaultValue = \"10\") Integer size,\n");
+        sb.append("            @RequestParam(required = false) Map<String, Object> conditions) {\n");
+        sb.append("        Long userId = UserContext.getCurrentUserId();\n");
+        sb.append("        LambdaQueryWrapper<").append(entityName).append("> wrapper = new LambdaQueryWrapper<>();\n");
+        sb.append("        // TODO: 注入行级权限过滤条件\n");
+        sb.append("        // String rowFilter = permissionService.getRowLevelFilter(userId, appId, modelId);\n");
+        sb.append("        // if (rowFilter != null && !rowFilter.isEmpty()) {\n");
+        sb.append("        //     wrapper.apply(rowFilter);\n");
+        sb.append("        // }\n");
         sb.append("        Page<").append(entityName).append("> page = ").append(serviceField)
-                .append(".page(new Page<>(current, size), new LambdaQueryWrapper<>());\n");
+                .append(".page(new Page<>(current, size), wrapper);\n");
         sb.append("        Page<").append(entityName).append("VO> voPage = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());\n");
         sb.append("        voPage.setRecords(page.getRecords().stream()\n");
         sb.append("                .map(this::convertToVO)\n");
@@ -505,6 +523,135 @@ public class CodeGeneratorService {
         sb.append("export default ").append(apiNameCamel).append("Api\n");
 
         return new GeneratedCode("API_JS", apiName, filePath, sb.toString());
+    }
+
+    public GeneratedCode generatePermissionPage(DataModel model, GeneratorConfig config) {
+        String entityName = model.getEntityName();
+        String pageName = StrUtil.toSymbolCase(entityName, '-') + ".tsx";
+        String filePath = "pages/" + StrUtil.toSymbolCase(entityName, '-') + "/index.tsx";
+        String apiNameCamel = StrUtil.toCamelCase(entityName);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("import React, { useState, useEffect } from 'react'\n");
+        sb.append("import { Table, Button, Form, Modal, Input, message, Space, Popconfirm } from 'antd'\n");
+        sb.append("import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'\n");
+        sb.append("import ").append(apiNameCamel).append("Api from '@/api/").append(StrUtil.toSymbolCase(entityName, '-')).append("'\n");
+        sb.append("import { usePermission } from '@/hooks/usePermission'\n");
+        sb.append("import PermissionGuard from '@/components/PermissionGuard'\n");
+        sb.append("import PermissionButton from '@/components/PermissionButton'\n");
+        sb.append("import PermissionField from '@/components/PermissionField'\n\n");
+
+        sb.append("const ").append(entityName).append("Page: React.FC = () => {\n");
+        sb.append("  const { hasPermission, isComponentVisible, isComponentDisabled, canEditField, getModelRowLevelFilter } = usePermission()\n");
+        sb.append("  const [data, setData] = useState([])\n");
+        sb.append("  const [loading, setLoading] = useState(false)\n");
+        sb.append("  const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 })\n");
+        sb.append("  const [modalVisible, setModalVisible] = useState(false)\n");
+        sb.append("  const [editingId, setEditingId] = useState<number | null>(null)\n");
+        sb.append("  const [form] = Form.useForm()\n\n");
+
+        sb.append("  const fetchData = async (page = 1, pageSize = 10) => {\n");
+        sb.append("    setLoading(true)\n");
+        sb.append("    try {\n");
+        sb.append("      // TODO: 行级权限过滤 - 可通过后端自动注入\n");
+        sb.append("      // const rowFilter = getModelRowLevelFilter(modelId)\n");
+        sb.append("      const res = await ").append(apiNameCamel).append("Api.page({ current: page, size: pageSize })\n");
+        sb.append("      setData(res?.records || res?.data?.records || [])\n");
+        sb.append("      setPagination({ current: page, pageSize, total: res?.total || res?.data?.total || 0 })\n");
+        sb.append("    } finally {\n");
+        sb.append("      setLoading(false)\n");
+        sb.append("    }\n");
+        sb.append("  }\n\n");
+
+        sb.append("  useEffect(() => {\n");
+        sb.append("    fetchData()\n");
+        sb.append("  }, [])\n\n");
+
+        sb.append("  const handleAdd = () => {\n");
+        sb.append("    setEditingId(null)\n");
+        sb.append("    form.resetFields()\n");
+        sb.append("    setModalVisible(true)\n");
+        sb.append("  }\n\n");
+
+        sb.append("  const handleEdit = (record: any) => {\n");
+        sb.append("    setEditingId(record.id)\n");
+        sb.append("    form.setFieldsValue(record)\n");
+        sb.append("    setModalVisible(true)\n");
+        sb.append("  }\n\n");
+
+        sb.append("  const handleDelete = async (id: number) => {\n");
+        sb.append("    await ").append(apiNameCamel).append("Api.delete(id)\n");
+        sb.append("    message.success('删除成功')\n");
+        sb.append("    fetchData(pagination.current, pagination.pageSize)\n");
+        sb.append("  }\n\n");
+
+        sb.append("  const handleSubmit = async () => {\n");
+        sb.append("    const values = await form.validateFields()\n");
+        sb.append("    if (editingId) {\n");
+        sb.append("      await ").append(apiNameCamel).append("Api.update({ ...values, id: editingId })\n");
+        sb.append("      message.success('更新成功')\n");
+        sb.append("    } else {\n");
+        sb.append("      await ").append(apiNameCamel).append("Api.save(values)\n");
+        sb.append("      message.success('新增成功')\n");
+        sb.append("    }\n");
+        sb.append("    setModalVisible(false)\n");
+        sb.append("    fetchData(pagination.current, pagination.pageSize)\n");
+        sb.append("  }\n\n");
+
+        sb.append("  const columns = [\n");
+        sb.append("    {\n");
+        sb.append("      title: '操作',\n");
+        sb.append("      key: 'action',\n");
+        sb.append("      width: 200,\n");
+        sb.append("      render: (_: any, record: any) => (\n");
+        sb.append("        <Space>\n");
+        sb.append("          <PermissionButton permission='").append(entityName.toLowerCase()).append(":edit' type='link' icon={<EditOutlined />} onClick={() => handleEdit(record)}>\n");
+        sb.append("            编辑\n");
+        sb.append("          </PermissionButton>\n");
+        sb.append("          <PermissionGuard permission='").append(entityName.toLowerCase()).append(":delete'>\n");
+        sb.append("            <Popconfirm title='确定删除?' onConfirm={() => handleDelete(record.id)}>\n");
+        sb.append("              <Button type='link' danger icon={<DeleteOutlined />} disabled={!isComponentVisible('btn_delete_" + entityName.toLowerCase() + "') || isComponentDisabled('btn_delete_" + entityName.toLowerCase() + "')}>\n");
+        sb.append("                删除\n");
+        sb.append("              </Button>\n");
+        sb.append("            </Popconfirm>\n");
+        sb.append("          </PermissionGuard>\n");
+        sb.append("        </Space>\n");
+        sb.append("      ),\n");
+        sb.append("    },\n");
+        sb.append("  ]\n\n");
+
+        sb.append("  return (\n");
+        sb.append("    <div style={{ padding: 24 }}>\n");
+        sb.append("      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>\n");
+        sb.append("        <h2>").append(model.getModelName()).append("管理</h2>\n");
+        sb.append("        <PermissionButton permission='").append(entityName.toLowerCase()).append(":add' type='primary' icon={<PlusOutlined />} onClick={handleAdd}>\n");
+        sb.append("          新增\n");
+        sb.append("        </PermissionButton>\n");
+        sb.append("      </div>\n");
+        sb.append("      <Table\n");
+        sb.append("        rowKey='id'\n");
+        sb.append("        loading={loading}\n");
+        sb.append("        dataSource={data}\n");
+        sb.append("        columns={columns}\n");
+        sb.append("        pagination={pagination}\n");
+        sb.append("        onChange={(p) => fetchData(p.current, p.pageSize)}\n");
+        sb.append("      />\n");
+        sb.append("      <Modal title={editingId ? '编辑' : '新增'} open={modalVisible} onCancel={() => setModalVisible(false)} onOk={handleSubmit}>\n");
+        sb.append("        <Form form={form} layout='vertical'>\n");
+        sb.append("          <PermissionField fieldId={null} action='edit'>\n");
+        sb.append("            <Form.Item name='name' label='名称' rules={[{ required: true, message: '请输入名称' }]}>\n");
+        sb.append("              <Input placeholder='请输入名称' />\n");
+        sb.append("            </Form.Item>\n");
+        sb.append("          </PermissionField>\n");
+        sb.append("        </Form>\n");
+        sb.append("      </Modal>\n");
+        sb.append("    </div>\n");
+        sb.append("  )\n");
+        sb.append("}\n\n");
+
+        sb.append("export default ").append(entityName).append("Page\n");
+
+        return new GeneratedCode("PERMISSION_PAGE", pageName, filePath, sb.toString());
     }
 
     private String buildPackage(GeneratorConfig config, String subPackage) {

@@ -12,7 +12,11 @@ import java.util.List;
 public interface SysPagePermissionMapper extends BaseMapper<SysPagePermission> {
 
     @Select("SELECT pp.* FROM sys_page_permission pp " +
-            "WHERE pp.role_id IN (SELECT role_id FROM sys_user_app_role WHERE user_id = #{userId} AND app_id = #{appId}) " +
+            "WHERE pp.role_id IN ( " +
+            "  SELECT role_id FROM sys_user_app_role WHERE user_id = #{userId} AND app_id = #{appId} AND deleted = 0 " +
+            "  UNION " +
+            "  SELECT role_id FROM sys_user_role WHERE user_id = #{userId} AND deleted = 0 " +
+            ") " +
             "AND pp.page_id = #{pageId} AND pp.deleted = 0")
     List<SysPagePermission> selectPagePermissions(@Param("userId") Long userId, @Param("appId") Long appId, @Param("pageId") Long pageId);
 

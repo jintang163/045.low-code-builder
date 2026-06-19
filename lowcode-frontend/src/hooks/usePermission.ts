@@ -82,6 +82,11 @@ export function usePermission() {
     return permissions?.rowLevelSqlFilter || null
   }, [permissions])
 
+  const getModelRowLevelFilter = useCallback((modelId: number) => {
+    if (!permissions?.modelRowLevelFilters) return null
+    return permissions.modelRowLevelFilters[modelId] || null
+  }, [permissions])
+
   const isAdmin = useMemo(() => {
     return hasRole(['admin', 'super_admin', 'SYSTEM_ADMIN', 'APP_ADMIN'])
   }, [hasRole])
@@ -101,6 +106,7 @@ export function usePermission() {
     canEditField,
     getFieldPermission,
     getRowLevelSqlFilter,
+    getModelRowLevelFilter,
     isAdmin,
   }
 }

@@ -12,7 +12,11 @@ import java.util.List;
 public interface SysFieldPermissionMapper extends BaseMapper<SysFieldPermission> {
 
     @Select("SELECT fp.* FROM sys_field_permission fp " +
-            "WHERE fp.role_id IN (SELECT role_id FROM sys_user_app_role WHERE user_id = #{userId} AND app_id = #{appId}) " +
+            "WHERE fp.role_id IN ( " +
+            "  SELECT role_id FROM sys_user_app_role WHERE user_id = #{userId} AND app_id = #{appId} AND deleted = 0 " +
+            "  UNION " +
+            "  SELECT role_id FROM sys_user_role WHERE user_id = #{userId} AND deleted = 0 " +
+            ") " +
             "AND fp.model_id = #{modelId} AND fp.deleted = 0")
     List<SysFieldPermission> selectFieldPermissions(@Param("userId") Long userId, @Param("appId") Long appId, @Param("modelId") Long modelId);
 

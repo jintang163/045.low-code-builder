@@ -9,6 +9,7 @@ export interface UserPermissionVO {
   componentPermissions: Record<string, ComponentPermissionVO>
   fieldPermissions: Record<number, FieldPermissionVO>
   rowLevelSqlFilter: string
+  modelRowLevelFilters: Record<number, string>
 }
 
 export interface ComponentPermissionVO {

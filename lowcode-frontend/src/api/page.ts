@@ -33,6 +33,7 @@ export interface PageComponent {
   eventConfig?: string
   dataSourceConfig?: string
   validationConfig?: string
+  permissionConfig?: string
 }
 
 export interface ComponentLibrary {
