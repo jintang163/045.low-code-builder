@@ -149,6 +149,23 @@ export interface VirtualViewJoin {
   joinType: string
 }
 
+export interface FieldMapping {
+  id?: number
+  appId: number
+  dataSourceId: number
+  pageId?: number
+  componentId?: string
+  sourceTable: string
+  sourceField: string
+  sourceType: string
+  targetComponent: string
+  targetComponentId: string
+  targetProperty: string
+  mappingType?: string
+  sortOrder?: number
+  description?: string
+}
+
 export const dataSourceApi = {
   testConnection: (data: DataSource) => request.post<boolean>('/datasource/testConnection', data),
   list: (appId: number) => request.get<DataSource[]>(`/datasource/list/${appId}`),
@@ -179,7 +196,24 @@ export const virtualViewApi = {
   save: (data: VirtualView) => request.post<VirtualView>('/datasource/virtualView', data),
   update: (data: VirtualView) => request.put<VirtualView>('/datasource/virtualView', data),
   delete: (id: number) => request.delete(`/datasource/virtualView/${id}`),
-  query: (viewId: number) => request.post<any[]>(`/datasource/virtualView/${viewId}/query`),
+  query: (viewId: number, limit = 1000) =>
+    request.post<any[]>(`/datasource/virtualView/${viewId}/query`, null, { params: { limit } }),
+}
+
+export const fieldMappingApi = {
+  save: (data: FieldMapping) => request.post<FieldMapping>('/datasource/fieldMapping', data),
+  update: (data: FieldMapping) => request.put<FieldMapping>('/datasource/fieldMapping', data),
+  delete: (id: number) => request.delete(`/datasource/fieldMapping/${id}`),
+  getByDataSource: (dataSourceId: number) =>
+    request.get<FieldMapping[]>(`/datasource/fieldMapping/dataSource/${dataSourceId}`),
+  getByPage: (pageId: number) =>
+    request.get<FieldMapping[]>(`/datasource/fieldMapping/page/${pageId}`),
+  getByComponent: (pageId: number, componentId: string) =>
+    request.get<FieldMapping[]>(`/datasource/fieldMapping/page/${pageId}/component/${componentId}`),
+  saveBatchByPage: (pageId: number, mappings: FieldMapping[]) =>
+    request.post<boolean>(`/datasource/fieldMapping/batch/page/${pageId}`, mappings),
+  saveBatchByDataSource: (dataSourceId: number, pageId: number, mappings: FieldMapping[]) =>
+    request.post<boolean>(`/datasource/fieldMapping/batch/dataSource/${dataSourceId}/page/${pageId}`, mappings),
 }
 
 export const migrationApi = {

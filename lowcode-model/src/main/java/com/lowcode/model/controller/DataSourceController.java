@@ -4,9 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.lowcode.common.result.Result;
 import com.lowcode.model.entity.DataSource;
+import com.lowcode.model.entity.FieldMapping;
 import com.lowcode.model.entity.VirtualView;
 import com.lowcode.model.service.CrossDataSourceQueryService;
 import com.lowcode.model.service.DataSourceService;
+import com.lowcode.model.service.FieldMappingService;
 import com.lowcode.model.service.VirtualViewService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -29,6 +31,9 @@ public class DataSourceController {
 
     @Autowired
     private CrossDataSourceQueryService crossDataSourceQueryService;
+
+    @Autowired
+    private FieldMappingService fieldMappingService;
 
     @ApiOperation("测试连接")
     @PostMapping("/testConnection")
@@ -175,7 +180,65 @@ public class DataSourceController {
 
     @ApiOperation("执行虚拟视图查询")
     @PostMapping("/virtualView/{viewId}/query")
-    public Result<List<Map<String, Object>>> queryVirtualView(@PathVariable Long viewId) {
-        return Result.success(crossDataSourceQueryService.queryVirtualView(viewId));
+    public Result<List<Map<String, Object>>> queryVirtualView(
+            @PathVariable Long viewId,
+            @RequestParam(required = false, defaultValue = "1000") Integer limit) {
+        return Result.success(crossDataSourceQueryService.queryVirtualView(viewId, limit));
+    }
+
+    @ApiOperation("保存字段映射")
+    @PostMapping("/fieldMapping")
+    public Result<FieldMapping> saveFieldMapping(@RequestBody FieldMapping fieldMapping) {
+        return Result.success(fieldMappingService.saveFieldMapping(fieldMapping));
+    }
+
+    @ApiOperation("更新字段映射")
+    @PutMapping("/fieldMapping")
+    public Result<FieldMapping> updateFieldMapping(@RequestBody FieldMapping fieldMapping) {
+        return Result.success(fieldMappingService.updateFieldMapping(fieldMapping));
+    }
+
+    @ApiOperation("删除字段映射")
+    @DeleteMapping("/fieldMapping/{id}")
+    public Result<Void> deleteFieldMapping(@PathVariable Long id) {
+        fieldMappingService.deleteFieldMapping(id);
+        return Result.success();
+    }
+
+    @ApiOperation("获取数据源字段映射列表")
+    @GetMapping("/fieldMapping/dataSource/{dataSourceId}")
+    public Result<List<FieldMapping>> getFieldMappingsByDataSource(@PathVariable Long dataSourceId) {
+        return Result.success(fieldMappingService.listByDataSourceId(dataSourceId));
+    }
+
+    @ApiOperation("获取页面字段映射列表")
+    @GetMapping("/fieldMapping/page/{pageId}")
+    public Result<List<FieldMapping>> getFieldMappingsByPage(@PathVariable Long pageId) {
+        return Result.success(fieldMappingService.listByPageId(pageId));
+    }
+
+    @ApiOperation("获取组件字段映射列表")
+    @GetMapping("/fieldMapping/page/{pageId}/component/{componentId}")
+    public Result<List<FieldMapping>> getFieldMappingsByComponent(
+            @PathVariable Long pageId,
+            @PathVariable String componentId) {
+        return Result.success(fieldMappingService.listByComponentId(pageId, componentId));
+    }
+
+    @ApiOperation("批量保存页面字段映射")
+    @PostMapping("/fieldMapping/batch/page/{pageId}")
+    public Result<Boolean> saveBatchFieldMappingsByPage(
+            @PathVariable Long pageId,
+            @RequestBody List<FieldMapping> mappings) {
+        return Result.success(fieldMappingService.saveBatchByPageId(pageId, mappings));
+    }
+
+    @ApiOperation("批量保存数据源字段映射")
+    @PostMapping("/fieldMapping/batch/dataSource/{dataSourceId}/page/{pageId}")
+    public Result<Boolean> saveBatchFieldMappingsByDataSource(
+            @PathVariable Long dataSourceId,
+            @PathVariable Long pageId,
+            @RequestBody List<FieldMapping> mappings) {
+        return Result.success(fieldMappingService.saveBatchByDataSourceId(dataSourceId, pageId, mappings));
     }
 }

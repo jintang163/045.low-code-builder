@@ -37,6 +37,11 @@ spring:
 
 server:
   port: 8082
+
+lowcode:
+  encrypt:
+    aes:
+      key: ${LOWCODE_AES_KEY:LowcodePlatform2024SecureKey32B}
   servlet:
     context-path: /
 
@@ -62,6 +67,11 @@ knife4j:
     version: 1.0.0
     concat: lowcode-platform
 
+lowcode:
+  encrypt:
+    aes:
+      key: ${LOWCODE_AES_KEY:LowcodePlatform2024SecureKey32B}
+
 ---
 spring:
   config:
@@ -80,3 +90,8 @@ spring:
 
 server:
   port: 8082
+
+lowcode:
+  encrypt:
+    aes:
+      key: ${LOWCODE_AES_KEY:LowcodePlatform2024SecureKey32B}

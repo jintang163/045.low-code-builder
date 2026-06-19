@@ -748,3 +748,29 @@ ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS connect_timeout INT DEFAULT
 ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS read_timeout INT DEFAULT 10000 COMMENT 'HTTP读取超时(ms)' AFTER connect_timeout;
 ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS last_health_check_time DATETIME COMMENT '最后健康检查时间' AFTER status;
 ALTER TABLE sys_data_source ADD COLUMN IF NOT EXISTS health_check_status VARCHAR(20) COMMENT '健康检查状态' AFTER last_health_check_time;
+
+CREATE TABLE IF NOT EXISTS sys_field_mapping (
+    id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    app_id BIGINT NOT NULL COMMENT '应用ID',
+    data_source_id BIGINT NOT NULL COMMENT '数据源ID',
+    page_id BIGINT COMMENT '页面ID',
+    component_id VARCHAR(100) COMMENT '组件ID',
+    source_table VARCHAR(100) COMMENT '源表名',
+    source_field VARCHAR(100) COMMENT '源字段名',
+    source_type VARCHAR(50) COMMENT '源字段类型',
+    target_component VARCHAR(100) COMMENT '目标组件类型',
+    target_component_id VARCHAR(100) COMMENT '目标组件ID',
+    target_property VARCHAR(100) COMMENT '目标属性名',
+    mapping_type VARCHAR(50) DEFAULT 'DIRECT' COMMENT '映射类型 DIRECT FORMAT EXPRESSION',
+    sort_order INT DEFAULT 0 COMMENT '排序',
+    description VARCHAR(500) COMMENT '描述',
+    created_by BIGINT COMMENT '创建人',
+    created_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_by BIGINT COMMENT '更新人',
+    updated_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    deleted TINYINT DEFAULT 0 COMMENT '删除标记',
+    PRIMARY KEY (id),
+    KEY idx_data_source_id (data_source_id),
+    KEY idx_page_id (page_id),
+    KEY idx_component_id (component_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='字段映射表';

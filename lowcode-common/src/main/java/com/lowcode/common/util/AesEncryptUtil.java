@@ -1,7 +1,11 @@
 package com.lowcode.common.util;
 
+import com.lowcode.common.config.EncryptConfig;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
+import javax.annotation.PostConstruct;
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
@@ -10,13 +14,27 @@ import java.security.SecureRandom;
 import java.util.Base64;
 
 @Slf4j
+@Component
 public class AesEncryptUtil {
 
     private static final String ALGORITHM = "AES";
     private static final String TRANSFORMATION = "AES/GCM/NoPadding";
     private static final int GCM_IV_LENGTH = 12;
     private static final int GCM_TAG_LENGTH = 128;
-    private static final String DEFAULT_KEY = "LowcodePlatform2024SecureKey32B";
+
+    @Autowired
+    private EncryptConfig encryptConfig;
+
+    private static String DEFAULT_KEY = "LowcodePlatform2024SecureKey32B";
+    private static AesEncryptUtil INSTANCE;
+
+    @PostConstruct
+    public void init() {
+        if (encryptConfig != null && encryptConfig.getAesKey() != null) {
+            DEFAULT_KEY = encryptConfig.getAesKey();
+        }
+        INSTANCE = this;
+    }
 
     private static SecretKeySpec getKeySpec() {
         byte[] keyBytes = DEFAULT_KEY.getBytes(StandardCharsets.UTF_8);

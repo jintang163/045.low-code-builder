@@ -43,6 +43,10 @@ import {
   CheckCircleOutlined,
   FormOutlined,
   RobotOutlined,
+  DatabaseOutlined,
+  SaveOutlined,
+  ArrowRightOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons'
 import { useParams, useNavigate } from 'react-router-dom'
 import { DndProvider, useDrag, useDrop } from 'react-dnd'
@@ -50,7 +54,7 @@ import { HTML5Backend } from 'react-dnd-html5-backend'
 import { createForm, Field } from '@formily/core'
 import { createSchemaField, FormProvider, FormItem, Input as FormilyInput, Select as FormilySelect, NumberPicker, Switch as FormilySwitch } from '@formily/antd'
 import { PageInfo, PageComponent, ComponentLibrary, pageApi, componentApi, customComponentApi, CustomComponent } from '@/api/page'
-import { dataModelApi } from '@/api/dataModel'
+import { dataModelApi, dataSourceApi, fieldMappingApi, DataSource, FieldMapping, TableColumnInfo } from '@/api/dataModel'
 import { useAppStore } from '@/store/appStore'
 import CustomComponentWrapper, { CustomComponentPreview, useCustomComponentSchema } from '@/components/CustomComponentWrapper'
 import { loadCustomComponent } from '@/utils/componentLoader'
@@ -357,10 +361,19 @@ const PageDesigner: React.FC = () => {
   const [aiPanelVisible, setAiPanelVisible] = useState(false)
   const [aiSessionId, setAiSessionId] = useState('')
 
+  const [extDataSources, setExtDataSources] = useState<DataSource[]>([])
+  const [selectedExtDataSourceId, setSelectedExtDataSourceId] = useState<number | null>(null)
+  const [extTables, setExtTables] = useState<string[]>([])
+  const [selectedExtTable, setSelectedExtTable] = useState<string | null>(null)
+  const [extTableColumns, setExtTableColumns] = useState<TableColumnInfo[]>([])
+  const [extMappings, setExtMappings] = useState<FieldMapping[]>([])
+  const [extMappingLoading, setExtMappingLoading] = useState(false)
+  const [extTablesLoading, setExtTablesLoading] = useState(false)
+  const [extColumnsLoading, setExtColumnsLoading] = useState(false)
+
   const canvasRef = useRef<HTMLDivElement>(null)
 
   const loadPage = useCallback(async () => {
-    if (!id || id === 'undefined') {
       setPage({
         appId: currentApp?.id || 1,
         pageName: '',
@@ -443,10 +456,151 @@ const PageDesigner: React.FC = () => {
     }
   }, [currentApp])
 
+  const loadExtDataSources = useCallback(async () => {
+    if (!currentApp) return
+    try {
+      const res: any = await dataSourceApi.list(currentApp.id)
+      if (res.code === 0 || res.code === 200) {
+        setExtDataSources((res.data || []).filter((ds: DataSource) => ds.status === 1))
+      }
+    } catch (e) {
+      console.error('加载外部数据源失败:', e)
+    }
+  }, [currentApp])
+
+  const loadExtTables = useCallback(async (dsId: number) => {
+    try {
+      setExtTablesLoading(true)
+      const res: any = await dataSourceApi.getTables(dsId)
+      if (res.code === 0 || res.code === 200) {
+        setExtTables(res.data || [])
+      }
+    } catch (e) {
+      console.error('加载表列表失败:', e)
+      message.error('加载表列表失败')
+    } finally {
+      setExtTablesLoading(false)
+    }
+  }, [])
+
+  const loadExtTableColumns = useCallback(async (dsId: number, tableName: string) => {
+    try {
+      setExtColumnsLoading(true)
+      const res: any = await dataSourceApi.getTableColumns(dsId, tableName)
+      if (res.code === 0 || res.code === 200) {
+        setExtTableColumns(res.data || [])
+      }
+    } catch (e) {
+      console.error('加载表字段失败:', e)
+      message.error('加载表字段失败')
+    } finally {
+      setExtColumnsLoading(false)
+    }
+  }, [])
+
+  const loadExtMappings = useCallback(async () => {
+    if (!id || id === 'undefined') return
+    try {
+      setExtMappingLoading(true)
+      const res: any = await fieldMappingApi.getByPage(Number(id))
+      if (res.code === 0 || res.code === 200) {
+        setExtMappings(res.data || [])
+      }
+    } catch (e) {
+      console.error('加载字段映射失败:', e)
+    } finally {
+      setExtMappingLoading(false)
+    }
+  }, [id])
+
+  const handleExtDataSourceChange = async (dsId: number) => {
+    setSelectedExtDataSourceId(dsId)
+    setSelectedExtTable(null)
+    setExtTables([])
+    setExtTableColumns([])
+    await loadExtTables(dsId)
+  }
+
+  const handleExtTableChange = async (tableName: string) => {
+    setSelectedExtTable(tableName)
+    if (selectedExtDataSourceId) {
+      await loadExtTableColumns(selectedExtDataSourceId, tableName)
+    }
+  }
+
+  const handleDragFieldToComponent = (column: TableColumnInfo) => {
+    if (!selectedComponent) {
+      message.warning('请先选择目标组件')
+      return
+    }
+    const newMapping: FieldMapping = {
+      appId: currentApp?.id || 0,
+      dataSourceId: selectedExtDataSourceId || 0,
+      pageId: Number(id),
+      sourceTable: selectedExtTable || '',
+      sourceField: column.columnName,
+      sourceType: column.typeName,
+      targetComponent: selectedComponent.componentType,
+      targetComponentId: selectedComponent.componentId,
+      targetProperty: 'value',
+      mappingType: 'DIRECT',
+      sortOrder: extMappings.length,
+    }
+    setExtMappings(prev => [...prev, newMapping])
+    message.success(`已将字段 ${column.columnName} 映射到 ${selectedComponent.componentName}`)
+  }
+
+  const handleSaveExtMappings = async () => {
+    if (!id || id === 'undefined') return
+    try {
+      setExtMappingLoading(true)
+      const res: any = await fieldMappingApi.saveBatchByPage(Number(id), extMappings)
+      if (res.code === 0 || res.code === 200) {
+        message.success('字段映射保存成功')
+      }
+    } catch (e: any) {
+      message.error('保存失败: ' + e.message)
+    } finally {
+      setExtMappingLoading(false)
+    }
+  }
+
+  const handleRemoveExtMapping = (index: number) => {
+    setExtMappings(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const handleApplyExtMappings = () => {
+    if (!page) return
+    const newComponents = page.components?.map(comp => {
+      const compMappings = extMappings.filter(m => m.targetComponentId === comp.componentId)
+      if (compMappings.length === 0) return comp
+      const dataSourceConfig = compMappings.reduce((acc, m) => {
+        acc[m.targetProperty] = {
+          dataSourceId: m.dataSourceId,
+          sourceTable: m.sourceTable,
+          sourceField: m.sourceField,
+          mappingType: m.mappingType,
+        }
+        return acc
+      }, {} as Record<string, any>)
+      return {
+        ...comp,
+        dataSourceConfig: JSON.stringify({
+          ...(comp.dataSourceConfig ? JSON.parse(comp.dataSourceConfig) : {}),
+          ...dataSourceConfig,
+        }),
+      }
+    }) || []
+    setPage({ ...page, components: newComponents })
+    message.success('字段映射已应用到组件配置')
+  }
+
   useEffect(() => {
     loadPage()
     loadComponentLibrary()
     loadDataModels()
+    loadExtDataSources()
+    loadExtMappings()
     const createAiSession = async () => {
       try {
         const { aiPageApi } = await import('@/api/page')
@@ -457,7 +611,7 @@ const PageDesigner: React.FC = () => {
       }
     }
     createAiSession()
-  }, [loadPage, loadComponentLibrary, loadDataModels])
+  }, [loadPage, loadComponentLibrary, loadDataModels, loadExtDataSources, loadExtMappings])
 
   const buildComponentTree = (components: PageComponent[]): any[] => {
     const map = new Map()
@@ -1361,6 +1515,177 @@ const PageDesigner: React.FC = () => {
     )
   }
 
+  const renderFieldMappingPanel = () => {
+    if (!selectedComponent) return null
+
+    const currentCompMappings = extMappings.filter(m => m.targetComponentId === selectedComponent.componentId)
+    const dsNameMap: Record<number, string> = {}
+    extDataSources.forEach(ds => { if (ds.id) dsNameMap[ds.id] = ds.sourceName })
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <Alert
+          type="info"
+          message="外部数据源映射"
+          description="选择数据源和表，将字段拖拽或点击映射到当前组件。"
+          showIcon
+        />
+
+        <Select
+          placeholder="选择外部数据源"
+          loading={extMappingLoading}
+          value={selectedExtDataSourceId || undefined}
+          onChange={handleExtDataSourceChange}
+          style={{ width: '100%' }}
+          allowClear
+        >
+          {extDataSources.map(ds => (
+            <Option key={ds.id} value={ds.id}>
+              {ds.sourceName} ({ds.dbType})
+            </Option>
+          ))}
+        </Select>
+
+        {selectedExtDataSourceId && (
+          <Select
+            placeholder="选择表"
+            loading={extTablesLoading}
+            value={selectedExtTable || undefined}
+            onChange={handleExtTableChange}
+            style={{ width: '100%' }}
+            allowClear
+          >
+            {extTables.map(table => (
+              <Option key={table} value={table}>
+                {table}
+              </Option>
+            ))}
+          </Select>
+        )}
+
+        {selectedExtTable && (
+          <Card
+            size="small"
+            title={
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <DatabaseOutlined />
+                可用字段（点击映射）
+              </span>
+            }
+            style={{ maxHeight: 260, overflow: 'auto' }}
+            loading={extColumnsLoading}
+          >
+            {extTableColumns.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {extTableColumns.map((col, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      padding: '6px 10px',
+                      border: '1px solid #e8e8e8',
+                      borderRadius: 4,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      background: '#fafafa',
+                      transition: 'all 0.2s',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#e6f7ff'
+                      e.currentTarget.style.borderColor = '#1890ff'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = '#fafafa'
+                      e.currentTarget.style.borderColor = '#e8e8e8'
+                    }}
+                    onClick={() => handleDragFieldToComponent(col)}
+                  >
+                    <span style={{ fontWeight: 500 }}>{col.columnName}</span>
+                    <Tag color="blue" style={{ margin: 0 }}>{col.typeName}</Tag>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', color: '#999', padding: 16 }}>
+                该表没有字段
+              </div>
+            )}
+          </Card>
+        )}
+
+        <Divider style={{ margin: '8px 0' }} />
+
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <span style={{ fontWeight: 500 }}>
+              已配置映射 ({currentCompMappings.length})
+            </span>
+          </div>
+          <div style={{ maxHeight: 200, overflow: 'auto' }}>
+            {currentCompMappings.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {currentCompMappings.map((mapping, idx) => (
+                  <Card key={idx} size="small" style={{ background: '#f0f5ff' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                          <span style={{ color: '#666', fontSize: 12 }}>数据源：</span>
+                          <Tag color="green">{dsNameMap[mapping.dataSourceId] || '未知'}</Tag>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                          <span style={{ color: '#666', fontSize: 12 }}>源字段：</span>
+                          <span style={{ fontWeight: 500 }}>{mapping.sourceTable}.{mapping.sourceField}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <ArrowRightOutlined style={{ color: '#1890ff' }} />
+                          <span style={{ color: '#666', fontSize: 12 }}>目标属性：</span>
+                          <span style={{ fontWeight: 500, color: '#1890ff' }}>{mapping.targetProperty}</span>
+                        </div>
+                      </div>
+                      <Button
+                        type="text"
+                        danger
+                        size="small"
+                        icon={<DeleteOutlined />}
+                        onClick={() => handleRemoveExtMapping(extMappings.findIndex(m => m === mapping))}
+                      />
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', color: '#999', padding: 20, border: '1px dashed #d9d9d9', borderRadius: 4 }}>
+                暂无映射配置，请从上方字段列表选择
+              </div>
+            )}
+          </div>
+        </div>
+
+        <Divider style={{ margin: '8px 0' }} />
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button
+            type="primary"
+            icon={<SaveOutlined />}
+            onClick={handleSaveExtMappings}
+            loading={extMappingLoading}
+            block
+          >
+            保存映射
+          </Button>
+          <Button
+            icon={<ThunderboltOutlined />}
+            onClick={handleApplyExtMappings}
+            block
+          >
+            应用到组件
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   const renderCanvas = () => {
     const width = previewMode === 'mobile' ? 375 : '100%'
     const maxWidth = previewMode === 'mobile' ? 375 : 'none'
@@ -1658,6 +1983,15 @@ const PageDesigner: React.FC = () => {
                         </span>
                       ),
                       children: renderValidationPanel(),
+                    },
+                    {
+                      key: 'fieldMapping',
+                      label: (
+                        <span>
+                          <DatabaseOutlined /> 字段映射
+                        </span>
+                      ),
+                      children: renderFieldMappingPanel(),
                     },
                   ]}
                 />

@@ -10,21 +10,15 @@ import {
 } from '@ant-design/icons'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  dataSourceApi, virtualViewApi, DataSource, TableColumnInfo,
-  VirtualView, VirtualViewJoin,
+  dataSourceApi, virtualViewApi, fieldMappingApi, DataSource, TableColumnInfo,
+  VirtualView, VirtualViewJoin, FieldMapping,
 } from '@/api/dataModel'
+import { pageApi, PageInfo } from '@/api/page'
 import { useAppStore } from '@/store/appStore'
 
 const { Sider, Content } = Layout
 const { TabPane } = Tabs
 const { Option } = Select
-
-interface FieldMapping {
-  sourceField: string
-  sourceType: string
-  targetComponent: string
-  targetProperty: string
-}
 
 const DataSourceDesigner: React.FC = () => {
   const { id } = useParams<{ id: string }>()
@@ -40,6 +34,9 @@ const DataSourceDesigner: React.FC = () => {
   const [columnsLoading, setColumnsLoading] = useState(false)
   const [fieldMappings, setFieldMappings] = useState<FieldMapping[]>([])
   const [restApiResult, setRestApiResult] = useState<any[]>([])
+  const [pages, setPages] = useState<PageInfo[]>([])
+  const [selectedPageId, setSelectedPageId] = useState<number | null>(null)
+  const [savingMappings, setSavingMappings] = useState(false)
 
   const [virtualViews, setVirtualViews] = useState<VirtualView[]>([])
   const [viewModalVisible, setViewModalVisible] = useState(false)
@@ -127,14 +124,48 @@ const DataSourceDesigner: React.FC = () => {
     }
   }, [currentApp])
 
+  const fetchPages = useCallback(async () => {
+    if (!currentApp?.id) return
+    try {
+      const res: any = await pageApi.list(currentApp.id)
+      if (res.code === 0 || res.code === 200) {
+        setPages(res.data || [])
+      }
+    } catch (e: any) {
+      message.error('获取页面列表失败')
+    }
+  }, [currentApp])
+
+  const loadExistingMappings = useCallback(async () => {
+    if (!id || !selectedPageId) return
+    try {
+      const res: any = await fieldMappingApi.getByPage(selectedPageId)
+      if (res.code === 0 || res.code === 200) {
+        const dsMappings = (res.data || []).filter((m: FieldMapping) =>
+          m.dataSourceId === Number(id) && m.sourceTable === selectedTable
+        )
+        setFieldMappings(dsMappings)
+      }
+    } catch (e: any) {
+      message.error('加载字段映射失败')
+    }
+  }, [id, selectedPageId, selectedTable])
+
   useEffect(() => {
     if (id) {
       fetchDataSource()
       fetchTables()
+      fetchPages()
     } else {
       fetchVirtualViews()
     }
-  }, [id, fetchDataSource, fetchTables, fetchVirtualViews])
+  }, [id, fetchDataSource, fetchTables, fetchPages, fetchVirtualViews])
+
+  useEffect(() => {
+    if (id && selectedPageId && selectedTable) {
+      loadExistingMappings()
+    }
+  }, [id, selectedPageId, selectedTable, loadExistingMappings])
 
   const handleCallRestApi = async () => {
     if (!id) return
@@ -153,13 +184,51 @@ const DataSourceDesigner: React.FC = () => {
   }
 
   const handleAddFieldMapping = (column: TableColumnInfo) => {
+    if (!selectedPageId) {
+      message.warning('请先选择目标页面')
+      return
+    }
     setFieldMappings(prev => [...prev, {
+      appId: currentApp?.id || 0,
+      dataSourceId: Number(id),
+      pageId: selectedPageId,
+      sourceTable: selectedTable || '',
       sourceField: column.columnName,
       sourceType: column.typeName,
       targetComponent: '',
+      targetComponentId: '',
       targetProperty: '',
+      mappingType: 'DIRECT',
+      sortOrder: prev.length,
     }])
     message.info(`已添加字段映射: ${column.columnName}`)
+  }
+
+  const handleSaveFieldMappings = async () => {
+    if (!id || !selectedPageId) return
+    try {
+      setSavingMappings(true)
+      const mappingsToSave = fieldMappings.map((m, idx) => ({
+        ...m,
+        appId: currentApp?.id || 0,
+        dataSourceId: Number(id),
+        pageId: selectedPageId,
+        sourceTable: selectedTable || '',
+        sortOrder: idx,
+      }))
+      const res: any = await fieldMappingApi.saveBatchByDataSource(
+        Number(id),
+        selectedPageId,
+        mappingsToSave
+      )
+      if (res.code === 0 || res.code === 200) {
+        message.success('字段映射保存成功')
+      }
+    } catch (e: any) {
+      message.error('保存失败: ' + e.message)
+    } finally {
+      setSavingMappings(false)
+    }
   }
 
   const handleRemoveFieldMapping = (index: number) => {
@@ -264,17 +333,32 @@ const DataSourceDesigner: React.FC = () => {
   ]
 
   const mappingColumns = [
+    { title: '源表', dataIndex: 'sourceTable', key: 'sourceTable', width: 100 },
     { title: '源字段', dataIndex: 'sourceField', key: 'sourceField' },
-    { title: '源类型', dataIndex: 'sourceType', key: 'sourceType', width: 100 },
+    { title: '源类型', dataIndex: 'sourceType', key: 'sourceType', width: 80 },
     {
-      title: '目标组件', dataIndex: 'targetComponent', key: 'targetComponent',
+      title: '目标组件类型', dataIndex: 'targetComponent', key: 'targetComponent',
       render: (v: string, _: any, idx: number) => (
         <Input
           value={v}
-          placeholder="如: Input, Select"
+          placeholder="如: INPUT, SELECT"
           onChange={e => {
             const newMappings = [...fieldMappings]
             newMappings[idx].targetComponent = e.target.value
+            setFieldMappings(newMappings)
+          }}
+        />
+      ),
+    },
+    {
+      title: '目标组件ID', dataIndex: 'targetComponentId', key: 'targetComponentId',
+      render: (v: string, _: any, idx: number) => (
+        <Input
+          value={v}
+          placeholder="如: cmp_001"
+          onChange={e => {
+            const newMappings = [...fieldMappings]
+            newMappings[idx].targetComponentId = e.target.value
             setFieldMappings(newMappings)
           }}
         />
@@ -403,16 +487,43 @@ const DataSourceDesigner: React.FC = () => {
                   </TabPane>
                   <TabPane tab={`字段映射 (${fieldMappings.length})`} key="mapping">
                     <Card size="small">
+                      <div style={{ marginBottom: 16, display: 'flex', gap: 16, alignItems: 'center' }}>
+                        <span style={{ fontWeight: 'bold' }}>绑定页面:</span>
+                        <Select
+                          style={{ width: 300 }}
+                          placeholder="请选择目标页面"
+                          value={selectedPageId}
+                          onChange={setSelectedPageId}
+                          showSearch
+                          optionFilterProp="children"
+                        >
+                          {pages.map(p => (
+                            <Option key={p.id} value={p.id}>{p.pageName} ({p.pageCode})</Option>
+                          ))}
+                        </Select>
+                        {selectedPageId && (
+                          <Tag color="blue">
+                            <LinkOutlined /> 已绑定页面ID: {selectedPageId}
+                          </Tag>
+                        )}
+                      </div>
                       <Table
                         columns={mappingColumns}
                         dataSource={fieldMappings}
-                        rowKey="sourceField"
+                        rowKey={(r, i) => r.sourceField + '_' + i}
                         size="small"
                         pagination={false}
                       />
                       {fieldMappings.length > 0 && (
                         <div style={{ marginTop: 16, textAlign: 'right' }}>
-                          <Button type="primary" icon={<SaveOutlined />}>保存映射配置</Button>
+                          <Button
+                            type="primary"
+                            icon={<SaveOutlined />}
+                            loading={savingMappings}
+                            onClick={handleSaveFieldMappings}
+                          >
+                            保存映射配置
+                          </Button>
                         </div>
                       )}
                     </Card>

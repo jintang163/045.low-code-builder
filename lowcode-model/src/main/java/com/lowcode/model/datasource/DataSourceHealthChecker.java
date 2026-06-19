@@ -1,6 +1,7 @@
 package com.lowcode.model.datasource;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.lowcode.common.util.AesEncryptUtil;
 import com.lowcode.model.entity.DataSource;
 import com.lowcode.model.mapper.DataSourceMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -48,11 +49,7 @@ public class DataSourceHealthChecker {
             if (!healthy) {
                 try {
                     healthy = dynamicDataSourceManager.getConnection(ds.getId(), ds) != null;
-                    if (healthy) {
-                        checkStatus = "HEALTHY";
-                    } else {
-                        checkStatus = "UNHEALTHY";
-                    }
+                    checkStatus = healthy ? "HEALTHY" : "UNHEALTHY";
                 } catch (Exception e) {
                     healthy = false;
                     checkStatus = "UNHEALTHY";
@@ -62,12 +59,11 @@ public class DataSourceHealthChecker {
             }
         }
 
-        ds.setLastHealthCheckTime(LocalDateTime.now());
-        ds.setHealthCheckStatus(checkStatus);
-        if (!healthy) {
-            ds.setStatus(0);
-        }
-        dataSourceMapper.updateById(ds);
+        DataSource updateEntity = new DataSource();
+        updateEntity.setId(ds.getId());
+        updateEntity.setLastHealthCheckTime(LocalDateTime.now());
+        updateEntity.setHealthCheckStatus(checkStatus);
+        dataSourceMapper.updateById(updateEntity);
 
         Map<String, Object> result = new java.util.HashMap<>();
         result.put("dataSourceId", ds.getId());
@@ -89,15 +85,19 @@ public class DataSourceHealthChecker {
             conn.setReadTimeout(ds.getReadTimeout() != null ? ds.getReadTimeout() : 5000);
 
             if (ds.getRestApiAuthType() != null && ds.getRestApiAuthToken() != null) {
+                String authToken = AesEncryptUtil.isEncrypted(ds.getRestApiAuthToken())
+                        ? AesEncryptUtil.decrypt(ds.getRestApiAuthToken())
+                        : ds.getRestApiAuthToken();
+
                 switch (ds.getRestApiAuthType()) {
                     case "BEARER":
-                        conn.setRequestProperty("Authorization", "Bearer " + ds.getRestApiAuthToken());
+                        conn.setRequestProperty("Authorization", "Bearer " + authToken);
                         break;
                     case "BASIC":
-                        conn.setRequestProperty("Authorization", "Basic " + ds.getRestApiAuthToken());
+                        conn.setRequestProperty("Authorization", "Basic " + authToken);
                         break;
                     case "API_KEY":
-                        conn.setRequestProperty("X-API-Key", ds.getRestApiAuthToken());
+                        conn.setRequestProperty("X-API-Key", authToken);
                         break;
                     default:
                         break;
