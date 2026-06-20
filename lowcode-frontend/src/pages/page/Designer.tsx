@@ -73,6 +73,11 @@ import VersionHistoryPanel from '@/components/version/VersionHistoryPanel'
 import ReleaseManagementPanel from '@/components/version/ReleaseManagementPanel'
 import { generateColor } from '@/utils/collaboration'
 import type { CRDTOperation, ConflictInfo } from '@/utils/collaboration'
+import OfflineStatus from '@/components/offline/OfflineStatus'
+import { useNetworkStatus } from '@/hooks/useNetworkStatus'
+import { savePageOffline, savePageOfflineOnly, loadPageForEdit } from '@/utils/offline/pageOfflineService'
+import { startSync } from '@/utils/offline/syncManager'
+import { getPendingCount } from '@/utils/offline/indexedDB'
 
 const { Header, Sider, Content } = Layout
 const { Option } = Select
@@ -757,8 +762,14 @@ const PageDesigner: React.FC = () => {
   const currentAvatar = userInfo?.avatar || ''
 
   const isRemoteOperationRef = useRef(false)
+  const wasOfflineRef = useRef(false)
+
+  const { isOnline, networkStatus } = useNetworkStatus()
+
+  const [isOfflineMode, setIsOfflineMode] = useState(false)
 
   const loadPage = useCallback(async () => {
+    if (!id || id === 'undefined') {
       setPage({
         appId: currentApp?.id || 1,
         pageName: '',
@@ -779,14 +790,18 @@ const PageDesigner: React.FC = () => {
       return
     }
     try {
-      const res = await pageApi.get(Number(id))
-      setPage(res.data || null)
+      const result = await loadPageForEdit(Number(id))
+      setPage(result.page || null)
+      setIsOfflineMode(result.fromCache)
       form.setFieldsValue({
-        ...res.data,
-        isHome: res.data?.isHome === 1,
+        ...result.page,
+        isHome: result.page?.isHome === 1,
       })
-      if (res.data?.components && res.data.components.length > 0) {
-        const tree = buildComponentTree(res.data.components)
+      if (result.fromCache) {
+        message.info('当前使用本地缓存数据，网络恢复后将自动同步')
+      }
+      if (result.page?.components && result.page.components.length > 0) {
+        const tree = buildComponentTree(result.page.components)
         setComponentTree(tree)
       }
     } catch (e) {
@@ -1222,6 +1237,34 @@ const PageDesigner: React.FC = () => {
   }, [id, userInfo, connect, disconnect, currentUserId, currentUsername, currentAvatar])
 
   useEffect(() => {
+    if (!wasOfflineRef.current) {
+      wasOfflineRef.current = !isOnline
+      return
+    }
+
+    const handleNetworkRestore = async () => {
+      if (isOnline && wasOfflineRef.current && page?.id) {
+        try {
+          message.info('网络已恢复，正在同步数据...')
+          await startSync()
+          const result = await loadPageForEdit(page.id!)
+          if (!result.fromCache) {
+            setPage(result.page || null)
+            setIsOfflineMode(false)
+            message.success('数据同步完成')
+          }
+        } catch (e) {
+          console.error('网络恢复后同步失败:', e)
+          message.error('同步失败，请稍后重试')
+        }
+      }
+      wasOfflineRef.current = !isOnline
+    }
+
+    handleNetworkRestore()
+  }, [isOnline])
+
+  useEffect(() => {
     const handleRemoteOperation = (op: CRDTOperation) => {
       if (op.userId === currentUserId) return
 
@@ -1388,26 +1431,49 @@ const PageDesigner: React.FC = () => {
         ...values,
         isHome: values.isHome ? 1 : 0,
       }
-      if (page.id) {
-        await pageApi.update(data)
-        message.success('保存成功')
-        try {
-          await versionApi.createSnapshot({
-            appId: currentApp?.id || 1,
-            resourceType: 'PAGE',
-            resourceId: page.id,
-            description: `保存页面: ${values.pageName}`,
-            autoCreate: true,
-          })
-          message.info('已自动创建版本快照')
-        } catch (snapshotError) {
-          console.warn('创建自动快照失败:', snapshotError)
+
+      if (!id || id === 'undefined') {
+        if (page.id) {
+          await savePageOffline(data)
+          message.success('已离线保存')
+        } else {
+          const res = await pageApi.save(data)
+          setPage(res.data)
+          message.success('创建成功')
+          navigate(`/page/designer/${res.data.id}`, { replace: true })
+        }
+        return
+      }
+
+      if (isOnline) {
+        if (page.id) {
+          await pageApi.update(data)
+          message.success('保存成功')
+          try {
+            await versionApi.createSnapshot({
+              appId: currentApp?.id || 1,
+              resourceType: 'PAGE',
+              resourceId: page.id,
+              description: `保存页面: ${values.pageName}`,
+              autoCreate: true,
+            })
+            message.info('已自动创建版本快照')
+          } catch (snapshotError) {
+            console.warn('创建自动快照失败:', snapshotError)
+          }
+          try {
+            await savePageOfflineOnly(data)
+          } catch (offlineError) {
+            console.warn('缓存到本地失败:', offlineError)
+          }
         }
       } else {
-        const res = await pageApi.save(data)
-        setPage(res.data)
-        message.success('创建成功')
-        navigate(`/page/designer/${res.data.id}`, { replace: true })
+        if (page.id) {
+          await savePageOffline(data)
+          const pendingCount = await getPendingCount()
+          message.success(`已离线保存，${pendingCount} 项待同步`)
+          setIsOfflineMode(true)
+        }
       }
     } catch (e) {
       console.error(e)
@@ -3082,6 +3148,13 @@ const PageDesigner: React.FC = () => {
             </Form>
           </Space>
           <Space>
+            {isOfflineMode && (
+              <Tag color="orange" icon={<CloudServerOutlined />}>
+                离线模式
+              </Tag>
+            )}
+            <OfflineStatus onSync={startSync} />
+            <Divider type="vertical" />
             <Radio.Group value={previewMode} onChange={(e) => setPreviewMode(e.target.value)} size="small">
               <Radio.Button value="pc"><DesktopOutlined /> PC</Radio.Button>
               <Radio.Button value="mobile"><MobileOutlined /> 移动端</Radio.Button>
