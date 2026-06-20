@@ -166,12 +166,21 @@ const routes = [
         path: 'mobile',
         children: [
           {
+            path: 'generator',
+            element: <MobileGenerator />,
+          },
+          {
             path: 'preview',
             element: <MobilePreview />,
           },
+        ],
+      },
+      {
+        path: 'monitor',
+        children: [
           {
-            path: 'generator',
-            element: <MobileGenerator />,
+            path: '',
+            element: <MonitorDashboard />,
           },
         ],
       },

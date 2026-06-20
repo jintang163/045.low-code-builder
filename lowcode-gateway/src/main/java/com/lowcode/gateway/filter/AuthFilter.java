@@ -34,6 +34,7 @@ public class AuthFilter implements GlobalFilter, Ordered {
     private static final List<String> WHITE_LIST = Arrays.asList(
             "/api/auth/login",
             "/api/auth/validate",
+            "/api/monitor",
             "/v2/api-docs",
             "/v3/api-docs",
             "/swagger-resources",

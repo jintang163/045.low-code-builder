@@ -42,6 +42,12 @@ spring:
           uri: lb://lowcode-generator
           predicates:
             - Path=/api/app/**,/api/template/**
+        - id: lowcode-monitor
+          uri: lb://lowcode-monitor
+          predicates:
+            - Path=/api/monitor/**
+          filters:
+            - StripPrefix=1
       globalcors:
         corsConfigurations:
           '[/**]':

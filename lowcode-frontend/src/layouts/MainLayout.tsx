@@ -116,6 +116,11 @@ const MainLayout: React.FC = ({ children }: { children?: React.ReactNode }) => {
       icon: <SettingOutlined />,
       label: '系统设置',
     },
+    {
+      key: '/monitor',
+      icon: <MonitorDashboardOutlined />,
+      label: '监控大屏',
+    },
   ]
 
   const userMenu = {

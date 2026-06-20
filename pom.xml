@@ -20,6 +20,7 @@
         <module>lowcode-flow</module>
         <module>lowcode-generator</module>
         <module>lowcode-oss</module>
+        <module>lowcode-monitor</module>
     </modules>
 
     <properties>
