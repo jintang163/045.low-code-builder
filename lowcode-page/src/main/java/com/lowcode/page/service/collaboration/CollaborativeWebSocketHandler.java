@@ -57,9 +57,9 @@ public class CollaborativeWebSocketHandler extends TextWebSocketHandler {
             Collaborator collaborator = collaborationService.joinPage(
                     pageId, session.getId(), userId, username, avatar);
 
-            sendMessage(session, buildJoinAckMessage(collaborator));
+            sendSyncMessage(session, pageId, session.getId());
 
-            broadcastCollaboratorUpdate(pageId, session.getId());
+            broadcastPresence(pageId, session.getId());
 
             log.info("User joined via WebSocket: pageId={}, userId={}, sessionId={}",
                     pageId, userId, session.getId());
@@ -93,6 +93,7 @@ public class CollaborativeWebSocketHandler extends TextWebSocketHandler {
 
             switch (type.toUpperCase()) {
                 case "JOIN":
+                case "LEAVE":
                     handleJoin(session, msg, pageId, sessionId);
                     break;
                 case "OPERATION":
@@ -104,14 +105,19 @@ public class CollaborativeWebSocketHandler extends TextWebSocketHandler {
                 case "PRESENCE":
                     handlePresence(session, msg, pageId, sessionId);
                     break;
+                case "CONFLICT":
                 case "RESOLVE":
                     handleResolve(session, msg, pageId, sessionId);
                     break;
                 case "SYNC":
                     handleSync(session, msg, pageId, sessionId);
                     break;
+                case "HEARTBEAT":
                 case "PING":
                     handlePing(session, msg);
+                    break;
+                case "PONG":
+                    log.debug("Received PONG from session: {}", sessionId);
                     break;
                 default:
                     log.warn("Unknown message type: {}", type);
@@ -131,9 +137,20 @@ public class CollaborativeWebSocketHandler extends TextWebSocketHandler {
     private void handleJoin(WebSocketSession session, JSONObject msg, Long pageId, String sessionId) throws Exception {
         log.info("Handling JOIN message: sessionId={}", sessionId);
 
-        String userId = msg.getString("userId");
-        String username = msg.getString("username");
-        String avatar = msg.getString("avatar");
+        JSONObject data = msg.getJSONObject("data");
+        String userId;
+        String username;
+        String avatar;
+
+        if (data != null) {
+            userId = data.getString("userId");
+            username = data.getString("username");
+            avatar = data.getString("avatar");
+        } else {
+            userId = msg.getString("userId");
+            username = msg.getString("username");
+            avatar = msg.getString("avatar");
+        }
 
         if (userId != null) {
             session.getAttributes().put(ATTR_USER_ID, userId);
@@ -148,14 +165,17 @@ public class CollaborativeWebSocketHandler extends TextWebSocketHandler {
                 username != null ? username : (String) session.getAttributes().get(ATTR_USERNAME),
                 avatar);
 
-        sendMessage(session, buildJoinAckMessage(collaborator));
-        broadcastCollaboratorUpdate(pageId, sessionId);
+        sendSyncMessage(session, pageId, sessionId);
+        broadcastPresence(pageId, sessionId);
     }
 
     private void handleOperation(WebSocketSession session, JSONObject msg, Long pageId, String sessionId) throws Exception {
         log.debug("Handling OPERATION message: sessionId={}", sessionId);
 
-        JSONObject operationJson = msg.getJSONObject("operation");
+        JSONObject operationJson = msg.getJSONObject("data");
+        if (operationJson == null) {
+            operationJson = msg.getJSONObject("operation");
+        }
         if (operationJson == null) {
             sendMessage(session, buildErrorMessage("INVALID_OPERATION", "Operation data is required"));
             return;
@@ -169,9 +189,10 @@ public class CollaborativeWebSocketHandler extends TextWebSocketHandler {
         if (operation.getUsername() == null || operation.getUsername().isEmpty()) {
             operation.setUsername((String) session.getAttributes().get(ATTR_USERNAME));
         }
+        operation.setSessionId(sessionId);
 
-        if (operation.getOperationId() == null || operation.getOperationId().isEmpty()) {
-            operation.setOperationId(crdtEngine.generateOperationId());
+        if (operation.getId() == null || operation.getId().isEmpty()) {
+            operation.setId(crdtEngine.generateOperationId());
         }
 
         collaborationService.broadcastOperation(pageId, operation);
@@ -189,17 +210,33 @@ public class CollaborativeWebSocketHandler extends TextWebSocketHandler {
     private void handleCursor(WebSocketSession session, JSONObject msg, Long pageId, String sessionId) throws Exception {
         log.debug("Handling CURSOR message: sessionId={}", sessionId);
 
-        JSONObject cursorJson = msg.getJSONObject("cursorPosition");
-        if (cursorJson == null) {
+        JSONObject data = msg.getJSONObject("data");
+        Object cursorPositionObj = null;
+        String userId = null;
+
+        if (data != null) {
+            if (data.containsKey("cursorPosition")) {
+                cursorPositionObj = data.get("cursorPosition");
+            } else if (data.containsKey("position")) {
+                cursorPositionObj = data.get("position");
+            }
+            userId = data.getString("userId");
+        } else {
+            if (msg.containsKey("cursorPosition")) {
+                cursorPositionObj = msg.get("cursorPosition");
+            } else if (msg.containsKey("position")) {
+                cursorPositionObj = msg.get("position");
+            }
+            userId = msg.getString("userId");
+        }
+
+        if (cursorPositionObj == null) {
             return;
         }
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> cursorPosition = JSON.toJavaObject(cursorJson, Map.class);
+        collaborationService.broadcastCursor(pageId, sessionId, cursorPositionObj);
 
-        collaborationService.broadcastCursor(pageId, sessionId, cursorPosition);
-
-        broadcastCursorUpdate(pageId, sessionId, cursorPosition);
+        broadcastCursorUpdate(pageId, sessionId, userId, cursorPositionObj);
     }
 
     private void handlePresence(WebSocketSession session, JSONObject msg, Long pageId, String sessionId) throws Exception {
@@ -212,9 +249,20 @@ public class CollaborativeWebSocketHandler extends TextWebSocketHandler {
     private void handleResolve(WebSocketSession session, JSONObject msg, Long pageId, String sessionId) throws Exception {
         log.info("Handling RESOLVE message: sessionId={}", sessionId);
 
-        String conflictId = msg.getString("conflictId");
-        String resolution = msg.getString("resolution");
-        String chosenUserId = msg.getString("chosenUserId");
+        JSONObject data = msg.getJSONObject("data");
+        String conflictId;
+        String resolution;
+        String chosenUserId;
+
+        if (data != null) {
+            conflictId = data.getString("conflictId");
+            resolution = data.getString("resolution");
+            chosenUserId = data.getString("chosenUserId");
+        } else {
+            conflictId = msg.getString("conflictId");
+            resolution = msg.getString("resolution");
+            chosenUserId = msg.getString("chosenUserId");
+        }
 
         if (conflictId == null || conflictId.isEmpty()) {
             sendMessage(session, buildErrorMessage("INVALID_RESOLVE", "Conflict ID is required"));
@@ -233,7 +281,10 @@ public class CollaborativeWebSocketHandler extends TextWebSocketHandler {
 
     private void handleSync(WebSocketSession session, JSONObject msg, Long pageId, String sessionId) throws Exception {
         log.info("Handling SYNC message: sessionId={}", sessionId);
+        sendSyncMessage(session, pageId, sessionId);
+    }
 
+    private void sendSyncMessage(WebSocketSession session, Long pageId, String sessionId) throws Exception {
         DocumentState state = collaborationService.syncDocument(pageId, sessionId);
         List<Collaborator> collaborators = collaborationService.getCollaborators(pageId);
         List<ConflictInfo> conflicts = collaborationService.getPendingConflicts(pageId);
@@ -242,12 +293,14 @@ public class CollaborativeWebSocketHandler extends TextWebSocketHandler {
     }
 
     private void handlePing(WebSocketSession session, JSONObject msg) throws Exception {
-        Map<String, Object> pongMsg = new HashMap<>();
-        pongMsg.put("type", "PONG");
-        pongMsg.put("timestamp", System.currentTimeMillis());
+        log.debug("Handling PING/HEARTBEAT message: sessionId={}", session.getId());
+
+        Map<String, Object> data = new HashMap<>();
         if (msg.containsKey("timestamp")) {
-            pongMsg.put("clientTimestamp", msg.getLong("timestamp"));
+            data.put("clientTimestamp", msg.getLong("timestamp"));
         }
+
+        Map<String, Object> pongMsg = buildMessage("PONG", data);
         sendMessage(session, pongMsg);
     }
 
@@ -261,7 +314,7 @@ public class CollaborativeWebSocketHandler extends TextWebSocketHandler {
 
             if (pageId != null && sessionId != null) {
                 collaborationService.leavePage(pageId, sessionId);
-                broadcastCollaboratorUpdate(pageId, sessionId);
+                broadcastPresence(pageId, sessionId);
             }
         } catch (Exception e) {
             log.error("Error in afterConnectionClosed", e);
@@ -278,11 +331,19 @@ public class CollaborativeWebSocketHandler extends TextWebSocketHandler {
 
             if (pageId != null && sessionId != null) {
                 collaborationService.leavePage(pageId, sessionId);
-                broadcastCollaboratorUpdate(pageId, sessionId);
+                broadcastPresence(pageId, sessionId);
             }
         } catch (Exception e) {
             log.error("Error handling transport error cleanup", e);
         }
+    }
+
+    private Map<String, Object> buildMessage(String type, Object data) {
+        Map<String, Object> msg = new HashMap<>();
+        msg.put("type", type);
+        msg.put("data", data != null ? data : new HashMap<>());
+        msg.put("timestamp", System.currentTimeMillis());
+        return msg;
     }
 
     private void sendMessage(WebSocketSession session, Map<String, Object> message) throws Exception {
@@ -298,11 +359,7 @@ public class CollaborativeWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-        Map<String, Object> msg = new HashMap<>();
-        msg.put("type", "OPERATION");
-        msg.put("operation", operation);
-        msg.put("timestamp", System.currentTimeMillis());
-
+        Map<String, Object> msg = buildMessage("OPERATION", operation);
         String msgJson = JSON.toJSONString(msg);
 
         for (Map.Entry<String, WebSocketSession> entry : pageSessions.entrySet()) {
@@ -322,7 +379,7 @@ public class CollaborativeWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
-    private void broadcastCollaboratorUpdate(Long pageId, String excludeSessionId) {
+    private void broadcastPresence(Long pageId, String excludeSessionId) {
         List<Collaborator> collaborators = collaborationService.getCollaborators(pageId);
         Map<String, WebSocketSession> pageSessions = collaborationService.getSessions(pageId);
 
@@ -330,12 +387,14 @@ public class CollaborativeWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-        Map<String, Object> msg = buildPresenceMessage(collaborators);
+        Map<String, Object> data = new HashMap<>();
+        data.put("collaborators", collaborators);
+        Map<String, Object> msg = buildMessage("PRESENCE", data);
         String msgJson = JSON.toJSONString(msg);
 
         for (Map.Entry<String, WebSocketSession> entry : pageSessions.entrySet()) {
             String sessionId = entry.getKey();
-            if (sessionId.equals(excludeSessionId)) {
+            if (excludeSessionId != null && sessionId.equals(excludeSessionId)) {
                 continue;
             }
 
@@ -350,18 +409,17 @@ public class CollaborativeWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
-    private void broadcastCursorUpdate(Long pageId, String excludeSessionId, Map<String, Object> cursorPosition) {
+    private void broadcastCursorUpdate(Long pageId, String excludeSessionId, String userId, Object cursorPosition) {
         Map<String, WebSocketSession> pageSessions = collaborationService.getSessions(pageId);
         if (pageSessions == null || pageSessions.isEmpty()) {
             return;
         }
 
-        Map<String, Object> msg = new HashMap<>();
-        msg.put("type", "CURSOR");
-        msg.put("sessionId", excludeSessionId);
-        msg.put("cursorPosition", cursorPosition);
-        msg.put("timestamp", System.currentTimeMillis());
-
+        Map<String, Object> data = new HashMap<>();
+        data.put("userId", userId);
+        data.put("sessionId", excludeSessionId);
+        data.put("cursorPosition", cursorPosition);
+        Map<String, Object> msg = buildMessage("CURSOR", data);
         String msgJson = JSON.toJSONString(msg);
 
         for (Map.Entry<String, WebSocketSession> entry : pageSessions.entrySet()) {
@@ -389,11 +447,9 @@ public class CollaborativeWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-        Map<String, Object> msg = new HashMap<>();
-        msg.put("type", "CONFLICTS");
-        msg.put("conflicts", conflicts);
-        msg.put("timestamp", System.currentTimeMillis());
-
+        Map<String, Object> data = new HashMap<>();
+        data.put("conflicts", conflicts);
+        Map<String, Object> msg = buildMessage("CONFLICT", data);
         String msgJson = JSON.toJSONString(msg);
 
         for (Map.Entry<String, WebSocketSession> entry : pageSessions.entrySet()) {
@@ -408,57 +464,40 @@ public class CollaborativeWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
-    private Map<String, Object> buildJoinAckMessage(Collaborator collaborator) {
-        Map<String, Object> msg = new HashMap<>();
-        msg.put("type", "JOIN_ACK");
-        msg.put("collaborator", collaborator);
-        msg.put("timestamp", System.currentTimeMillis());
-        return msg;
-    }
-
     private Map<String, Object> buildOperationAckMessage(CRDTOperation operation) {
-        Map<String, Object> msg = new HashMap<>();
-        msg.put("type", "OPERATION_ACK");
-        msg.put("operationId", operation.getOperationId());
-        msg.put("lamportClock", operation.getLamportClock());
-        msg.put("timestamp", System.currentTimeMillis());
-        return msg;
+        Map<String, Object> data = new HashMap<>();
+        data.put("operationId", operation.getId());
+        data.put("lamportClock", operation.getLamportClock());
+        return buildMessage("ACK", data);
     }
 
     private Map<String, Object> buildPresenceMessage(List<Collaborator> collaborators) {
-        Map<String, Object> msg = new HashMap<>();
-        msg.put("type", "PRESENCE");
-        msg.put("collaborators", collaborators);
-        msg.put("timestamp", System.currentTimeMillis());
-        return msg;
+        Map<String, Object> data = new HashMap<>();
+        data.put("collaborators", collaborators);
+        return buildMessage("PRESENCE", data);
     }
 
     private Map<String, Object> buildResolveAckMessage(String conflictId, boolean success) {
-        Map<String, Object> msg = new HashMap<>();
-        msg.put("type", "RESOLVE_ACK");
-        msg.put("conflictId", conflictId);
-        msg.put("success", success);
-        msg.put("timestamp", System.currentTimeMillis());
-        return msg;
+        Map<String, Object> data = new HashMap<>();
+        data.put("conflictId", conflictId);
+        data.put("success", success);
+        return buildMessage("ACK", data);
     }
 
     private Map<String, Object> buildSyncMessage(DocumentState state, List<Collaborator> collaborators,
                                                   List<ConflictInfo> conflicts) {
-        Map<String, Object> msg = new HashMap<>();
-        msg.put("type", "SYNC");
-        msg.put("documentState", state);
-        msg.put("collaborators", collaborators);
-        msg.put("conflicts", conflicts);
-        msg.put("timestamp", System.currentTimeMillis());
-        return msg;
+        Map<String, Object> data = new HashMap<>();
+        data.put("documentState", state);
+        data.put("collaborators", collaborators);
+        data.put("conflicts", conflicts);
+        data.put("documentVersion", state != null ? state.getVersion() : 0);
+        return buildMessage("SYNC", data);
     }
 
     private Map<String, Object> buildErrorMessage(String code, String message) {
-        Map<String, Object> msg = new HashMap<>();
-        msg.put("type", "ERROR");
-        msg.put("code", code);
-        msg.put("message", message);
-        msg.put("timestamp", System.currentTimeMillis());
-        return msg;
+        Map<String, Object> data = new HashMap<>();
+        data.put("code", code);
+        data.put("message", message);
+        return buildMessage("ERROR", data);
     }
 }

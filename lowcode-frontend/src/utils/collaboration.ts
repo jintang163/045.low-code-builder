@@ -196,3 +196,56 @@ export function formatJoinTime(timestamp: number): string {
   const minutes = date.getMinutes().toString().padStart(2, '0')
   return `${hours}:${minutes}`
 }
+
+export type WsMessageType =
+  | 'JOIN' | 'LEAVE' | 'OPERATION' | 'CURSOR'
+  | 'PRESENCE' | 'CONFLICT' | 'RESOLVE' | 'SYNC'
+  | 'ACK' | 'PING' | 'PONG' | 'ERROR'
+
+export interface WsMessage {
+  type: WsMessageType
+  data?: any
+  timestamp?: number
+}
+
+export interface JoinPayload {
+  userId: string
+  username: string
+  avatar?: string
+}
+
+export interface CursorPayload {
+  userId: string
+  position: {
+    x: number
+    y: number
+    componentId?: string
+  }
+}
+
+export interface PresencePayload {
+  collaborators: Collaborator[]
+}
+
+export interface ConflictPayload {
+  conflicts: ConflictInfo[]
+}
+
+export interface SyncPayload {
+  documentState?: any
+  collaborators: Collaborator[]
+  conflicts?: ConflictInfo[]
+  documentVersion?: number
+}
+
+export interface AckPayload {
+  operationId?: string
+  lamportClock?: number
+  conflictId?: string
+  success?: boolean
+}
+
+export interface ErrorPayload {
+  code: string
+  message: string
+}

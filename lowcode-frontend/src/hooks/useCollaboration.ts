@@ -1,13 +1,20 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { Collaborator, CRDTOperation, ConflictInfo, generateColor, generateOperationId, throttle } from '@/utils/collaboration'
-
-export type MessageType = 'JOIN' | 'LEAVE' | 'OPERATION' | 'CURSOR' | 'CONFLICT' | 'SYNC' | 'ACK' | 'HEARTBEAT' | 'ERROR'
-
-export interface CollaborationMessage {
-  type: MessageType
-  data?: any
-  timestamp?: number
-}
+import {
+  Collaborator,
+  CRDTOperation,
+  ConflictInfo,
+  generateColor,
+  generateOperationId,
+  throttle,
+  WsMessage,
+  WsMessageType,
+  JoinPayload,
+  CursorPayload,
+  PresencePayload,
+  SyncPayload,
+  AckPayload,
+  ErrorPayload,
+} from '@/utils/collaboration'
 
 export interface CursorPosition {
   x: number
@@ -38,6 +45,31 @@ const MAX_RECONNECT_ATTEMPTS = 10
 const BASE_RECONNECT_DELAY = 1000
 const MESSAGE_QUEUE_KEY = 'collab_message_queue'
 
+function normalizeCollaborator(c: Partial<Collaborator> & { userId: string; username?: string }): Collaborator {
+  return {
+    userId: c.userId,
+    username: c.username || c.userId,
+    avatar: c.avatar || '',
+    color: c.color || generateColor(c.userId),
+    cursorPosition: c.cursorPosition,
+    isOnline: c.isOnline !== undefined ? c.isOnline : true,
+    joinTime: c.joinTime || Date.now(),
+  }
+}
+
+function extractMessageData(message: any): any {
+  if (message.data !== undefined) {
+    return message.data
+  }
+  return message
+}
+
+function extractCursorPosition(data: any): { x: number; y: number; componentId?: string } | undefined {
+  if (data.position) return data.position
+  if (data.cursorPosition) return data.cursorPosition
+  return undefined
+}
+
 export function useCollaboration() {
   const [state, setState] = useState<CollaborationState>({
     isConnected: false,
@@ -53,7 +85,7 @@ export function useCollaboration() {
   const reconnectAttemptsRef = useRef(0)
   const reconnectTimerRef = useRef<number | null>(null)
   const heartbeatTimerRef = useRef<number | null>(null)
-  const messageQueueRef = useRef<CollaborationMessage[]>([])
+  const messageQueueRef = useRef<WsMessage[]>([])
   const lamportClockRef = useRef(0)
   const onOperationRef = useRef<((op: CRDTOperation) => void) | null>(null)
   const onSyncRef = useRef<((data: any) => void) | null>(null)
@@ -82,11 +114,15 @@ export function useCollaboration() {
     }
   }, [])
 
-  const sendMessage = useCallback((message: CollaborationMessage) => {
+  const sendMessage = useCallback((message: WsMessage) => {
+    const msgWithTimestamp: WsMessage = {
+      ...message,
+      timestamp: message.timestamp ?? Date.now(),
+    }
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(message))
+      wsRef.current.send(JSON.stringify(msgWithTimestamp))
     } else {
-      messageQueueRef.current.push(message)
+      messageQueueRef.current.push(msgWithTimestamp)
       saveMessageQueue()
     }
   }, [saveMessageQueue])
@@ -110,11 +146,11 @@ export function useCollaboration() {
     }
     heartbeatTimerRef.current = window.setInterval(() => {
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        const heartbeatMsg: CollaborationMessage = {
-          type: 'HEARTBEAT',
+        const pingMsg: WsMessage = {
+          type: 'PING',
           timestamp: Date.now(),
         }
-        wsRef.current.send(JSON.stringify(heartbeatMsg))
+        wsRef.current.send(JSON.stringify(pingMsg))
       }
     }, HEARTBEAT_INTERVAL)
   }, [])
@@ -128,94 +164,149 @@ export function useCollaboration() {
 
   const handleMessage = useCallback((event: MessageEvent) => {
     try {
-      const message: CollaborationMessage = JSON.parse(event.data)
+      const message: any = JSON.parse(event.data)
+      const messageType: WsMessageType = message.type
+      const data = extractMessageData(message)
 
-      switch (message.type) {
-        case 'JOIN': {
-          const newCollaborator: Collaborator = {
-            ...message.data,
-            color: generateColor(message.data.userId),
-            isOnline: true,
-            joinTime: Date.now(),
-          }
+      switch (messageType) {
+        case 'SYNC': {
+          const syncData = data as SyncPayload
+          const { documentState, collaborators, conflicts, documentVersion } = syncData
+
           setState((prev) => ({
             ...prev,
-            collaborators: [
-              ...prev.collaborators.filter((c) => c.userId !== newCollaborator.userId),
-              newCollaborator,
-            ],
+            collaborators: Array.isArray(collaborators)
+              ? collaborators.map((c) => normalizeCollaborator(c))
+              : prev.collaborators,
+            conflicts: Array.isArray(conflicts) ? conflicts : prev.conflicts,
+            documentVersion: documentVersion ?? prev.documentVersion,
           }))
+
+          if (onSyncRef.current && documentState !== undefined) {
+            onSyncRef.current(documentState)
+          }
+          break
+        }
+
+        case 'PRESENCE': {
+          const presenceData = data as PresencePayload
+          if (presenceData.collaborators && Array.isArray(presenceData.collaborators)) {
+            setState((prev) => ({
+              ...prev,
+              collaborators: presenceData.collaborators.map((c) => normalizeCollaborator(c)),
+            }))
+          }
+          break
+        }
+
+        case 'JOIN': {
+          const joinData = data as JoinPayload
+          if (joinData && joinData.userId) {
+            const newCollaborator: Collaborator = normalizeCollaborator({
+              userId: joinData.userId,
+              username: joinData.username,
+              avatar: joinData.avatar,
+              isOnline: true,
+              joinTime: Date.now(),
+            })
+            setState((prev) => ({
+              ...prev,
+              collaborators: [
+                ...prev.collaborators.filter((c) => c.userId !== newCollaborator.userId),
+                newCollaborator,
+              ],
+            }))
+          }
           break
         }
 
         case 'LEAVE': {
-          const { userId } = message.data
-          setState((prev) => ({
-            ...prev,
-            collaborators: prev.collaborators.map((c) =>
-              c.userId === userId ? { ...c, isOnline: false } : c
-            ),
-          }))
+          const leaveData = data as { userId?: string }
+          const userId = leaveData?.userId || message.userId
+          if (userId) {
+            setState((prev) => ({
+              ...prev,
+              collaborators: prev.collaborators.map((c) =>
+                c.userId === userId ? { ...c, isOnline: false } : c
+              ),
+            }))
+          }
           break
         }
 
         case 'OPERATION': {
-          const operation: CRDTOperation = message.data
-          if (operation.lamportClock > lamportClockRef.current) {
+          const operation: CRDTOperation = data as CRDTOperation
+          if (operation && operation.lamportClock > lamportClockRef.current) {
             lamportClockRef.current = operation.lamportClock
           }
-          if (onOperationRef.current) {
+          if (onOperationRef.current && operation) {
             onOperationRef.current(operation)
           }
           break
         }
 
         case 'CURSOR': {
-          const { userId, position } = message.data
-          setState((prev) => ({
-            ...prev,
-            collaborators: prev.collaborators.map((c) =>
-              c.userId === userId ? { ...c, cursorPosition: position } : c
-            ),
-          }))
+          const cursorData = data as CursorPayload
+          const userId = cursorData?.userId || message.userId
+          const position = extractCursorPosition(cursorData || message)
+          if (userId && position) {
+            setState((prev) => ({
+              ...prev,
+              collaborators: prev.collaborators.map((c) =>
+                c.userId === userId ? { ...c, cursorPosition: position } : c
+              ),
+            }))
+          }
           break
         }
 
         case 'CONFLICT': {
-          const conflict: ConflictInfo = message.data
-          setState((prev) => ({
-            ...prev,
-            conflicts: [...prev.conflicts, conflict],
-          }))
-          break
-        }
-
-        case 'SYNC': {
-          const { collaborators, documentVersion, data } = message.data
-          if (collaborators && Array.isArray(collaborators)) {
+          const conflictData = data as { conflicts?: ConflictInfo[]; conflict?: ConflictInfo }
+          const incomingConflicts: ConflictInfo[] = []
+          if (conflictData?.conflicts && Array.isArray(conflictData.conflicts)) {
+            incomingConflicts.push(...conflictData.conflicts)
+          } else if (conflictData?.conflict) {
+            incomingConflicts.push(conflictData.conflict)
+          } else if (data && !Array.isArray(data) && (data as ConflictInfo).conflictId) {
+            incomingConflicts.push(data as ConflictInfo)
+          }
+          if (incomingConflicts.length > 0) {
             setState((prev) => ({
               ...prev,
-              collaborators: collaborators.map((c: any) => ({
-                ...c,
-                color: generateColor(c.userId),
-              })),
-              documentVersion: documentVersion || prev.documentVersion,
+              conflicts: [...prev.conflicts, ...incomingConflicts],
             }))
-          }
-          if (onSyncRef.current && data) {
-            onSyncRef.current(data)
           }
           break
         }
 
         case 'ACK': {
+          const ackData = data as AckPayload
+          if (ackData?.lamportClock !== undefined && ackData.lamportClock > lamportClockRef.current) {
+            lamportClockRef.current = ackData.lamportClock
+          }
+          break
+        }
+
+        case 'PONG': {
+          break
+        }
+
+        case 'PING': {
+          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            const pongMsg: WsMessage = {
+              type: 'PONG',
+              timestamp: Date.now(),
+            }
+            wsRef.current.send(JSON.stringify(pongMsg))
+          }
           break
         }
 
         case 'ERROR': {
+          const errorData = data as ErrorPayload
           setState((prev) => ({
             ...prev,
-            connectionError: message.data?.message || '连接错误',
+            connectionError: errorData?.message || '连接错误',
           }))
           break
         }
@@ -238,7 +329,7 @@ export function useCollaboration() {
     loadMessageQueue()
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}/api/ws/collaboration?pageId=${pageId}&userId=${userInfo.userId}&username=${encodeURIComponent(userInfo.username)}`
+    const wsUrl = `${protocol}//${window.location.host}/ws/collaboration?pageId=${pageId}&userId=${userInfo.userId}&username=${encodeURIComponent(userInfo.username)}&avatar=${encodeURIComponent(userInfo.avatar || '')}`
 
     try {
       const ws = new WebSocket(wsUrl)
@@ -334,15 +425,21 @@ export function useCollaboration() {
     if (!userInfoRef.current) return
 
     const fullOperation: CRDTOperation = {
-      ...operation,
       id: generateOperationId(),
       userId: userInfoRef.current.userId,
       username: userInfoRef.current.username,
+      type: operation.type,
+      targetType: operation.targetType,
+      targetId: operation.targetId,
+      parentId: operation.parentId,
+      position: operation.position,
+      data: operation.data,
+      oldData: operation.oldData,
       timestamp: Date.now(),
       lamportClock: incrementClock(),
     }
 
-    const message: CollaborationMessage = {
+    const message: WsMessage = {
       type: 'OPERATION',
       data: fullOperation,
       timestamp: Date.now(),
@@ -355,7 +452,7 @@ export function useCollaboration() {
     throttle((position: CursorPosition) => {
       if (!userInfoRef.current) return
 
-      const message: CollaborationMessage = {
+      const message: WsMessage = {
         type: 'CURSOR',
         data: {
           userId: userInfoRef.current.userId,
@@ -369,12 +466,13 @@ export function useCollaboration() {
     [sendMessage]
   )
 
-  const resolveConflict = useCallback((conflictId: string, resolution: 'A' | 'B' | 'MANUAL') => {
-    const message: CollaborationMessage = {
-      type: 'CONFLICT',
+  const resolveConflict = useCallback((conflictId: string, resolution: 'A' | 'B' | 'MANUAL', chosenUserId?: string) => {
+    const message: WsMessage = {
+      type: 'RESOLVE',
       data: {
         conflictId,
         resolution,
+        chosenUserId,
       },
       timestamp: Date.now(),
     }

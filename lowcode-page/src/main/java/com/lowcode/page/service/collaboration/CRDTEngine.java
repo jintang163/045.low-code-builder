@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -26,103 +27,153 @@ public class CRDTEngine {
         try {
             state.updateLamportClock(op.getLamportClock());
 
-            switch (op.getType()) {
-                case INSERT:
+            String type = op.getType();
+            if (type == null) {
+                log.warn("Operation type is null, skipping");
+                return state;
+            }
+
+            switch (type.toUpperCase()) {
+                case "INSERT":
                     applyInsert(op, state);
                     break;
-                case DELETE:
+                case "DELETE":
                     applyDelete(op, state);
                     break;
-                case UPDATE:
+                case "UPDATE":
                     applyUpdate(op, state);
                     break;
-                case MOVE:
+                case "MOVE":
                     applyMove(op, state);
                     break;
-                case PROP_CHANGE:
+                case "PROP_CHANGE":
                     applyPropChange(op, state);
                     break;
                 default:
-                    log.warn("Unknown operation type: {}", op.getType());
+                    log.warn("Unknown operation type: {}", type);
             }
         } catch (Exception e) {
-            log.error("Failed to apply operation: {}", op.getOperationId(), e);
+            log.error("Failed to apply operation: {}", op.getId(), e);
         }
 
         return state;
     }
 
+    @SuppressWarnings("unchecked")
     private void applyInsert(CRDTOperation op, DocumentState state) {
-        if (state.hasComponent(op.getComponentId())) {
-            log.debug("Component already exists, skipping insert: {}", op.getComponentId());
+        String targetId = op.getTargetId();
+        if (state.hasComponent(targetId)) {
+            log.debug("Component already exists, skipping insert: {}", targetId);
             return;
         }
 
         DocumentState.ComponentNode node = new DocumentState.ComponentNode();
-        node.setComponentId(op.getComponentId());
-        node.setComponentType(op.getComponentType());
-        node.setComponentName(op.getComponentName());
+        node.setComponentId(targetId);
 
-        if (op.getProps() != null) {
-            node.getProps().putAll(op.getProps());
-        }
-        if (op.getStyle() != null) {
-            node.getStyle().putAll(op.getStyle());
-        }
-        if (op.getEvents() != null) {
-            node.getEvents().putAll(op.getEvents());
+        Object dataObj = op.getData();
+        if (dataObj instanceof Map) {
+            Map<String, Object> data = (Map<String, Object>) dataObj;
+            if (data.containsKey("componentType")) {
+                node.setComponentType(String.valueOf(data.get("componentType")));
+            }
+            if (data.containsKey("componentName")) {
+                node.setComponentName(String.valueOf(data.get("componentName")));
+            }
+            if (data.containsKey("props") && data.get("props") instanceof Map) {
+                node.getProps().putAll((Map<String, Object>) data.get("props"));
+            }
+            if (data.containsKey("style") && data.get("style") instanceof Map) {
+                node.getStyle().putAll((Map<String, Object>) data.get("style"));
+            }
+            if (data.containsKey("events") && data.get("events") instanceof Map) {
+                node.getEvents().putAll((Map<String, Object>) data.get("events"));
+            }
         }
 
         state.addComponent(node, op.getParentId(), op.getPosition());
-        log.debug("Applied INSERT operation for component: {}", op.getComponentId());
+        log.debug("Applied INSERT operation for component: {}", targetId);
     }
 
     private void applyDelete(CRDTOperation op, DocumentState state) {
-        if (!state.hasComponent(op.getComponentId())) {
-            log.debug("Component not found, skipping delete: {}", op.getComponentId());
+        String targetId = op.getTargetId();
+        if (!state.hasComponent(targetId)) {
+            log.debug("Component not found, skipping delete: {}", targetId);
             return;
         }
-        state.removeComponent(op.getComponentId());
-        log.debug("Applied DELETE operation for component: {}", op.getComponentId());
+        state.removeComponent(targetId);
+        log.debug("Applied DELETE operation for component: {}", targetId);
     }
 
+    @SuppressWarnings("unchecked")
     private void applyUpdate(CRDTOperation op, DocumentState state) {
-        if (!state.hasComponent(op.getComponentId())) {
-            log.debug("Component not found, skipping update: {}", op.getComponentId());
+        String targetId = op.getTargetId();
+        if (!state.hasComponent(targetId)) {
+            log.debug("Component not found, skipping update: {}", targetId);
             return;
         }
 
-        if (op.getProps() != null && !op.getProps().isEmpty()) {
-            state.updateProps(op.getComponentId(), op.getProps());
+        Object dataObj = op.getData();
+        if (dataObj instanceof Map) {
+            Map<String, Object> data = (Map<String, Object>) dataObj;
+            if (data.containsKey("props") && data.get("props") instanceof Map) {
+                Map<String, Object> props = (Map<String, Object>) data.get("props");
+                if (!props.isEmpty()) {
+                    state.updateProps(targetId, props);
+                }
+            }
+            if (data.containsKey("style") && data.get("style") instanceof Map) {
+                Map<String, Object> style = (Map<String, Object>) data.get("style");
+                if (!style.isEmpty()) {
+                    state.updateStyle(targetId, style);
+                }
+            }
+            if (data.containsKey("events") && data.get("events") instanceof Map) {
+                Map<String, Object> events = (Map<String, Object>) data.get("events");
+                if (!events.isEmpty()) {
+                    state.updateEvents(targetId, events);
+                }
+            }
         }
-        if (op.getStyle() != null && !op.getStyle().isEmpty()) {
-            state.updateStyle(op.getComponentId(), op.getStyle());
-        }
-        if (op.getEvents() != null && !op.getEvents().isEmpty()) {
-            state.updateEvents(op.getComponentId(), op.getEvents());
-        }
-        log.debug("Applied UPDATE operation for component: {}", op.getComponentId());
+        log.debug("Applied UPDATE operation for component: {}", targetId);
     }
 
     private void applyMove(CRDTOperation op, DocumentState state) {
-        if (!state.hasComponent(op.getComponentId())) {
-            log.debug("Component not found, skipping move: {}", op.getComponentId());
+        String targetId = op.getTargetId();
+        if (!state.hasComponent(targetId)) {
+            log.debug("Component not found, skipping move: {}", targetId);
             return;
         }
-        state.moveComponent(op.getComponentId(), op.getParentId(), op.getPosition());
-        log.debug("Applied MOVE operation for component: {}", op.getComponentId());
+        state.moveComponent(targetId, op.getParentId(), op.getPosition());
+        log.debug("Applied MOVE operation for component: {}", targetId);
     }
 
+    @SuppressWarnings("unchecked")
     private void applyPropChange(CRDTOperation op, DocumentState state) {
-        if (!state.hasComponent(op.getComponentId())) {
-            log.debug("Component not found, skipping prop change: {}", op.getComponentId());
+        String targetId = op.getTargetId();
+        if (!state.hasComponent(targetId)) {
+            log.debug("Component not found, skipping prop change: {}", targetId);
             return;
         }
-        if (op.getPropName() != null) {
-            state.updateProp(op.getComponentId(), op.getPropName(), op.getPropValue());
+
+        Object dataObj = op.getData();
+        String propName = null;
+        Object propValue = null;
+
+        if (dataObj instanceof Map) {
+            Map<String, Object> data = (Map<String, Object>) dataObj;
+            if (data.containsKey("propName")) {
+                propName = String.valueOf(data.get("propName"));
+            }
+            if (data.containsKey("propValue")) {
+                propValue = data.get("propValue");
+            }
+        }
+
+        if (propName != null) {
+            state.updateProp(targetId, propName, propValue);
         }
         log.debug("Applied PROP_CHANGE operation for component: {}, prop: {}",
-                op.getComponentId(), op.getPropName());
+                targetId, propName);
     }
 
     public CRDTOperation transform(CRDTOperation op1, CRDTOperation op2) {
@@ -130,20 +181,25 @@ public class CRDTEngine {
             return op1;
         }
 
-        if (op1.getOperationId() != null && op1.getOperationId().equals(op2.getOperationId())) {
+        if (op1.getId() != null && op1.getId().equals(op2.getId())) {
             return op1;
         }
 
         try {
             CRDTOperation transformed = deepCopyOperation(op1);
 
-            switch (op1.getType()) {
-                case INSERT:
-                case DELETE:
-                case UPDATE:
-                case PROP_CHANGE:
+            String type1 = op1.getType();
+            if (type1 == null) {
+                return op1;
+            }
+
+            switch (type1.toUpperCase()) {
+                case "INSERT":
+                case "DELETE":
+                case "UPDATE":
+                case "PROP_CHANGE":
                     break;
-                case MOVE:
+                case "MOVE":
                     transformed = transformMove(op1, op2);
                     break;
                 default:
@@ -160,7 +216,12 @@ public class CRDTEngine {
     private CRDTOperation transformMove(CRDTOperation moveOp, CRDTOperation otherOp) {
         CRDTOperation transformed = deepCopyOperation(moveOp);
 
-        if (otherOp.getType() == CRDTOperation.OperationType.INSERT) {
+        String otherType = otherOp.getType();
+        if (otherType == null) {
+            return transformed;
+        }
+
+        if ("INSERT".equalsIgnoreCase(otherType)) {
             if (moveOp.getParentId() != null && moveOp.getParentId().equals(otherOp.getParentId())) {
                 Integer otherPos = otherOp.getPosition();
                 Integer movePos = moveOp.getPosition();
@@ -168,7 +229,7 @@ public class CRDTEngine {
                     transformed.setPosition(movePos + 1);
                 }
             }
-        } else if (otherOp.getType() == CRDTOperation.OperationType.DELETE) {
+        } else if ("DELETE".equalsIgnoreCase(otherType)) {
             if (moveOp.getParentId() != null && moveOp.getParentId().equals(otherOp.getParentId())) {
                 Integer movePos = moveOp.getPosition();
                 if (movePos != null && movePos > 0) {
@@ -185,39 +246,40 @@ public class CRDTEngine {
             return Optional.empty();
         }
 
-        if (op1.getOperationId() != null && op1.getOperationId().equals(op2.getOperationId())) {
+        if (op1.getId() != null && op1.getId().equals(op2.getId())) {
             return Optional.empty();
         }
 
-        if (op1.getComponentId() == null || op2.getComponentId() == null) {
+        if (op1.getTargetId() == null || op2.getTargetId() == null) {
             return Optional.empty();
         }
 
-        ConflictInfo.ConflictType conflictType = null;
-        String conflictComponentId = null;
-        String propName = null;
+        String conflictType = null;
+        String conflictTargetId = null;
+        String description = null;
 
         if (isDeleteUpdateConflict(op1, op2)) {
-            conflictType = ConflictInfo.ConflictType.DELETE_UPDATE_CONFLICT;
-            conflictComponentId = op1.getComponentId();
+            conflictType = "DELETE_UPDATE_CONFLICT";
+            conflictTargetId = op1.getTargetId();
+            description = "One user deleted a component while another updated it";
         } else if (isPropertyConflict(op1, op2)) {
-            conflictType = ConflictInfo.ConflictType.PROPERTY_CONFLICT;
-            conflictComponentId = op1.getComponentId();
-            propName = findConflictingProp(op1, op2);
+            conflictType = "PROPERTY_CONFLICT";
+            conflictTargetId = op1.getTargetId();
+            description = "Multiple users modified the same property";
         } else if (isStructureConflict(op1, op2)) {
-            conflictType = ConflictInfo.ConflictType.STRUCTURE_CONFLICT;
-            conflictComponentId = op1.getParentId() != null ? op1.getParentId() : "root";
+            conflictType = "STRUCTURE_CONFLICT";
+            conflictTargetId = op1.getParentId() != null ? op1.getParentId() : "root";
+            description = "Structural changes conflict in the same parent";
         }
 
         if (conflictType != null) {
             ConflictInfo conflict = new ConflictInfo();
             conflict.setConflictId(generateOperationId());
-            conflict.setType(conflictType);
-            conflict.setComponentId(conflictComponentId);
-            conflict.setPropName(propName);
-            conflict.addConflictingOperation(op1);
-            conflict.addConflictingOperation(op2);
-            conflict.setStatus(ConflictInfo.ConflictStatus.PENDING);
+            conflict.setConflictType(conflictType);
+            conflict.setOperationA(op1);
+            conflict.setOperationB(op2);
+            conflict.setDescription(description);
+            conflict.setStatus("PENDING");
             return Optional.of(conflict);
         }
 
@@ -225,51 +287,116 @@ public class CRDTEngine {
     }
 
     private boolean isDeleteUpdateConflict(CRDTOperation op1, CRDTOperation op2) {
-        if (!op1.getComponentId().equals(op2.getComponentId())) {
+        if (!op1.getTargetId().equals(op2.getTargetId())) {
             return false;
         }
 
-        CRDTOperation.OperationType t1 = op1.getType();
-        CRDTOperation.OperationType t2 = op2.getType();
+        String t1 = op1.getType();
+        String t2 = op2.getType();
+        if (t1 == null || t2 == null) {
+            return false;
+        }
 
-        return (t1 == CRDTOperation.OperationType.DELETE &&
-                (t2 == CRDTOperation.OperationType.UPDATE ||
-                 t2 == CRDTOperation.OperationType.PROP_CHANGE ||
-                 t2 == CRDTOperation.OperationType.MOVE))
-               ||
-               (t2 == CRDTOperation.OperationType.DELETE &&
-                (t1 == CRDTOperation.OperationType.UPDATE ||
-                 t1 == CRDTOperation.OperationType.PROP_CHANGE ||
-                 t1 == CRDTOperation.OperationType.MOVE));
+        boolean isDelete1 = "DELETE".equalsIgnoreCase(t1);
+        boolean isDelete2 = "DELETE".equalsIgnoreCase(t2);
+        boolean isUpdateLike1 = "UPDATE".equalsIgnoreCase(t1) || "PROP_CHANGE".equalsIgnoreCase(t1) || "MOVE".equalsIgnoreCase(t1);
+        boolean isUpdateLike2 = "UPDATE".equalsIgnoreCase(t2) || "PROP_CHANGE".equalsIgnoreCase(t2) || "MOVE".equalsIgnoreCase(t2);
+
+        return (isDelete1 && isUpdateLike2) || (isDelete2 && isUpdateLike1);
     }
 
+    @SuppressWarnings("unchecked")
     private boolean isPropertyConflict(CRDTOperation op1, CRDTOperation op2) {
-        if (!op1.getComponentId().equals(op2.getComponentId())) {
+        if (!op1.getTargetId().equals(op2.getTargetId())) {
             return false;
         }
 
-        CRDTOperation.OperationType t1 = op1.getType();
-        CRDTOperation.OperationType t2 = op2.getType();
-
-        if (t1 == CRDTOperation.OperationType.PROP_CHANGE &&
-            t2 == CRDTOperation.OperationType.PROP_CHANGE) {
-            return op1.getPropName() != null && op1.getPropName().equals(op2.getPropName());
+        String t1 = op1.getType();
+        String t2 = op2.getType();
+        if (t1 == null || t2 == null) {
+            return false;
         }
 
-        if ((t1 == CRDTOperation.OperationType.UPDATE && t2 == CRDTOperation.OperationType.PROP_CHANGE) ||
-            (t2 == CRDTOperation.OperationType.UPDATE && t1 == CRDTOperation.OperationType.PROP_CHANGE)) {
-            CRDTOperation updateOp = t1 == CRDTOperation.OperationType.UPDATE ? op1 : op2;
-            CRDTOperation propOp = t1 == CRDTOperation.OperationType.PROP_CHANGE ? op1 : op2;
-            return updateOp.getProps() != null && updateOp.getProps().containsKey(propOp.getPropName());
+        boolean propChange1 = "PROP_CHANGE".equalsIgnoreCase(t1);
+        boolean propChange2 = "PROP_CHANGE".equalsIgnoreCase(t2);
+        boolean update1 = "UPDATE".equalsIgnoreCase(t1);
+        boolean update2 = "UPDATE".equalsIgnoreCase(t2);
+
+        if (propChange1 && propChange2) {
+            String pn1 = getPropNameFromData(op1.getData());
+            String pn2 = getPropNameFromData(op2.getData());
+            return pn1 != null && pn1.equals(pn2);
         }
 
-        if (t1 == CRDTOperation.OperationType.UPDATE && t2 == CRDTOperation.OperationType.UPDATE) {
-            return hasOverlappingProps(op1.getProps(), op2.getProps()) ||
-                   hasOverlappingProps(op1.getStyle(), op2.getStyle()) ||
-                   hasOverlappingProps(op1.getEvents(), op2.getEvents());
+        if ((update1 && propChange2) || (update2 && propChange1)) {
+            CRDTOperation updateOp = update1 ? op1 : op2;
+            CRDTOperation propOp = propChange1 ? op1 : op2;
+            String propName = getPropNameFromData(propOp.getData());
+            if (propName == null) {
+                return false;
+            }
+            Map<String, Object> updateProps = getPropsFromData(updateOp.getData());
+            return updateProps != null && updateProps.containsKey(propName);
+        }
+
+        if (update1 && update2) {
+            Map<String, Object> props1 = getPropsFromData(op1.getData());
+            Map<String, Object> props2 = getPropsFromData(op2.getData());
+            Map<String, Object> style1 = getStyleFromData(op1.getData());
+            Map<String, Object> style2 = getStyleFromData(op2.getData());
+            Map<String, Object> events1 = getEventsFromData(op1.getData());
+            Map<String, Object> events2 = getEventsFromData(op2.getData());
+
+            return hasOverlappingProps(props1, props2) ||
+                   hasOverlappingProps(style1, style2) ||
+                   hasOverlappingProps(events1, events2);
         }
 
         return false;
+    }
+
+    @SuppressWarnings("unchecked")
+    private String getPropNameFromData(Object data) {
+        if (data instanceof Map) {
+            Object propName = ((Map<String, Object>) data).get("propName");
+            if (propName != null) {
+                return String.valueOf(propName);
+            }
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> getPropsFromData(Object data) {
+        if (data instanceof Map) {
+            Object props = ((Map<String, Object>) data).get("props");
+            if (props instanceof Map) {
+                return (Map<String, Object>) props;
+            }
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> getStyleFromData(Object data) {
+        if (data instanceof Map) {
+            Object style = ((Map<String, Object>) data).get("style");
+            if (style instanceof Map) {
+                return (Map<String, Object>) style;
+            }
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> getEventsFromData(Object data) {
+        if (data instanceof Map) {
+            Object events = ((Map<String, Object>) data).get("events");
+            if (events instanceof Map) {
+                return (Map<String, Object>) events;
+            }
+        }
+        return null;
     }
 
     private boolean hasOverlappingProps(Map<String, Object> props1, Map<String, Object> props2) {
@@ -281,33 +408,19 @@ public class CRDTEngine {
         return !keys1.isEmpty();
     }
 
-    private String findConflictingProp(CRDTOperation op1, CRDTOperation op2) {
-        if (op1.getPropName() != null && op2.getPropName() != null &&
-            op1.getPropName().equals(op2.getPropName())) {
-            return op1.getPropName();
-        }
-
-        if (op1.getProps() != null && op2.getProps() != null) {
-            Set<String> keys1 = new HashSet<>(op1.getProps().keySet());
-            keys1.retainAll(op2.getProps().keySet());
-            if (!keys1.isEmpty()) {
-                return keys1.iterator().next();
-            }
-        }
-
-        return null;
-    }
-
     private boolean isStructureConflict(CRDTOperation op1, CRDTOperation op2) {
-        CRDTOperation.OperationType t1 = op1.getType();
-        CRDTOperation.OperationType t2 = op2.getType();
+        String t1 = op1.getType();
+        String t2 = op2.getType();
+        if (t1 == null || t2 == null) {
+            return false;
+        }
 
-        boolean isStructureOp1 = t1 == CRDTOperation.OperationType.INSERT ||
-                                 t1 == CRDTOperation.OperationType.DELETE ||
-                                 t1 == CRDTOperation.OperationType.MOVE;
-        boolean isStructureOp2 = t2 == CRDTOperation.OperationType.INSERT ||
-                                 t2 == CRDTOperation.OperationType.DELETE ||
-                                 t2 == CRDTOperation.OperationType.MOVE;
+        boolean isStructureOp1 = "INSERT".equalsIgnoreCase(t1) ||
+                                 "DELETE".equalsIgnoreCase(t1) ||
+                                 "MOVE".equalsIgnoreCase(t1);
+        boolean isStructureOp2 = "INSERT".equalsIgnoreCase(t2) ||
+                                 "DELETE".equalsIgnoreCase(t2) ||
+                                 "MOVE".equalsIgnoreCase(t2);
 
         if (!isStructureOp1 || !isStructureOp2) {
             return false;
@@ -341,7 +454,7 @@ public class CRDTEngine {
         Collections.sort(sortedOps, new Comparator<CRDTOperation>() {
             @Override
             public int compare(CRDTOperation o1, CRDTOperation o2) {
-                int clockCompare = Long.compare(o1.getLamportClock(), o2.getLamportClock());
+                int clockCompare = Integer.compare(o1.getLamportClock(), o2.getLamportClock());
                 if (clockCompare != 0) {
                     return clockCompare;
                 }
@@ -361,7 +474,7 @@ public class CRDTEngine {
                     ConflictInfo ci = conflict.get();
                     if (canAutoResolve(ci)) {
                         autoResolve(ci, state);
-                        ci.setStatus(ConflictInfo.ConflictStatus.AUTO_RESOLVED);
+                        ci.setStatus("AUTO_RESOLVED");
                     }
                     conflicts.add(ci);
                 }
@@ -380,32 +493,34 @@ public class CRDTEngine {
     }
 
     private boolean canAutoResolve(ConflictInfo conflict) {
-        if (conflict == null) {
+        if (conflict == null || conflict.getConflictType() == null) {
             return false;
         }
 
-        switch (conflict.getType()) {
-            case PROPERTY_CONFLICT:
-                return true;
-            case STRUCTURE_CONFLICT:
-                return true;
-            case DELETE_UPDATE_CONFLICT:
-                return false;
-            default:
-                return false;
+        String type = conflict.getConflictType();
+        if ("PROPERTY_CONFLICT".equalsIgnoreCase(type)) {
+            return true;
         }
+        if ("STRUCTURE_CONFLICT".equalsIgnoreCase(type)) {
+            return true;
+        }
+        if ("DELETE_UPDATE_CONFLICT".equalsIgnoreCase(type)) {
+            return false;
+        }
+        return false;
     }
 
     private void autoResolve(ConflictInfo conflict, DocumentState state) {
-        if (conflict == null || conflict.getConflictingOperations() == null ||
-            conflict.getConflictingOperations().size() < 2) {
+        if (conflict == null || conflict.getOperationA() == null || conflict.getOperationB() == null) {
             return;
         }
 
-        List<CRDTOperation> ops = conflict.getConflictingOperations();
-        CRDTOperation winner = selectWinner(ops.get(0), ops.get(1));
-        conflict.setChosenUserId(winner.getUserId());
+        CRDTOperation op1 = conflict.getOperationA();
+        CRDTOperation op2 = conflict.getOperationB();
+        CRDTOperation winner = selectWinner(op1, op2);
+        conflict.setResolvedBy(winner.getUserId());
         conflict.setResolution("auto_resolved_by_lamport_clock");
+        conflict.setResolveTime(new java.util.Date());
     }
 
     private CRDTOperation selectWinner(CRDTOperation op1, CRDTOperation op2) {
@@ -431,7 +546,7 @@ public class CRDTEngine {
         Collections.sort(sorted, new Comparator<CRDTOperation>() {
             @Override
             public int compare(CRDTOperation o1, CRDTOperation o2) {
-                int clockCompare = Long.compare(o1.getLamportClock(), o2.getLamportClock());
+                int clockCompare = Integer.compare(o1.getLamportClock(), o2.getLamportClock());
                 if (clockCompare != 0) {
                     return clockCompare;
                 }
@@ -449,35 +564,35 @@ public class CRDTEngine {
         return "op_" + UUID.randomUUID().toString().replace("-", "") + "_" + System.currentTimeMillis();
     }
 
+    @SuppressWarnings("unchecked")
     private CRDTOperation deepCopyOperation(CRDTOperation op) {
         if (op == null) {
             return null;
         }
 
         CRDTOperation copy = new CRDTOperation();
-        copy.setOperationId(op.getOperationId());
-        copy.setType(op.getType());
-        copy.setComponentId(op.getComponentId());
-        copy.setParentId(op.getParentId());
-        copy.setPosition(op.getPosition());
-        copy.setPropName(op.getPropName());
-        copy.setPropValue(op.getPropValue());
-        copy.setComponentType(op.getComponentType());
-        copy.setComponentName(op.getComponentName());
+        copy.setId(op.getId());
         copy.setUserId(op.getUserId());
         copy.setUsername(op.getUsername());
-        copy.setLamportClock(op.getLamportClock());
+        copy.setType(op.getType());
+        copy.setTargetType(op.getTargetType());
+        copy.setTargetId(op.getTargetId());
+        copy.setParentId(op.getParentId());
+        copy.setPosition(op.getPosition());
         copy.setTimestamp(op.getTimestamp());
-        copy.setBaseVersion(op.getBaseVersion());
+        copy.setLamportClock(op.getLamportClock());
+        copy.setSessionId(op.getSessionId());
 
-        if (op.getProps() != null) {
-            copy.setProps(new java.util.HashMap<>(op.getProps()));
+        if (op.getData() instanceof Map) {
+            copy.setData(new HashMap<>((Map<String, Object>) op.getData()));
+        } else {
+            copy.setData(op.getData());
         }
-        if (op.getStyle() != null) {
-            copy.setStyle(new java.util.HashMap<>(op.getStyle()));
-        }
-        if (op.getEvents() != null) {
-            copy.setEvents(new java.util.HashMap<>(op.getEvents()));
+
+        if (op.getOldData() instanceof Map) {
+            copy.setOldData(new HashMap<>((Map<String, Object>) op.getOldData()));
+        } else {
+            copy.setOldData(op.getOldData());
         }
 
         return copy;

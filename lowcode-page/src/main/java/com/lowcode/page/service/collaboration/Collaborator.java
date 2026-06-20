@@ -3,7 +3,7 @@ package com.lowcode.page.service.collaboration;
 import lombok.Data;
 
 import java.io.Serializable;
-import java.util.Map;
+import java.util.Date;
 
 @Data
 public class Collaborator implements Serializable {
@@ -18,19 +18,23 @@ public class Collaborator implements Serializable {
 
     private String avatar;
 
-    private long joinTime;
+    private String color;
 
-    private long lastActiveTime;
+    private Long pageId;
+
+    private Object cursorPosition;
+
+    private Object selection;
+
+    private Date joinTime;
+
+    private Date lastActiveTime;
 
     private boolean online;
 
-    private Map<String, Object> cursorPosition;
-
-    private String color;
-
     public Collaborator() {
-        this.joinTime = System.currentTimeMillis();
-        this.lastActiveTime = System.currentTimeMillis();
+        this.joinTime = new Date();
+        this.lastActiveTime = new Date();
         this.online = true;
     }
 
@@ -43,6 +47,6 @@ public class Collaborator implements Serializable {
     }
 
     public void updateActiveTime() {
-        this.lastActiveTime = System.currentTimeMillis();
+        this.lastActiveTime = new Date();
     }
 }

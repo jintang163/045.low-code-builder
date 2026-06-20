@@ -13,6 +13,7 @@ import org.springframework.web.socket.WebSocketSession;
 import javax.annotation.PostConstruct;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -65,6 +66,7 @@ public class CollaborationService {
             int colorIndex = pageCollaborators.size() % COLORS.length;
             Collaborator collaborator = new Collaborator(sessionId, userId, username, avatar);
             collaborator.setColor(COLORS[colorIndex]);
+            collaborator.setPageId(pageId);
 
             pageCollaborators.put(sessionId, collaborator);
 
@@ -98,6 +100,8 @@ public class CollaborationService {
             if (pageCollaborators != null) {
                 Collaborator collaborator = pageCollaborators.remove(sessionId);
                 if (collaborator != null) {
+                    collaborator.setOnline(false);
+                    collaborator.setLastActiveTime(new Date());
                     log.info("User left page: userId={}", collaborator.getUserId());
                 }
             }
@@ -120,7 +124,7 @@ public class CollaborationService {
 
     public List<CRDTOperation> broadcastOperation(Long pageId, CRDTOperation operation) {
         log.debug("Broadcasting operation: pageId={}, type={}, opId={}",
-                pageId, operation.getType(), operation.getOperationId());
+                pageId, operation.getType(), operation.getId());
 
         List<ConflictInfo> newConflicts = new ArrayList<>();
 
@@ -128,12 +132,12 @@ public class CollaborationService {
             DocumentState state = getOrCreateDocumentState(pageId);
 
             AtomicLong clock = lamportClocks.computeIfAbsent(pageId, k -> new AtomicLong(0));
-            long newClock = Math.max(clock.incrementAndGet(), operation.getLamportClock() + 1);
-            operation.setLamportClock(newClock);
+            long newClock = Math.max(clock.incrementAndGet(), (long) operation.getLamportClock() + 1);
+            operation.setLamportClock((int) newClock);
             clock.set(newClock);
 
-            if (operation.getOperationId() == null || operation.getOperationId().isEmpty()) {
-                operation.setOperationId(crdtEngine.generateOperationId());
+            if (operation.getId() == null || operation.getId().isEmpty()) {
+                operation.setId(crdtEngine.generateOperationId());
             }
 
             List<CRDTOperation> history = operationHistory.computeIfAbsent(pageId,
@@ -147,19 +151,19 @@ public class CollaborationService {
             }
 
             for (ConflictInfo conflict : detectedConflicts) {
-                if (conflict.getStatus() == ConflictInfo.ConflictStatus.PENDING) {
-                    if (conflict.getType() == ConflictInfo.ConflictType.PROPERTY_CONFLICT ||
-                        conflict.getType() == ConflictInfo.ConflictType.STRUCTURE_CONFLICT) {
-                        conflict.setStatus(ConflictInfo.ConflictStatus.AUTO_RESOLVED);
+                if ("PENDING".equalsIgnoreCase(conflict.getStatus())) {
+                    if ("PROPERTY_CONFLICT".equalsIgnoreCase(conflict.getConflictType()) ||
+                        "STRUCTURE_CONFLICT".equalsIgnoreCase(conflict.getConflictType())) {
+                        conflict.setStatus("AUTO_RESOLVED");
                         conflict.setResolution("auto_resolved_by_lamport_clock");
-                        if (conflict.getConflictingOperations() != null &&
-                            conflict.getConflictingOperations().size() >= 2) {
-                            CRDTOperation op1 = conflict.getConflictingOperations().get(0);
-                            CRDTOperation op2 = conflict.getConflictingOperations().get(1);
-                            conflict.setChosenUserId(
+                        if (conflict.getOperationA() != null && conflict.getOperationB() != null) {
+                            CRDTOperation op1 = conflict.getOperationA();
+                            CRDTOperation op2 = conflict.getOperationB();
+                            conflict.setResolvedBy(
                                 op1.getLamportClock() >= op2.getLamportClock()
                                     ? op1.getUserId() : op2.getUserId()
                             );
+                            conflict.setResolveTime(new Date());
                         }
                     }
                     newConflicts.add(conflict);
@@ -174,17 +178,17 @@ public class CollaborationService {
 
             history.add(operation);
 
-            log.debug("Operation applied successfully: pageId={}, opId={}", pageId, operation.getOperationId());
+            log.debug("Operation applied successfully: pageId={}, opId={}", pageId, operation.getId());
 
         } catch (Exception e) {
             log.error("Failed to broadcast operation: pageId={}, opId={}",
-                    pageId, operation.getOperationId(), e);
+                    pageId, operation.getId(), e);
         }
 
         return operationHistory.getOrDefault(pageId, Collections.emptyList());
     }
 
-    public void broadcastCursor(Long pageId, String sessionId, Map<String, Object> cursorPosition) {
+    public void broadcastCursor(Long pageId, String sessionId, Object cursorPosition) {
         log.debug("Broadcasting cursor: pageId={}, sessionId={}", pageId, sessionId);
 
         try {
@@ -319,10 +323,10 @@ public class CollaborationService {
 
             for (ConflictInfo conflict : pageConflicts) {
                 if (conflict.getConflictId().equals(conflictId)) {
-                    conflict.setStatus(ConflictInfo.ConflictStatus.RESOLVED);
+                    conflict.setStatus("RESOLVED");
                     conflict.setResolution(resolution);
-                    conflict.setChosenUserId(chosenUserId);
-                    conflict.setResolvedAt(System.currentTimeMillis());
+                    conflict.setResolvedBy(chosenUserId);
+                    conflict.setResolveTime(new Date());
                     log.info("Conflict resolved: conflictId={}, resolution={}", conflictId, resolution);
                     return true;
                 }
@@ -368,7 +372,7 @@ public class CollaborationService {
         List<ConflictInfo> pending = new ArrayList<>();
         synchronized (pageConflicts) {
             for (ConflictInfo conflict : pageConflicts) {
-                if (conflict.getStatus() == ConflictInfo.ConflictStatus.PENDING) {
+                if ("PENDING".equalsIgnoreCase(conflict.getStatus())) {
                     pending.add(conflict);
                 }
             }

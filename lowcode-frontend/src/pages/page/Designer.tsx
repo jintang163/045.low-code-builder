@@ -205,6 +205,19 @@ interface CanvasComponentProps {
 }
 
 const CanvasComponent: React.FC<CanvasComponentProps> = ({ component, isSelected, onSelect, onDelete, onDrop }) => {
+  const [{ isDragging }, drag] = useDrag(() => ({
+    type: 'COMPONENT',
+    item: () => ({
+      componentId: component.componentId,
+      componentType: component.componentType,
+      componentName: component.componentName,
+      isExisting: true,
+    }),
+    collect: (monitor) => ({
+      isDragging: monitor.isDragging(),
+    }),
+  }), [component.componentId, component.componentType, component.componentName])
+
   const [{ isOver }, drop] = useDrop(() => ({
     accept: 'COMPONENT',
     drop: (item: any) => onDrop(item),
@@ -643,9 +656,11 @@ const CanvasComponent: React.FC<CanvasComponentProps> = ({ component, isSelected
 
   return (
     <div
-      ref={drop}
+      ref={(node) => { drag(node); drop(node) }}
       style={{
         position: 'relative',
+        opacity: isDragging ? 0.4 : 1,
+        cursor: isDragging ? 'grabbing' : 'grab',
         ...(isOver ? { outline: '2px dashed #1677ff', outlineOffset: 2 } : {}),
       }}
       onClick={(e) => { e.stopPropagation(); onSelect() }}
@@ -1256,6 +1271,24 @@ const PageDesigner: React.FC = () => {
             break
           }
           case 'MOVE': {
+            if (op.targetType === 'COMPONENT') {
+              setPage(prevPage => {
+                if (!prevPage) return prevPage
+                const components = [...(prevPage.components || [])]
+                const idx = components.findIndex(c => c.componentId === op.targetId)
+                if (idx >= 0) {
+                  const moved = {
+                    ...components[idx],
+                    parentId: op.parentId || components[idx].parentId,
+                    sortOrder: op.position !== undefined ? op.position : components[idx].sortOrder,
+                  }
+                  components[idx] = moved
+                }
+                const tree = buildComponentTree(components)
+                setComponentTree(tree)
+                return { ...prevPage, components }
+              })
+            }
             break
           }
         }
@@ -1471,8 +1504,48 @@ const PageDesigner: React.FC = () => {
     message.success(`页面生成成功，共 ${validComponents.length} 个组件`)
   }, [page, form])
 
-  const handleDropComponent = (item: any, parentId?: string) => {
+  const handleMoveComponent = (componentId: string, newParentId: string | undefined, newPosition?: number) => {
     if (!page) return
+    saveHistory()
+
+    const components = [...(page.components || [])]
+    const idx = components.findIndex(c => c.componentId === componentId)
+    if (idx < 0) return
+
+    const oldComponent = { ...components[idx] }
+    const updated = {
+      ...components[idx],
+      parentId: newParentId || undefined,
+      sortOrder: newPosition !== undefined ? newPosition : components[idx].sortOrder,
+    }
+    components[idx] = updated
+
+    setPage({ ...page, components })
+    const tree = buildComponentTree(components)
+    setComponentTree(tree)
+
+    if (isConnected && !isRemoteOperationRef.current) {
+      sendOperation({
+        type: 'MOVE',
+        targetType: 'COMPONENT',
+        targetId: componentId,
+        parentId: newParentId || 'root',
+        position: newPosition,
+        data: updated,
+        oldData: oldComponent,
+      })
+    }
+  }
+
+  const handleDropComponent = (item: any, parentId?: string, position?: number) => {
+    if (!page) return
+
+    // 如果拖入的是已存在的组件（从组件树或画布内部拖入），执行 MOVE
+    if (item.componentId && page.components?.some((c: any) => c.componentId === item.componentId)) {
+      handleMoveComponent(item.componentId, parentId, position)
+      return
+    }
+
     saveHistory()
 
     const newComponent: PageComponent = {
@@ -1481,7 +1554,7 @@ const PageDesigner: React.FC = () => {
       componentType: item.componentType,
       componentVersion: item.isCustom ? item.currentVersion : undefined,
       parentId: parentId,
-      sortOrder: (page.components?.length || 0) + 1,
+      sortOrder: position !== undefined ? position : (page.components?.length || 0) + 1,
       propsConfig: item.defaultProps || '{}',
       styleConfig: '{}',
       eventConfig: '[]',
@@ -3093,11 +3166,32 @@ const PageDesigner: React.FC = () => {
                       <Tree
                         showLine
                         blockNode
+                        draggable
                         selectedKeys={selectedComponentId ? [selectedComponentId] : []}
                         onSelect={(keys) => {
                           if (keys.length > 0) {
                             handleSelectComponent(keys[0] as string)
                           }
+                        }}
+                        onDrop={(info: any) => {
+                          const dropKey = info.node.key
+                          const dragKey = info.dragNode.key
+                          const dropPos = info.node.pos.split('-')
+                          const dropPosition = info.dropPosition - Number(dropPos[dropPos.length - 1])
+
+                          if (dragKey === dropKey) return
+
+                          let newParentId: string | undefined
+                          let newPosition: number | undefined
+
+                          if (dropPosition === 0) {
+                            newParentId = dropKey
+                          } else {
+                            const dropNode = page?.components?.find((c: any) => c.componentId === dropKey)
+                            newParentId = dropNode?.parentId || undefined
+                          }
+
+                          handleMoveComponent(dragKey, newParentId, newPosition)
                         }}
                         treeData={componentTree}
                         fieldNames={{ title: 'title', key: 'key', children: 'children' }}

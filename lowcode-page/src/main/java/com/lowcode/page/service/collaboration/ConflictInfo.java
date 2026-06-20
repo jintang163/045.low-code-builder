@@ -3,8 +3,7 @@ package com.lowcode.page.service.collaboration;
 import lombok.Data;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Date;
 
 @Data
 public class ConflictInfo implements Serializable {
@@ -13,54 +12,28 @@ public class ConflictInfo implements Serializable {
 
     private String conflictId;
 
-    private ConflictType type;
+    private Long pageId;
 
-    private String componentId;
+    private CRDTOperation operationA;
 
-    private String propName;
+    private CRDTOperation operationB;
 
-    private List<CRDTOperation> conflictingOperations;
+    private String conflictType;
 
-    private long timestamp;
+    private String description;
 
-    private ConflictStatus status;
+    private String status;
 
     private String resolution;
 
-    private String chosenUserId;
+    private Date createTime;
+
+    private Date resolveTime;
 
     private String resolvedBy;
 
-    private long resolvedAt;
-
-    public enum ConflictType {
-        PROPERTY_CONFLICT,
-        STRUCTURE_CONFLICT,
-        DELETE_UPDATE_CONFLICT
-    }
-
-    public enum ConflictStatus {
-        PENDING,
-        RESOLVED,
-        AUTO_RESOLVED
-    }
-
     public ConflictInfo() {
-        this.conflictingOperations = new ArrayList<>();
-        this.timestamp = System.currentTimeMillis();
-        this.status = ConflictStatus.PENDING;
-    }
-
-    public ConflictInfo(ConflictType type, String componentId) {
-        this();
-        this.type = type;
-        this.componentId = componentId;
-    }
-
-    public void addConflictingOperation(CRDTOperation op) {
-        if (this.conflictingOperations == null) {
-            this.conflictingOperations = new ArrayList<>();
-        }
-        this.conflictingOperations.add(op);
+        this.createTime = new Date();
+        this.status = "PENDING";
     }
 }
