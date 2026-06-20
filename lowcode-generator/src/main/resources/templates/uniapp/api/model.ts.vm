@@ -1,0 +1,279 @@
+#set($entityNameLower = ${entityName.substring(0,1).toLowerCase()} + ${entityName.substring(1)})
+#set($entityNameCamel = ${entityNameLower})
+#set($packageName = "${packageName}")
+#set($author = "${author}")
+#set($date = "${date}")
+/**
+ * @file ${entityNameCamel}.ts
+ * @description ${entityName} API 接口
+ * @author ${author}
+ * @since ${date}
+ */
+
+import { request, type RequestConfig, type RequestResult, type CancelTokenSource } from '@/utils/request'
+
+/**
+ * ${entityName} 实体类型
+ */
+export interface ${entityName} {
+#foreach($field in $fields)
+  /** ${field.comment} */
+  ${field.name}${field.required ? '' : '?'}: ${getTsType($field.type)}
+#end
+}
+
+/**
+ * ${entityName} 查询参数
+ */
+export interface ${entityName}QueryParams {
+  /** 搜索关键词 */
+  keyword?: string
+  /** 状态 */
+  status?: number | string
+  /** 页码 */
+  pageNum?: number
+  /** 每页数量 */
+  pageSize?: number
+  /** 排序字段 */
+  orderBy?: string
+  /** 排序方向 */
+  orderDir?: 'asc' | 'desc'
+#foreach($field in $fields)
+  /** ${field.comment} */
+  ${field.name}${field.required ? '' : '?'}: ${getTsType($field.type)}
+#end
+}
+
+/**
+ * ${entityName} 创建参数
+ */
+export interface ${entityName}CreateParams {
+#foreach($field in $fields)
+#if($field.name != 'id' && $field.name != 'createTime' && $field.name != 'updateTime')
+  /** ${field.comment} */
+  ${field.name}${field.required ? '' : '?'}: ${getTsType($field.type)}
+#end
+#end
+}
+
+/**
+ * ${entityName} 更新参数
+ */
+export interface ${entityName}UpdateParams extends Partial<${entityName}CreateParams> {
+  /** 主键ID */
+  id: string | number
+}
+
+/**
+ * 分页响应结果
+ */
+export interface PageResult<T> {
+  /** 数据列表 */
+  list: T[]
+  /** 总记录数 */
+  total: number
+  /** 页码 */
+  pageNum: number
+  /** 每页数量 */
+  pageSize: number
+  /** 总页数 */
+  pages: number
+}
+
+const BASE_URL = '/api/${entityNameCamel}'
+
+/**
+ * 获取${entityName}列表（分页）
+ * @param params 查询参数
+ * @param config 请求配置
+ * @returns 分页数据
+ */
+export const get${entityName}List = (
+  params?: ${entityName}QueryParams,
+  config?: RequestConfig
+): Promise<RequestResult<PageResult<${entityName}>>> => {
+  return request<PageResult<${entityName}>>({
+    url: BASE_URL + '/list',
+    method: 'GET',
+    params,
+    ...config
+  })
+}
+
+/**
+ * 获取${entityName}详情
+ * @param id 主键ID
+ * @param config 请求配置
+ * @returns 详情数据
+ */
+export const get${entityName}Detail = (
+  id: string | number,
+  config?: RequestConfig
+): Promise<RequestResult<${entityName}>> => {
+  return request<${entityName}>({
+    url: BASE_URL + `/${id}`,
+    method: 'GET',
+    ...config
+  })
+}
+
+/**
+ * 创建${entityName}
+ * @param data 创建参数
+ * @param config 请求配置
+ * @returns 创建结果
+ */
+export const create${entityName} = (
+  data: ${entityName}CreateParams,
+  config?: RequestConfig
+): Promise<RequestResult<${entityName}>> => {
+  return request<${entityName}>({
+    url: BASE_URL,
+    method: 'POST',
+    data,
+    ...config
+  })
+}
+
+/**
+ * 更新${entityName}
+ * @param id 主键ID
+ * @param data 更新参数
+ * @param config 请求配置
+ * @returns 更新结果
+ */
+export const update${entityName} = (
+  id: string | number,
+  data: ${entityName}UpdateParams,
+  config?: RequestConfig
+): Promise<RequestResult<${entityName}>> => {
+  return request<${entityName}>({
+    url: BASE_URL + `/${id}`,
+    method: 'PUT',
+    data,
+    ...config
+  })
+}
+
+/**
+ * 删除${entityName}
+ * @param id 主键ID
+ * @param config 请求配置
+ * @returns 删除结果
+ */
+export const delete${entityName} = (
+  id: string | number,
+  config?: RequestConfig
+): Promise<RequestResult<void>> => {
+  return request<void>({
+    url: BASE_URL + `/${id}`,
+    method: 'DELETE',
+    ...config
+  })
+}
+
+/**
+ * 批量删除${entityName}
+ * @param ids 主键ID数组
+ * @param config 请求配置
+ * @returns 删除结果
+ */
+export const batchDelete${entityName} = (
+  ids: Array<string | number>,
+  config?: RequestConfig
+): Promise<RequestResult<void>> => {
+  return request<void>({
+    url: BASE_URL + '/batch',
+    method: 'DELETE',
+    data: { ids },
+    ...config
+  })
+}
+
+/**
+ * 导出${entityName}列表
+ * @param params 查询参数
+ * @param config 请求配置
+ * @returns 文件流
+ */
+export const export${entityName} = (
+  params?: ${entityName}QueryParams,
+  config?: RequestConfig
+): Promise<RequestResult<Blob>> => {
+  return request<Blob>({
+    url: BASE_URL + '/export',
+    method: 'GET',
+    params,
+    responseType: 'blob',
+    ...config
+  })
+}
+
+/**
+ * 获取${entityName}所有数据（不分页）
+ * @param params 查询参数
+ * @param config 请求配置
+ * @returns 数据列表
+ */
+export const getAll${entityName} = (
+  params?: ${entityName}QueryParams,
+  config?: RequestConfig
+): Promise<RequestResult<${entityName}[]>> => {
+  return request<${entityName}[]>({
+    url: BASE_URL + '/all',
+    method: 'GET',
+    params,
+    ...config
+  })
+}
+
+/**
+ * 创建可取消的请求
+ * @returns 取消令牌源
+ */
+export const createCancelToken = (): CancelTokenSource => {
+  return request.createCancelToken?.() || {
+    token: {},
+    cancel: () => {}
+  }
+}
+
+/**
+ * 批量请求
+ * @param requests 请求数组
+ * @returns 结果数组
+ */
+export const batchRequests = async <T>(
+  requests: Array<Promise<RequestResult<T>>>
+): Promise<RequestResult<T[]>> => {
+  try {
+    const results = await Promise.all(requests)
+    const data = results.map(r => r.data)
+    return {
+      code: 200,
+      data,
+      message: 'success',
+      success: true
+    }
+  } catch (error) {
+    return {
+      code: 500,
+      data: [],
+      message: error instanceof Error ? error.message : '批量请求失败',
+      success: false
+    }
+  }
+}
+
+export default {
+  getList: get${entityName}List,
+  getDetail: get${entityName}Detail,
+  create: create${entityName},
+  update: update${entityName},
+  delete: delete${entityName},
+  batchDelete: batchDelete${entityName},
+  export: export${entityName},
+  getAll: getAll${entityName},
+  createCancelToken,
+  batchRequests
+}

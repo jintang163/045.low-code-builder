@@ -1,0 +1,525 @@
+#set($entityNameLower = ${entityName.substring(0,1).toLowerCase()} + ${entityName.substring(1)})
+#set($entityNameCamel = ${entityNameLower})
+#set($packageName = "${packageName}")
+#set($author = "${author}")
+#set($date = "${date}")
+/**
+ * @file use${entityName}.ts
+ * @description ${entityName} 组合式函数
+ * @author ${author}
+ * @since ${date}
+ */
+
+import { ref, computed, reactive, onUnmounted } from 'vue'
+import {
+  get${entityName}List,
+  get${entityName}Detail,
+  create${entityName},
+  update${entityName},
+  delete${entityName},
+  type ${entityName},
+  type ${entityName}QueryParams,
+  type ${entityName}CreateParams,
+  type ${entityName}UpdateParams,
+  type PageResult
+} from '@/api/${entityNameCamel}'
+import { createCancelToken, type CancelTokenSource } from '@/utils/request'
+
+/**
+ * 列表组合式函数返回类型
+ */
+interface UseListReturn {
+  list: typeof list
+  loading: typeof loading
+  error: typeof error
+  total: typeof total
+  pageNum: typeof pageNum
+  pageSize: typeof pageSize
+  hasMore: typeof hasMore
+  isEmpty: typeof isEmpty
+  fetchList: typeof fetchList
+  refresh: typeof refresh
+  loadMore: typeof loadMore
+  deleteItem: typeof deleteItem
+  batchDelete: typeof batchDelete
+  reset: typeof reset
+  cancelRequest: typeof cancelRequest
+}
+
+/**
+ * 详情组合式函数返回类型
+ */
+interface UseDetailReturn {
+  detail: typeof detail
+  loading: typeof loading
+  error: typeof error
+  fetchDetail: typeof fetchDetail
+  refresh: typeof refresh
+  deleteItem: typeof deleteItem
+  reset: typeof reset
+  cancelRequest: typeof cancelRequest
+}
+
+/**
+ * 表单组合式函数返回类型
+ */
+interface UseFormReturn {
+  formData: typeof formData
+  loading: typeof loading
+  error: typeof error
+  submitting: typeof submitting
+  fetchDetail: typeof fetchDetail
+  createItem: typeof createItem
+  updateItem: typeof updateItem
+  validateForm: typeof validateForm
+  reset: typeof reset
+  cancelRequest: typeof cancelRequest
+}
+
+/**
+ * 列表数据管理组合式函数
+ * @param options 配置选项
+ */
+export function use${entityName}List(
+  options: {
+    defaultPageSize?: number
+    autoFetch?: boolean
+    cacheEnabled?: boolean
+  } = {}
+): UseListReturn {
+  const { defaultPageSize = 10, autoFetch = false, cacheEnabled = true } = options
+
+  const list = ref<${entityName}[]>([])
+  const loading = ref(false)
+  const error = ref<Error | null>(null)
+  const total = ref(0)
+  const pageNum = ref(1)
+  const pageSize = ref(defaultPageSize)
+  const hasMore = ref(true)
+
+  let cancelTokenSource: CancelTokenSource | null = null
+  let cache: Map<string, { data: PageResult<${entityName}>; timestamp: number }> = new Map()
+  const CACHE_EXPIRE_TIME = 5 * 60 * 1000
+
+  const isEmpty = computed(() => list.value.length === 0 && !loading.value)
+
+  const generateCacheKey = (params: Record<string, any>): string => {
+    const sorted = Object.keys(params)
+      .sort()
+      .map(key => `${key}=${params[key]}`)
+      .join('&')
+    return btoa(encodeURIComponent(sorted))
+  }
+
+  const fetchList = async (
+    params?: ${entityName}QueryParams,
+    forceRefresh = false
+  ): Promise<PageResult<${entityName}>> => {
+    cancelRequest()
+
+    loading.value = true
+    error.value = null
+    cancelTokenSource = createCancelToken()
+
+    const queryParams = {
+      pageNum: pageNum.value,
+      pageSize: pageSize.value,
+      ...params
+    }
+    const cacheKey = generateCacheKey(queryParams)
+
+    try {
+      if (!forceRefresh && cacheEnabled) {
+        const cached = cache.get(cacheKey)
+        if (cached && Date.now() - cached.timestamp < CACHE_EXPIRE_TIME) {
+          list.value = cached.data.list
+          total.value = cached.data.total
+          hasMore.value = pageNum.value < cached.data.pages
+          return cached.data
+        }
+      }
+
+      const result = await get${entityName}List(queryParams, {
+        cancelToken: cancelTokenSource.token,
+        showLoading: false
+      })
+      const data = result.data
+
+      list.value = pageNum.value === 1 ? data.list : [...list.value, ...data.list]
+      total.value = data.total
+      hasMore.value = pageNum.value < data.pages
+
+      if (cacheEnabled && pageNum.value === 1) {
+        cache.set(cacheKey, {
+          data,
+          timestamp: Date.now()
+        })
+      }
+
+      return data
+    } catch (err) {
+      error.value = err instanceof Error ? err : new Error(String(err))
+      throw error.value
+    } finally {
+      loading.value = false
+      cancelTokenSource = null
+    }
+  }
+
+  const refresh = async (
+    params?: ${entityName}QueryParams
+  ): Promise<PageResult<${entityName}>> => {
+    pageNum.value = 1
+    hasMore.value = true
+    return fetchList(params, true)
+  }
+
+  const loadMore = async (
+    params?: ${entityName}QueryParams
+  ): Promise<PageResult<${entityName}>> => {
+    if (!hasMore.value || loading.value) {
+      return {
+        list: [],
+        total: total.value,
+        pageNum: pageNum.value,
+        pageSize: pageSize.value,
+        pages: Math.ceil(total.value / pageSize.value)
+      }
+    }
+    pageNum.value++
+    return fetchList(params)
+  }
+
+  const deleteItem = async (id: string | number): Promise<void> => {
+    const result = await delete${entityName}(id)
+    if (result.success) {
+      const index = list.value.findIndex(item => item.id === id)
+      if (index !== -1) {
+        list.value.splice(index, 1)
+        total.value--
+      }
+      cache.clear()
+    }
+  }
+
+  const batchDelete = async (ids: Array<string | number>): Promise<void> => {
+    const result = await delete${entityName}(ids.join(','))
+    if (result.success) {
+      list.value = list.value.filter(item => !ids.includes(item.id!))
+      total.value -= ids.length
+      cache.clear()
+    }
+  }
+
+  const reset = (): void => {
+    list.value = []
+    loading.value = false
+    error.value = null
+    total.value = 0
+    pageNum.value = 1
+    pageSize.value = defaultPageSize
+    hasMore.value = true
+    cache.clear()
+    cancelRequest()
+  }
+
+  const cancelRequest = (): void => {
+    if (cancelTokenSource) {
+      cancelTokenSource.cancel('Request canceled by user')
+      cancelTokenSource = null
+    }
+  }
+
+  onUnmounted(() => {
+    cancelRequest()
+  })
+
+  return {
+    list,
+    loading,
+    error,
+    total,
+    pageNum,
+    pageSize,
+    hasMore,
+    isEmpty,
+    fetchList,
+    refresh,
+    loadMore,
+    deleteItem,
+    batchDelete,
+    reset,
+    cancelRequest
+  }
+}
+
+/**
+ * 详情数据管理组合式函数
+ * @param options 配置选项
+ */
+export function use${entityName}Detail(
+  options: {
+    autoFetch?: boolean
+    cacheEnabled?: boolean
+  } = {}
+): UseDetailReturn {
+  const { autoFetch = false, cacheEnabled = true } = options
+
+  const detail = ref<${entityName} | null>(null)
+  const loading = ref(false)
+  const error = ref<Error | null>(null)
+
+  let cancelTokenSource: CancelTokenSource | null = null
+  let cache: Map<string | number, { data: ${entityName}; timestamp: number }> = new Map()
+  const CACHE_EXPIRE_TIME = 5 * 60 * 1000
+
+  const fetchDetail = async (
+    id: string | number,
+    forceRefresh = false
+  ): Promise<${entityName}> => {
+    cancelRequest()
+
+    loading.value = true
+    error.value = null
+    cancelTokenSource = createCancelToken()
+
+    try {
+      if (!forceRefresh && cacheEnabled) {
+        const cached = cache.get(id)
+        if (cached && Date.now() - cached.timestamp < CACHE_EXPIRE_TIME) {
+          detail.value = cached.data
+          return cached.data
+        }
+      }
+
+      const result = await get${entityName}Detail(id, {
+        cancelToken: cancelTokenSource.token,
+        showLoading: false
+      })
+      const data = result.data
+
+      detail.value = data
+
+      if (cacheEnabled) {
+        cache.set(id, {
+          data,
+          timestamp: Date.now()
+        })
+      }
+
+      return data
+    } catch (err) {
+      error.value = err instanceof Error ? err : new Error(String(err))
+      throw error.value
+    } finally {
+      loading.value = false
+      cancelTokenSource = null
+    }
+  }
+
+  const refresh = async (id: string | number): Promise<${entityName}> => {
+    return fetchDetail(id, true)
+  }
+
+  const deleteItem = async (id: string | number): Promise<void> => {
+    const result = await delete${entityName}(id)
+    if (result.success) {
+      detail.value = null
+      cache.delete(id)
+    }
+  }
+
+  const reset = (): void => {
+    detail.value = null
+    loading.value = false
+    error.value = null
+    cache.clear()
+    cancelRequest()
+  }
+
+  const cancelRequest = (): void => {
+    if (cancelTokenSource) {
+      cancelTokenSource.cancel('Request canceled by user')
+      cancelTokenSource = null
+    }
+  }
+
+  onUnmounted(() => {
+    cancelRequest()
+  })
+
+  return {
+    detail,
+    loading,
+    error,
+    fetchDetail,
+    refresh,
+    deleteItem,
+    reset,
+    cancelRequest
+  }
+}
+
+/**
+ * 表单数据管理组合式函数
+ * @param options 配置选项
+ */
+export function use${entityName}Form(
+  options: {
+    validateOnChange?: boolean
+  } = {}
+): UseFormReturn {
+  const { validateOnChange = false } = options
+
+  const formData = reactive<Partial<${entityName}>>({})
+  const loading = ref(false)
+  const error = ref<Error | null>(null)
+  const submitting = ref(false)
+
+  let cancelTokenSource: CancelTokenSource | null = null
+
+  const fetchDetail = async (id: string | number): Promise<${entityName}> => {
+    cancelRequest()
+
+    loading.value = true
+    error.value = null
+    cancelTokenSource = createCancelToken()
+
+    try {
+      const result = await get${entityName}Detail(id, {
+        cancelToken: cancelTokenSource.token,
+        showLoading: false
+      })
+      const data = result.data
+
+      Object.assign(formData, data)
+
+      return data
+    } catch (err) {
+      error.value = err instanceof Error ? err : new Error(String(err))
+      throw error.value
+    } finally {
+      loading.value = false
+      cancelTokenSource = null
+    }
+  }
+
+  const createItem = async (
+    data: ${entityName}CreateParams
+  ): Promise<${entityName}> => {
+    if (submitting.value) {
+      throw new Error('Submitting...')
+    }
+
+    submitting.value = true
+    error.value = null
+    cancelTokenSource = createCancelToken()
+
+    try {
+      const result = await create${entityName}(data, {
+        cancelToken: cancelTokenSource.token,
+        showLoading: true,
+        loadingText: '创建中...'
+      })
+      const created = result.data
+
+      Object.assign(formData, created)
+
+      return created
+    } catch (err) {
+      error.value = err instanceof Error ? err : new Error(String(err))
+      throw error.value
+    } finally {
+      submitting.value = false
+      cancelTokenSource = null
+    }
+  }
+
+  const updateItem = async (
+    id: string | number,
+    data: ${entityName}UpdateParams
+  ): Promise<${entityName}> => {
+    if (submitting.value) {
+      throw new Error('Submitting...')
+    }
+
+    submitting.value = true
+    error.value = null
+    cancelTokenSource = createCancelToken()
+
+    try {
+      const result = await update${entityName}(id, data, {
+        cancelToken: cancelTokenSource.token,
+        showLoading: true,
+        loadingText: '保存中...'
+      })
+      const updated = result.data
+
+      Object.assign(formData, updated)
+
+      return updated
+    } catch (err) {
+      error.value = err instanceof Error ? err : new Error(String(err))
+      throw error.value
+    } finally {
+      submitting.value = false
+      cancelTokenSource = null
+    }
+  }
+
+  const validateForm = (): { valid: boolean; errors: Record<string, string> } => {
+    const errors: Record<string, string> = {}
+#foreach($field in $fields)
+#if($field.required && $field.name != 'id' && $field.name != 'createTime' && $field.name != 'updateTime')
+    const ${field.name}Value = formData.${field.name}
+    if (${field.name}Value === null || ${field.name}Value === undefined || ${field.name}Value === '' || (Array.isArray(${field.name}Value) && ${field.name}Value.length === 0)) {
+      errors['${field.name}'] = '${field.comment}不能为空'
+    }
+#end
+#end
+    return {
+      valid: Object.keys(errors).length === 0,
+      errors
+    }
+  }
+
+  const reset = (): void => {
+    Object.keys(formData).forEach(key => {
+      delete (formData as any)[key]
+    })
+    loading.value = false
+    error.value = null
+    submitting.value = false
+    cancelRequest()
+  }
+
+  const cancelRequest = (): void => {
+    if (cancelTokenSource) {
+      cancelTokenSource.cancel('Request canceled by user')
+      cancelTokenSource = null
+    }
+  }
+
+  onUnmounted(() => {
+    cancelRequest()
+  })
+
+  return {
+    formData,
+    loading,
+    error,
+    submitting,
+    fetchDetail,
+    createItem,
+    updateItem,
+    validateForm,
+    reset,
+    cancelRequest
+  }
+}
+
+export default {
+  use${entityName}List,
+  use${entityName}Detail,
+  use${entityName}Form
+}

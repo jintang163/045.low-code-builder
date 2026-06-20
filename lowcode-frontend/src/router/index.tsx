@@ -17,6 +17,8 @@ import ComponentList from '@/pages/component/List'
 import ComponentDebugger from '@/pages/component/Debugger'
 import Login from '@/pages/Login'
 import PermissionList from '@/pages/permission/List'
+import MobilePreview from '@/pages/mobile/Preview'
+import MobileGenerator from '@/pages/mobile/Generator'
 
 const routes = [
   {
@@ -157,6 +159,19 @@ const routes = [
           {
             path: '',
             element: <PermissionList />,
+          },
+        ],
+      },
+      {
+        path: 'mobile',
+        children: [
+          {
+            path: 'preview',
+            element: <MobilePreview />,
+          },
+          {
+            path: 'generator',
+            element: <MobileGenerator />,
           },
         ],
       },

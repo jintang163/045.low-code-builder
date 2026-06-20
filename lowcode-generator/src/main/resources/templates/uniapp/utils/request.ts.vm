@@ -1,0 +1,484 @@
+#set($packageName = "${packageName}")
+#set($author = "${author}")
+#set($date = "${date}")
+/**
+ * @file request.ts
+ * @description HTTP 请求封装
+ * @author ${author}
+ * @since ${date}
+ */
+
+/**
+ * 请求方法类型
+ */
+export type RequestMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD' | 'OPTIONS'
+
+/**
+ * 响应数据类型
+ */
+export type ResponseType = 'json' | 'text' | 'blob' | 'arraybuffer'
+
+/**
+ * 取消令牌
+ */
+export interface CancelToken {
+  readonly [key: string]: unknown
+}
+
+/**
+ * 取消令牌源
+ */
+export interface CancelTokenSource {
+  token: CancelToken
+  cancel: (message?: string) => void
+}
+
+/**
+ * 请求配置
+ */
+export interface RequestConfig {
+  /** 基础URL */
+  baseURL?: string
+  /** 请求URL */
+  url?: string
+  /** 请求方法 */
+  method?: RequestMethod
+  /** 请求参数 */
+  params?: Record<string, any>
+  /** 请求数据 */
+  data?: Record<string, any>
+  /** 请求头 */
+  headers?: Record<string, string>
+  /** 超时时间(ms) */
+  timeout?: number
+  /** 响应数据类型 */
+  responseType?: ResponseType
+  /** 取消令牌 */
+  cancelToken?: CancelToken
+  /** 是否显示加载状态 */
+  showLoading?: boolean
+  /** 加载文字 */
+  loadingText?: string
+  /** 是否显示错误提示 */
+  showError?: boolean
+  /** 是否需要认证 */
+  needAuth?: boolean
+}
+
+/**
+ * 响应结果
+ */
+export interface RequestResult<T = any> {
+  /** 状态码 */
+  code: number
+  /** 响应数据 */
+  data: T
+  /** 响应消息 */
+  message: string
+  /** 是否成功 */
+  success: boolean
+  /** 时间戳 */
+  timestamp?: number
+}
+
+/**
+ * 请求拦截器
+ */
+export interface RequestInterceptor {
+  (config: RequestConfig): RequestConfig | Promise<RequestConfig>
+}
+
+/**
+ * 响应拦截器
+ */
+export interface ResponseInterceptor {
+  (result: RequestResult, config: RequestConfig): RequestResult | Promise<RequestResult>
+}
+
+/**
+ * 错误拦截器
+ */
+export interface ErrorInterceptor {
+  (error: Error, config: RequestConfig): void | Promise<void>
+}
+
+/**
+ * 取消请求存储
+ */
+const pendingRequests = new Map<string, UniApp.RequestTask>()
+
+/**
+ * 生成请求唯一标识
+ */
+const generateRequestKey = (config: RequestConfig): string => {
+  const { url, method, params, data } = config
+  return `${method || 'GET'}_${url}_${JSON.stringify(params || {})}_${JSON.stringify(data || {})}`
+}
+
+/**
+ * 取消令牌工厂
+ */
+export const createCancelToken = (): CancelTokenSource => {
+  const source: Partial<CancelTokenSource> = {
+    token: {}
+  }
+  source.cancel = (message?: string) => {
+    const key = Object.keys(source.token)[0]
+    if (key) {
+      const task = pendingRequests.get(key)
+      if (task) {
+        task.abort()
+        pendingRequests.delete(key)
+      }
+    }
+  }
+  return source as CancelTokenSource
+}
+
+/**
+ * 请求拦截器列表
+ */
+const requestInterceptors: RequestInterceptor[] = [
+  (config) => {
+    if (config.needAuth !== false) {
+      const token = uni.getStorageSync('token')
+      if (token) {
+        config.headers = {
+          ...config.headers,
+          Authorization: `Bearer ${token}`
+        }
+      }
+    }
+    return config
+  },
+  (config) => {
+    config.headers = {
+      'Content-Type': 'application/json',
+      ...config.headers
+    }
+    return config
+  },
+  (config) => {
+    if (config.showLoading) {
+      uni.showLoading({
+        title: config.loadingText || '加载中...',
+        mask: true
+      })
+    }
+    return config
+  }
+]
+
+/**
+ * 响应拦截器列表
+ */
+const responseInterceptors: ResponseInterceptor[] = [
+  (result) => {
+    uni.hideLoading()
+    return result
+  },
+  (result, config) => {
+    if (!result.success && config.showError !== false) {
+      uni.showToast({
+        title: result.message || '请求失败',
+        icon: 'none',
+        duration: 2000
+      })
+    }
+    return result
+  }
+]
+
+/**
+ * 错误拦截器列表
+ */
+const errorInterceptors: ErrorInterceptor[] = [
+  (error) => {
+    uni.hideLoading()
+    console.error('Request error:', error)
+  },
+  (error, config) => {
+    if (config.showError !== false) {
+      uni.showToast({
+        title: error.message || '网络错误',
+        icon: 'none',
+        duration: 2000
+      })
+    }
+  }
+]
+
+/**
+ * 执行请求拦截器
+ */
+const executeRequestInterceptors = async (config: RequestConfig): Promise<RequestConfig> => {
+  let currentConfig = { ...config }
+  for (const interceptor of requestInterceptors) {
+    currentConfig = await interceptor(currentConfig)
+  }
+  return currentConfig
+}
+
+/**
+ * 执行响应拦截器
+ */
+const executeResponseInterceptors = async (
+  result: RequestResult,
+  config: RequestConfig
+): Promise<RequestResult> => {
+  let currentResult = { ...result }
+  for (const interceptor of responseInterceptors) {
+    currentResult = await interceptor(currentResult, config)
+  }
+  return currentResult
+}
+
+/**
+ * 执行错误拦截器
+ */
+const executeErrorInterceptors = async (error: Error, config: RequestConfig): Promise<void> => {
+  for (const interceptor of errorInterceptors) {
+    await interceptor(error, config)
+  }
+}
+
+/**
+ * 处理请求参数
+ */
+const handleParams = (params?: Record<string, any>): string => {
+  if (!params) return ''
+  const searchParams = new URLSearchParams()
+  Object.keys(params).forEach(key => {
+    const value = params[key]
+    if (value !== undefined && value !== null && value !== '') {
+      searchParams.append(key, String(value))
+    }
+  })
+  const queryString = searchParams.toString()
+  return queryString ? `?${queryString}` : ''
+}
+
+/**
+ * 核心请求方法
+ */
+export const request = <T = any>(
+  config: RequestConfig
+): Promise<RequestResult<T>> => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const processedConfig = await executeRequestInterceptors(config)
+      const baseURL = processedConfig.baseURL || ''
+      const url = baseURL + (processedConfig.url || '') + handleParams(processedConfig.params)
+      const method = (processedConfig.method || 'GET').toUpperCase() as RequestMethod
+      const timeout = processedConfig.timeout || 30000
+      const requestKey = generateRequestKey(processedConfig)
+
+      if (pendingRequests.has(requestKey)) {
+        const existingTask = pendingRequests.get(requestKey)
+        existingTask?.abort()
+        pendingRequests.delete(requestKey)
+      }
+
+      const task = uni.request({
+        url,
+        method,
+        data: processedConfig.data,
+        header: processedConfig.headers,
+        timeout,
+        dataType: processedConfig.responseType === 'json' ? 'json' : '其他',
+        success: async (res: any) => {
+          pendingRequests.delete(requestKey)
+
+          let result: RequestResult<T>
+          if (processedConfig.responseType === 'blob' || processedConfig.responseType === 'arraybuffer') {
+            result = {
+              code: 200,
+              data: res.data as T,
+              message: 'success',
+              success: true,
+              timestamp: Date.now()
+            }
+          } else if (res.statusCode >= 200 && res.statusCode < 300) {
+            if (typeof res.data === 'object' && 'code' in res.data) {
+              result = res.data as RequestResult<T>
+            } else {
+              result = {
+                code: 200,
+                data: res.data as T,
+                message: 'success',
+                success: true,
+                timestamp: Date.now()
+              }
+            }
+          } else {
+            const errorMessages: Record<number, string> = {
+              400: '请求参数错误',
+              401: '未授权，请重新登录',
+              403: '拒绝访问',
+              404: '请求地址不存在',
+              405: '请求方法不允许',
+              408: '请求超时',
+              500: '服务器内部错误',
+              501: '服务未实现',
+              502: '网关错误',
+              503: '服务不可用',
+              504: '网关超时'
+            }
+            const message = errorMessages[res.statusCode] || `HTTP Error ${res.statusCode}`
+            result = {
+              code: res.statusCode,
+              data: null as T,
+              message,
+              success: false,
+              timestamp: Date.now()
+            }
+
+            if (res.statusCode === 401) {
+              uni.removeStorageSync('token')
+              uni.reLaunch({ url: '/pages/login/index' })
+            }
+          }
+
+          const processedResult = await executeResponseInterceptors(result, processedConfig)
+
+          if (processedResult.success) {
+            resolve(processedResult)
+          } else {
+            const error = new Error(processedResult.message)
+            await executeErrorInterceptors(error, processedConfig)
+            reject(error)
+          }
+        },
+        fail: async (err: any) => {
+          pendingRequests.delete(requestKey)
+          const error = new Error(err.errMsg || '网络请求失败')
+          await executeErrorInterceptors(error, processedConfig)
+          reject(error)
+        }
+      })
+
+      pendingRequests.set(requestKey, task)
+
+      if (processedConfig.cancelToken) {
+        const cancelKey = Object.keys(processedConfig.cancelToken)[0]
+        if (cancelKey) {
+          ;(processedConfig.cancelToken as any)[cancelKey] = requestKey
+        }
+      }
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error))
+      await executeErrorInterceptors(err, config)
+      reject(err)
+    }
+  })
+}
+
+/**
+ * 添加请求拦截器
+ */
+export const addRequestInterceptor = (interceptor: RequestInterceptor): void => {
+  requestInterceptors.push(interceptor)
+}
+
+/**
+ * 添加响应拦截器
+ */
+export const addResponseInterceptor = (interceptor: ResponseInterceptor): void => {
+  responseInterceptors.push(interceptor)
+}
+
+/**
+ * 添加错误拦截器
+ */
+export const addErrorInterceptor = (interceptor: ErrorInterceptor): void => {
+  errorInterceptors.push(interceptor)
+}
+
+/**
+ * 取消所有请求
+ */
+export const cancelAllRequests = (): void => {
+  pendingRequests.forEach((task) => {
+    task.abort()
+  })
+  pendingRequests.clear()
+}
+
+/**
+ * GET 请求快捷方法
+ */
+export const get = <T = any>(
+  url: string,
+  params?: Record<string, any>,
+  config?: Omit<RequestConfig, 'url' | 'method' | 'params'>
+): Promise<RequestResult<T>> => {
+  return request<T>({
+    ...config,
+    url,
+    method: 'GET',
+    params
+  })
+}
+
+/**
+ * POST 请求快捷方法
+ */
+export const post = <T = any>(
+  url: string,
+  data?: Record<string, any>,
+  config?: Omit<RequestConfig, 'url' | 'method' | 'data'>
+): Promise<RequestResult<T>> => {
+  return request<T>({
+    ...config,
+    url,
+    method: 'POST',
+    data
+  })
+}
+
+/**
+ * PUT 请求快捷方法
+ */
+export const put = <T = any>(
+  url: string,
+  data?: Record<string, any>,
+  config?: Omit<RequestConfig, 'url' | 'method' | 'data'>
+): Promise<RequestResult<T>> => {
+  return request<T>({
+    ...config,
+    url,
+    method: 'PUT',
+    data
+  })
+}
+
+/**
+ * DELETE 请求快捷方法
+ */
+export const del = <T = any>(
+  url: string,
+  data?: Record<string, any>,
+  config?: Omit<RequestConfig, 'url' | 'method' | 'data'>
+): Promise<RequestResult<T>> => {
+  return request<T>({
+    ...config,
+    url,
+    method: 'DELETE',
+    data
+  })
+}
+
+/**
+ * 为 request 添加静态方法
+ */
+request.get = get
+request.post = post
+request.put = put
+request.delete = del
+request.createCancelToken = createCancelToken
+request.cancelAllRequests = cancelAllRequests
+request.addRequestInterceptor = addRequestInterceptor
+request.addResponseInterceptor = addResponseInterceptor
+request.addErrorInterceptor = addErrorInterceptor
+
+export default request

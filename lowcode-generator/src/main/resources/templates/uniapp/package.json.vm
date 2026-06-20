@@ -1,0 +1,44 @@
+{
+  "name": "${appCode}",
+  "version": "${version}",
+  "private": true,
+  "description": "${appDesc}",
+  "scripts": {
+    "dev:h5": "uni",
+    "dev:mp-weixin": "uni -p mp-weixin",
+    "dev:mp-alipay": "uni -p mp-alipay",
+    "dev:app": "uni -p app",
+    "build:h5": "uni build",
+    "build:mp-weixin": "uni build -p mp-weixin",
+    "build:mp-alipay": "uni build -p mp-alipay",
+    "build:app": "uni build -p app",
+    "type-check": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@dcloudio/uni-app": "${uniAppVersion}",
+    "@dcloudio/uni-components": "${uniAppVersion}",
+    "@dcloudio/uni-h5": "${uniAppVersion}",
+    "@dcloudio/uni-mp-alipay": "${uniAppVersion}",
+    "@dcloudio/uni-mp-weixin": "${uniAppVersion}",
+    "@dcloudio/uni-platform": "${uniAppVersion}",
+    "vue": "^3.4.21",
+    "vue-i18n": "^9.10.2",
+    "pinia": "^2.1.7",
+    "axios": "^1.6.7",
+    "dayjs": "^1.11.10"
+  },
+  "devDependencies": {
+    "@dcloudio/types": "^3.4.8",
+    "@dcloudio/uni-automator": "${uniAppVersion}",
+    "@dcloudio/uni-cli-shared": "${uniAppVersion}",
+    "@dcloudio/uni-stacktracey": "${uniAppVersion}",
+    "@dcloudio/vite-plugin-uni": "${uniAppVersion}",
+    "@vitejs/plugin-vue": "^5.0.4",
+    "sass": "^1.71.1",
+    "typescript": "^5.3.3",
+    "vite": "^5.1.6",
+    "vue-tsc": "^2.0.6",
+    "unplugin-auto-import": "^0.17.5",
+    "unplugin-vue-components": "^0.26.0"
+  }
+}

@@ -1,0 +1,563 @@
+#set($packageName = "${packageName}")
+#set($author = "${author}")
+#set($date = "${date}")
+/**
+ * @file gesture.ts
+ * @description 手势识别工具类
+ * @author ${author}
+ * @since ${date}
+ */
+
+import { TouchPoint, TouchDirection, TouchHandler, TouchState, throttle } from './touch'
+
+/**
+ * 手势类型枚举
+ */
+export enum GestureType {
+  /** 滑动手势 */
+  SWIPE = 'swipe',
+  /** 长按手势 */
+  LONG_PRESS = 'longPress',
+  /** 捏合缩放手势 */
+  PINCH = 'pinch',
+  /** 旋转手势 */
+  ROTATE = 'rotate',
+  /** 双击手势 */
+  DOUBLE_TAP = 'doubleTap',
+  /** 点击手势 */
+  TAP = 'tap',
+  /** 下拉手势 */
+  PULL = 'pull',
+  /** 上拉手势 */
+  PULL_UP = 'pullUp'
+}
+
+/**
+ * 手势事件数据
+ */
+export interface GestureEvent {
+  /** 手势类型 */
+  type: GestureType
+  /** 手势方向 */
+  direction?: TouchDirection
+  /** 手势速度 (px/ms) */
+  velocity?: number
+  /** 手势距离 (px) */
+  distance?: number
+  /** X 轴偏移量 */
+  deltaX?: number
+  /** Y 轴偏移量 */
+  deltaY?: number
+  /** 缩放比例 (pinch) */
+  scale?: number
+  /** 旋转角度 (rotate) */
+  rotation?: number
+  /** 触摸点集合 */
+  touches: TouchPoint[]
+  /** 时间戳 */
+  timestamp: number
+  /** 原始触摸事件 */
+  originalEvent?: TouchEvent
+}
+
+/**
+ * 手势识别配置
+ */
+export interface GestureConfig {
+  /** 滑动最小距离 (px) */
+  swipeThreshold?: number
+  /** 滑动速度阈值 (px/ms) */
+  swipeVelocity?: number
+  /** 长按时间阈值 (ms) */
+  longPressTime?: number
+  /** 长按移动容差 (px) */
+  longPressTolerance?: number
+  /** 双击时间间隔 (ms) */
+  doubleTapTime?: number
+  /** 双击距离容差 (px) */
+  doubleTapTolerance?: number
+  /** 点击最大时间 (ms) */
+  tapTime?: number
+  /** 点击最大移动距离 (px) */
+  tapTolerance?: number
+  /** 下拉触发距离 (px) */
+  pullThreshold?: number
+  /** 捏合最小距离变化 (px) */
+  pinchThreshold?: number
+  /** 旋转最小角度 (度) */
+  rotateThreshold?: number
+  /** 是否启用节流 */
+  enableThrottle?: boolean
+  /** 节流间隔 (ms) */
+  throttleInterval?: number
+}
+
+/**
+ * 手势回调函数类型
+ */
+export type GestureCallback = (event: GestureEvent) => void
+
+/**
+ * 默认手势配置
+ */
+const DEFAULT_CONFIG: Required<GestureConfig> = {
+  swipeThreshold: 50,
+  swipeVelocity: 0.3,
+  longPressTime: 500,
+  longPressTolerance: 10,
+  doubleTapTime: 300,
+  doubleTapTolerance: 20,
+  tapTime: 250,
+  tapTolerance: 10,
+  pullThreshold: 80,
+  pinchThreshold: 5,
+  rotateThreshold: 5,
+  enableThrottle: true,
+  throttleInterval: 16
+}
+
+/**
+ * 手势识别器
+ */
+export class GestureRecognizer {
+  private config: Required<GestureConfig>
+  private touchHandler: TouchHandler
+  private callbacks: Map<GestureType, Set<GestureCallback>>
+  private longPressTimer: ReturnType<typeof setTimeout> | null = null
+  private lastTapTime: number = 0
+  private lastTapPoint: TouchPoint | null = null
+  private isLongPressFired: boolean = false
+  private startPinchDistance: number = 0
+  private startRotation: number = 0
+  private initialPinchDistance: number = 0
+  private initialRotation: number = 0
+  private touchStartPoint: TouchPoint | null = null
+
+  /**
+   * 构造函数
+   * @param config 手势配置
+   */
+  constructor(config: GestureConfig = {}) {
+    this.config = { ...DEFAULT_CONFIG, ...config }
+    this.touchHandler = new TouchHandler({
+      minDistance: this.config.swipeThreshold,
+      velocityThreshold: this.config.swipeVelocity
+    })
+    this.callbacks = new Map()
+  }
+
+  /**
+   * 注册手势事件监听
+   * @param type 手势类型
+   * @param callback 回调函数
+   */
+  public on(type: GestureType, callback: GestureCallback): void {
+    if (!this.callbacks.has(type)) {
+      this.callbacks.set(type, new Set())
+    }
+    this.callbacks.get(type)!.add(callback)
+  }
+
+  /**
+   * 移除手势事件监听
+   * @param type 手势类型
+   * @param callback 回调函数
+   */
+  public off(type: GestureType, callback: GestureCallback): void {
+    const callbacks = this.callbacks.get(type)
+    if (callbacks) {
+      callbacks.delete(callback)
+    }
+  }
+
+  /**
+   * 触发手势事件
+   * @param event 手势事件
+   */
+  private emit(event: GestureEvent): void {
+    const callbacks = this.callbacks.get(event.type)
+    if (callbacks) {
+      callbacks.forEach((cb) => cb(event))
+    }
+  }
+
+  /**
+   * 获取所有触摸点
+   * @param event 触摸事件
+   */
+  private getTouches(event: TouchEvent): TouchPoint[] {
+    const touches: TouchPoint[] = []
+    for (let i = 0; i < event.touches.length; i++) {
+      const touch = event.touches[i]
+      touches.push({
+        x: touch.clientX,
+        y: touch.clientY,
+        identifier: touch.identifier
+      })
+    }
+    return touches
+  }
+
+  /**
+   * 计算两点之间的距离
+   * @param p1 点1
+   * @param p2 点2
+   */
+  private getDistance(p1: TouchPoint, p2: TouchPoint): number {
+    const dx = p2.x - p1.x
+    const dy = p2.y - p1.y
+    return Math.sqrt(dx * dx + dy * dy)
+  }
+
+  /**
+   * 计算两点连线的角度 (弧度)
+   * @param p1 点1
+   * @param p2 点2
+   */
+  private getAngle(p1: TouchPoint, p2: TouchPoint): number {
+    return Math.atan2(p2.y - p1.y, p2.x - p1.x)
+  }
+
+  /**
+   * 弧度转角度
+   * @param radians 弧度
+   */
+  private toDegrees(radians: number): number {
+    return radians * (180 / Math.PI)
+  }
+
+  /**
+   * 计算角度差 (处理0度边界问题)
+   * @param current 当前角度
+   * @param start 起始角度
+   */
+  private getAngleDiff(current: number, start: number): number {
+    let diff = current - start
+    if (diff > Math.PI) diff -= 2 * Math.PI
+    if (diff < -Math.PI) diff += 2 * Math.PI
+    return diff
+  }
+
+  /**
+   * 处理触摸开始事件
+   * @param event 触摸事件
+   */
+  public handleTouchStart(event: TouchEvent): void {
+    const touches = this.getTouches(event)
+    const state = this.touchHandler.onTouchStart(event)
+    this.touchStartPoint = state.startPoint
+    this.isLongPressFired = false
+
+    if (touches.length === 2) {
+      this.startPinchDistance = this.getDistance(touches[0], touches[1])
+      this.initialPinchDistance = this.startPinchDistance
+      this.startRotation = this.getAngle(touches[0], touches[1])
+      this.initialRotation = this.startRotation
+    }
+
+    this.startLongPressTimer(event, touches)
+  }
+
+  /**
+   * 处理触摸移动事件（带节流）
+   * @param event 触摸事件
+   */
+  public handleTouchMove = this.config.enableThrottle
+    ? throttle((event: TouchEvent) => {
+        this.processTouchMove(event)
+      }, this.config.throttleInterval)
+    : (event: TouchEvent) => {
+        this.processTouchMove(event)
+      }
+
+  /**
+   * 处理触摸移动逻辑
+   * @param event 触摸事件
+   */
+  private processTouchMove(event: TouchEvent): void {
+    const touches = this.getTouches(event)
+    const state = this.touchHandler.onTouchMove(event)
+
+    if (
+      this.isLongPressFired === false &&
+      state.startPoint &&
+      state.currentPoint
+    ) {
+      const moveDistance = this.getDistance(state.startPoint, state.currentPoint)
+      if (moveDistance > this.config.longPressTolerance) {
+        this.clearLongPressTimer()
+      }
+    }
+
+    if (touches.length === 2) {
+      this.handlePinch(event, touches)
+      this.handleRotate(event, touches)
+    }
+
+    if (state.direction === TouchDirection.DOWN) {
+      this.handlePull(event, state, touches)
+    }
+  }
+
+  /**
+   * 处理触摸结束事件
+   * @param event 触摸事件
+   */
+  public handleTouchEnd(event: TouchEvent): void {
+    const touches = this.getTouches(event)
+    const state = this.touchHandler.onTouchEnd(event)
+
+    this.clearLongPressTimer()
+
+    if (this.isLongPressFired) {
+      return
+    }
+
+    this.handleTap(event, state, touches)
+    this.handleSwipe(event, state, touches)
+    this.handlePullEnd(event, state, touches)
+
+    this.touchStartPoint = null
+  }
+
+  /**
+   * 处理触摸取消事件
+   * @param event 触摸事件
+   */
+  public handleTouchCancel(event: TouchEvent): void {
+    this.clearLongPressTimer()
+    this.touchHandler.reset()
+    this.touchStartPoint = null
+    this.isLongPressFired = false
+  }
+
+  /**
+   * 启动长按定时器
+   */
+  private startLongPressTimer(event: TouchEvent, touches: TouchPoint[]): void {
+    this.clearLongPressTimer()
+    this.longPressTimer = setTimeout(() => {
+      if (!this.isLongPressFired) {
+        this.isLongPressFired = true
+        this.emit({
+          type: GestureType.LONG_PRESS,
+          touches,
+          timestamp: Date.now(),
+          originalEvent: event
+        })
+      }
+    }, this.config.longPressTime)
+  }
+
+  /**
+   * 清除长按定时器
+   */
+  private clearLongPressTimer(): void {
+    if (this.longPressTimer) {
+      clearTimeout(this.longPressTimer)
+      this.longPressTimer = null
+    }
+  }
+
+  /**
+   * 处理点击和双击手势
+   */
+  private handleTap(
+    event: TouchEvent,
+    state: TouchState,
+    touches: TouchPoint[]
+  ): void {
+    const duration = state.endTime - state.startTime
+    const now = Date.now()
+
+    if (
+      duration < this.config.tapTime &&
+      state.distance < this.config.tapTolerance
+    ) {
+      if (
+        this.lastTapPoint &&
+        state.startPoint &&
+        now - this.lastTapTime < this.config.doubleTapTime
+      ) {
+        const distance = this.getDistance(this.lastTapPoint, state.startPoint)
+        if (distance < this.config.doubleTapTolerance) {
+          this.emit({
+            type: GestureType.DOUBLE_TAP,
+            touches,
+            timestamp: now,
+            originalEvent: event
+          })
+          this.lastTapTime = 0
+          this.lastTapPoint = null
+          return
+        }
+      }
+
+      this.lastTapTime = now
+      this.lastTapPoint = state.startPoint
+
+      this.emit({
+        type: GestureType.TAP,
+        touches,
+        timestamp: now,
+        originalEvent: event
+      })
+    }
+  }
+
+  /**
+   * 处理滑动手势
+   */
+  private handleSwipe(
+    event: TouchEvent,
+    state: TouchState,
+    touches: TouchPoint[]
+  ): void {
+    if (
+      state.direction !== TouchDirection.NONE &&
+      state.distance >= this.config.swipeThreshold &&
+      state.velocity >= this.config.swipeVelocity
+    ) {
+      this.emit({
+        type: GestureType.SWIPE,
+        direction: state.direction,
+        velocity: state.velocity,
+        distance: state.distance,
+        deltaX: state.deltaX,
+        deltaY: state.deltaY,
+        touches,
+        timestamp: Date.now(),
+        originalEvent: event
+      })
+    }
+  }
+
+  /**
+   * 处理捏合缩放手势
+   */
+  private handlePinch(event: TouchEvent, touches: TouchPoint[]): void {
+    const currentDistance = this.getDistance(touches[0], touches[1])
+    const delta = Math.abs(currentDistance - this.startPinchDistance)
+
+    if (delta >= this.config.pinchThreshold) {
+      const scale = currentDistance / this.initialPinchDistance
+      this.emit({
+        type: GestureType.PINCH,
+        scale,
+        deltaX: currentDistance - this.startPinchDistance,
+        touches,
+        timestamp: Date.now(),
+        originalEvent: event
+      })
+      this.startPinchDistance = currentDistance
+    }
+  }
+
+  /**
+   * 处理旋转手势
+   */
+  private handleRotate(event: TouchEvent, touches: TouchPoint[]): void {
+    const currentAngle = this.getAngle(touches[0], touches[1])
+    const angleDiff = this.getAngleDiff(currentAngle, this.startRotation)
+    const absDiff = Math.abs(this.toDegrees(angleDiff))
+
+    if (absDiff >= this.config.rotateThreshold) {
+      const totalRotation = this.toDegrees(
+        this.getAngleDiff(currentAngle, this.initialRotation)
+      )
+      this.emit({
+        type: GestureType.ROTATE,
+        rotation: totalRotation,
+        touches,
+        timestamp: Date.now(),
+        originalEvent: event
+      })
+      this.startRotation = currentAngle
+    }
+  }
+
+  /**
+   * 处理下拉手势
+   */
+  private handlePull(
+    event: TouchEvent,
+    state: TouchState,
+    touches: TouchPoint[]
+  ): void {
+    if (state.deltaY > 0 && state.direction === TouchDirection.DOWN) {
+      this.emit({
+        type: GestureType.PULL,
+        direction: TouchDirection.DOWN,
+        distance: state.deltaY,
+        deltaY: state.deltaY,
+        touches,
+        timestamp: Date.now(),
+        originalEvent: event
+      })
+    }
+  }
+
+  /**
+   * 处理下拉结束手势
+   */
+  private handlePullEnd(
+    event: TouchEvent,
+    state: TouchState,
+    touches: TouchPoint[]
+  ): void {
+    if (
+      state.direction === TouchDirection.DOWN &&
+      state.deltaY >= this.config.pullThreshold
+    ) {
+      this.emit({
+        type: GestureType.PULL,
+        direction: TouchDirection.DOWN,
+        distance: state.deltaY,
+        deltaY: state.deltaY,
+        velocity: state.velocity,
+        touches,
+        timestamp: Date.now(),
+        originalEvent: event
+      })
+    }
+  }
+
+  /**
+   * 销毁手势识别器
+   */
+  public destroy(): void {
+    this.clearLongPressTimer()
+    this.callbacks.clear()
+    this.touchHandler.reset()
+    this.lastTapTime = 0
+    this.lastTapPoint = null
+    this.touchStartPoint = null
+  }
+
+  /**
+   * 更新配置
+   * @param config 新配置
+   */
+  public updateConfig(config: Partial<GestureConfig>): void {
+    this.config = { ...this.config, ...config }
+  }
+
+  /**
+   * 获取当前配置
+   */
+  public getConfig(): Readonly<Required<GestureConfig>> {
+    return { ...this.config }
+  }
+}
+
+/**
+ * 创建手势识别器实例
+ * @param config 配置
+ */
+export function createGestureRecognizer(
+  config?: GestureConfig
+): GestureRecognizer {
+  return new GestureRecognizer(config)
+}
+
+export default GestureRecognizer

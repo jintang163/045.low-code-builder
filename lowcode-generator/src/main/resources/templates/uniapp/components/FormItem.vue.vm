@@ -1,0 +1,719 @@
+#set($packageName = "${packageName}")
+#set($author = "${author}")
+#set($date = "${date}")
+<template>
+  <view
+    class="form-item"
+    :class="{
+      'form-item--error': error,
+      'form-item--disabled': disabled,
+      'form-item--required': required
+    }"
+    @touchstart="onTouchStart"
+    @touchend="onTouchEnd"
+  >
+    <view class="form-item__header">
+      <view class="form-item__label" @tap="onLabelClick">
+        <text v-if="required" class="form-item__required">*</text>
+        <text>{{ label }}</text>
+      </view>
+      <view v-if="showActions" class="form-item__actions">
+        <view
+          v-if="type === 'input' && showScan"
+          class="action-btn"
+          @tap.stop="onScan"
+        >
+          <text class="action-icon">📷</text>
+        </view>
+        <view
+          v-if="type === 'input' && showPhoto"
+          class="action-btn"
+          @tap.stop="onPhoto"
+        >
+          <text class="action-icon">📸</text>
+        </view>
+        <view
+          v-if="type === 'input' && showAlbum"
+          class="action-btn"
+          @tap.stop="onAlbum"
+        >
+          <text class="action-icon">🖼️</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="form-item__content">
+      <template v-if="type === 'input'">
+        <input
+          class="form-item__input"
+          :type="inputType"
+          :value="modelValue"
+          :placeholder="placeholder"
+          :maxlength="maxlength"
+          :disabled="disabled"
+          :password="password"
+          :confirm-type="confirmType"
+          @input="onInput"
+          @focus="onFocus"
+          @blur="onBlur"
+          @confirm="onConfirm"
+        />
+      </template>
+
+      <template v-else-if="type === 'number'">
+        <input
+          class="form-item__input"
+          type="number"
+          :value="modelValue"
+          :placeholder="placeholder"
+          :maxlength="maxlength"
+          :disabled="disabled"
+          @input="onInput"
+          @focus="onFocus"
+          @blur="onBlur"
+        />
+      </template>
+
+      <template v-else-if="type === 'digit'">
+        <input
+          class="form-item__input"
+          type="digit"
+          :value="modelValue"
+          :placeholder="placeholder"
+          :maxlength="maxlength"
+          :disabled="disabled"
+          @input="onInput"
+          @focus="onFocus"
+          @blur="onBlur"
+        />
+      </template>
+
+      <template v-else-if="type === 'textarea'">
+        <textarea
+          class="form-item__textarea"
+          :value="modelValue"
+          :placeholder="placeholder"
+          :maxlength="maxlength"
+          :rows="rows"
+          :disabled="disabled"
+          :auto-height="autoHeight"
+          :show-confirm-bar="false"
+          @input="onInput"
+          @focus="onFocus"
+          @blur="onBlur"
+        />
+        <view v-if="maxlength" class="form-item__counter">
+          {{ (modelValue || '').length }}/{{ maxlength }}
+        </view>
+      </template>
+
+      <template v-else-if="type === 'select'">
+        <picker
+          :range="options"
+          range-key="label"
+          :value="selectIndex"
+          :disabled="disabled"
+          @change="onSelectChange"
+          @cancel="onSelectCancel"
+        >
+          <view class="form-item__picker" :class="{ 'is-placeholder': !modelValue }">
+            <text v-if="modelValue !== null && modelValue !== undefined && modelValue !== ''">
+              {{ selectedLabel }}
+            </text>
+            <text v-else class="placeholder">{{ placeholder }}</text>
+            <text class="picker-arrow">›</text>
+          </view>
+        </picker>
+      </template>
+
+      <template v-else-if="type === 'radio'">
+        <view class="form-item__radio-group">
+          <view
+            v-for="(option, index) in options"
+            :key="index"
+            class="form-item__radio"
+            :class="{ 'is-checked': modelValue === option.value, 'is-disabled': disabled }"
+            @tap.stop="onRadioChange(option)"
+          >
+            <view class="radio-icon">
+              <view v-if="modelValue === option.value" class="radio-icon__inner"></view>
+            </view>
+            <text class="radio-label">{{ option.label }}</text>
+          </view>
+        </view>
+      </template>
+
+      <template v-else-if="type === 'checkbox'">
+        <view class="form-item__checkbox-group">
+          <view
+            v-for="(option, index) in options"
+            :key="index"
+            class="form-item__checkbox"
+            :class="{ 'is-checked': isChecked(option.value), 'is-disabled': disabled }"
+            @tap.stop="onCheckboxChange(option)"
+          >
+            <view class="checkbox-icon">
+              <text v-if="isChecked(option.value)" class="checkbox-icon__check">✓</text>
+            </view>
+            <text class="checkbox-label">{{ option.label }}</text>
+          </view>
+        </view>
+      </template>
+
+      <template v-else-if="type === 'switch'">
+        <switch
+          :checked="Boolean(modelValue)"
+          :disabled="disabled"
+          color="#1989fa"
+          @change="onSwitchChange"
+        />
+      </template>
+
+      <template v-else-if="type === 'date'">
+        <picker
+          mode="date"
+          :value="modelValue"
+          :disabled="disabled"
+          @change="onDateChange"
+          @cancel="onSelectCancel"
+        >
+          <view class="form-item__picker" :class="{ 'is-placeholder': !modelValue }">
+            <text v-if="modelValue">{{ modelValue }}</text>
+            <text v-else class="placeholder">{{ placeholder }}</text>
+            <text class="picker-arrow">›</text>
+          </view>
+        </picker>
+      </template>
+
+      <template v-else-if="type === 'datetime'">
+        <picker
+          mode="multiSelector"
+          :value="datetimeValue"
+          :range="datetimeRange"
+          :disabled="disabled"
+          @change="onDatetimeChange"
+          @columnchange="onDatetimeColumnChange"
+        >
+          <view class="form-item__picker" :class="{ 'is-placeholder': !modelValue }">
+            <text v-if="modelValue">{{ modelValue }}</text>
+            <text v-else class="placeholder">{{ placeholder }}</text>
+            <text class="picker-arrow">›</text>
+          </view>
+        </picker>
+      </template>
+
+      <template v-else-if="type === 'time'">
+        <picker
+          mode="time"
+          :value="modelValue"
+          :disabled="disabled"
+          @change="onTimeChange"
+          @cancel="onSelectCancel"
+        >
+          <view class="form-item__picker" :class="{ 'is-placeholder': !modelValue }">
+            <text v-if="modelValue">{{ modelValue }}</text>
+            <text v-else class="placeholder">{{ placeholder }}</text>
+            <text class="picker-arrow">›</text>
+          </view>
+        </picker>
+      </template>
+    </view>
+
+    <view v-if="error" class="form-item__error">
+      <text class="error-icon">⚠️</text>
+      <text class="error-text">{{ error }}</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, watch } from 'vue'
+import { createTouchHandler } from '@/utils/touch'
+
+export interface FormItemOption {
+  label: string
+  value: string | number | boolean
+}
+
+interface FormItemProps {
+  label: string
+  prop?: string
+  type?: 'input' | 'number' | 'digit' | 'textarea' | 'select' | 'radio' | 'checkbox' | 'switch' | 'date' | 'datetime' | 'time'
+  modelValue?: any
+  placeholder?: string
+  required?: boolean
+  disabled?: boolean
+  maxlength?: number
+  rows?: number
+  options?: FormItemOption[]
+  password?: boolean
+  inputType?: 'text' | 'number' | 'idcard' | 'digit'
+  confirmType?: 'done' | 'go' | 'next' | 'search' | 'send'
+  autoHeight?: boolean
+  showScan?: boolean
+  showPhoto?: boolean
+  showAlbum?: boolean
+  error?: string
+}
+
+interface FormItemEmits {
+  (e: 'update:modelValue', value: any): void
+  (e: 'change', value: any): void
+  (e: 'focus', event: any): void
+  (e: 'blur', event: any): void
+  (e: 'confirm', event: any): void
+  (e: 'scan'): void
+  (e: 'photo'): void
+  (e: 'album'): void
+  (e: 'click'): void
+}
+
+const props = withDefaults(defineProps<FormItemProps>(), {
+  type: 'input',
+  placeholder: '请输入',
+  required: false,
+  disabled: false,
+  rows: 3,
+  options: () => [],
+  password: false,
+  inputType: 'text',
+  confirmType: 'done',
+  autoHeight: true,
+  showScan: false,
+  showPhoto: false,
+  showAlbum: false
+})
+
+const emit = defineEmits<FormItemEmits>()
+
+const isTouched = ref(false)
+const touchHandler = createTouchHandler({
+  minDistance: 10
+})
+
+const showActions = computed(() => {
+  return props.showScan || props.showPhoto || props.showAlbum
+})
+
+const selectIndex = computed(() => {
+  if (!props.modelValue || props.options.length === 0) return -1
+  return props.options.findIndex(opt => opt.value === props.modelValue)
+})
+
+const selectedLabel = computed(() => {
+  const option = props.options.find(opt => opt.value === props.modelValue)
+  return option?.label || ''
+})
+
+const datetimeValue = ref([0, 0, 0, 0, 0])
+const datetimeRange = computed(() => {
+  const now = new Date()
+  const years = Array.from({ length: 50 }, (_, i) => String(now.getFullYear() - 20 + i))
+  const months = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0'))
+  const days = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'))
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
+  const minutes = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'))
+  return [years, months, days, hours, minutes]
+})
+
+const initDatetimeValue = () => {
+  if (props.modelValue) {
+    const date = new Date(props.modelValue)
+    datetimeValue.value = [
+      date.getFullYear() - (new Date().getFullYear() - 20),
+      date.getMonth(),
+      date.getDate() - 1,
+      date.getHours(),
+      date.getMinutes()
+    ]
+  }
+}
+
+const isChecked = (value: any): boolean => {
+  const values = Array.isArray(props.modelValue) ? props.modelValue : []
+  return values.includes(value)
+}
+
+const onInput = (e: any) => {
+  const value = e.detail.value
+  emit('update:modelValue', value)
+  emit('change', value)
+}
+
+const onFocus = (e: any) => {
+  emit('focus', e)
+}
+
+const onBlur = (e: any) => {
+  isTouched.value = true
+  emit('blur', e)
+}
+
+const onConfirm = (e: any) => {
+  emit('confirm', e)
+}
+
+const onSelectChange = (e: any) => {
+  const index = e.detail.value
+  const option = props.options[index]
+  if (option) {
+    emit('update:modelValue', option.value)
+    emit('change', option.value)
+  }
+}
+
+const onSelectCancel = () => {
+  // 取消选择
+}
+
+const onRadioChange = (option: FormItemOption) => {
+  if (props.disabled) return
+  emit('update:modelValue', option.value)
+  emit('change', option.value)
+}
+
+const onCheckboxChange = (option: FormItemOption) => {
+  if (props.disabled) return
+  const values = Array.isArray(props.modelValue) ? [...props.modelValue] : []
+  const index = values.indexOf(option.value)
+  if (index === -1) {
+    values.push(option.value)
+  } else {
+    values.splice(index, 1)
+  }
+  emit('update:modelValue', values)
+  emit('change', values)
+}
+
+const onSwitchChange = (e: any) => {
+  const value = e.detail.value
+  emit('update:modelValue', value)
+  emit('change', value)
+}
+
+const onDateChange = (e: any) => {
+  const value = e.detail.value
+  emit('update:modelValue', value)
+  emit('change', value)
+}
+
+const onDatetimeChange = (e: any) => {
+  const [yearIndex, monthIndex, dayIndex, hourIndex, minuteIndex] = e.detail.value
+  const year = datetimeRange.value[0][yearIndex]
+  const month = datetimeRange.value[1][monthIndex]
+  const day = datetimeRange.value[2][dayIndex]
+  const hour = datetimeRange.value[3][hourIndex]
+  const minute = datetimeRange.value[4][minuteIndex]
+  const value = `${year}-${month}-${day} ${hour}:${minute}`
+  emit('update:modelValue', value)
+  emit('change', value)
+}
+
+const onDatetimeColumnChange = (e: any) => {
+  const { column, value } = e.detail
+  datetimeValue.value[column] = value
+}
+
+const onTimeChange = (e: any) => {
+  const value = e.detail.value
+  emit('update:modelValue', value)
+  emit('change', value)
+}
+
+const onLabelClick = () => {
+  emit('click')
+}
+
+const onScan = () => {
+  emit('scan')
+}
+
+const onPhoto = () => {
+  emit('photo')
+}
+
+const onAlbum = () => {
+  emit('album')
+}
+
+const onTouchStart = (e: TouchEvent) => {
+  touchHandler.onTouchStart(e)
+}
+
+const onTouchEnd = (e: TouchEvent) => {
+  const state = touchHandler.onTouchEnd(e)
+  if (state.distance < 10 && !props.disabled) {
+    emit('click')
+  }
+}
+
+watch(() => props.modelValue, () => {
+  initDatetimeValue()
+}, { immediate: true })
+</script>
+
+<style lang="scss" scoped>
+.form-item {
+  background-color: #fff;
+  padding: 24rpx 32rpx;
+  margin-bottom: 2rpx;
+  transition: background-color 0.2s ease;
+
+  &:active {
+    background-color: #f7f8fa;
+  }
+
+  &--error {
+    .form-item__input,
+    .form-item__textarea,
+    .form-item__picker {
+      border-color: #ee0a24 !important;
+    }
+  }
+
+  &--disabled {
+    opacity: 0.6;
+    pointer-events: none;
+  }
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16rpx;
+  }
+
+  &__label {
+    display: flex;
+    align-items: center;
+    font-size: 28rpx;
+    color: #323233;
+    font-weight: 500;
+  }
+
+  &__required {
+    color: #ee0a24;
+    margin-right: 8rpx;
+    font-size: 28rpx;
+  }
+
+  &__actions {
+    display: flex;
+    gap: 16rpx;
+  }
+
+  .action-btn {
+    width: 56rpx;
+    height: 56rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #f7f8fa;
+    border-radius: 50%;
+    transition: background-color 0.2s ease;
+
+    &:active {
+      background-color: #ebedf0;
+    }
+
+    .action-icon {
+      font-size: 28rpx;
+    }
+  }
+
+  &__content {
+    position: relative;
+  }
+
+  &__input {
+    width: 100%;
+    height: 80rpx;
+    padding: 0 24rpx;
+    font-size: 30rpx;
+    color: #323233;
+    background-color: #f7f8fa;
+    border: 2rpx solid transparent;
+    border-radius: 12rpx;
+    transition: border-color 0.2s ease, background-color 0.2s ease;
+
+    &:focus {
+      border-color: #1989fa;
+      background-color: #fff;
+    }
+
+    &::placeholder {
+      color: #c8c9cc;
+    }
+  }
+
+  &__textarea {
+    width: 100%;
+    min-height: 160rpx;
+    padding: 24rpx;
+    font-size: 30rpx;
+    color: #323233;
+    background-color: #f7f8fa;
+    border: 2rpx solid transparent;
+    border-radius: 12rpx;
+    line-height: 1.6;
+    transition: border-color 0.2s ease, background-color 0.2s ease;
+
+    &:focus {
+      border-color: #1989fa;
+      background-color: #fff;
+    }
+
+    &::placeholder {
+      color: #c8c9cc;
+    }
+  }
+
+  &__counter {
+    position: absolute;
+    right: 16rpx;
+    bottom: 8rpx;
+    font-size: 22rpx;
+    color: #c8c9cc;
+  }
+
+  &__picker {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 80rpx;
+    padding: 0 24rpx;
+    background-color: #f7f8fa;
+    border: 2rpx solid transparent;
+    border-radius: 12rpx;
+    transition: border-color 0.2s ease, background-color 0.2s ease;
+
+    &:active {
+      background-color: #ebedf0;
+    }
+
+    &.is-placeholder {
+      .placeholder {
+        color: #c8c9cc;
+      }
+    }
+
+    text {
+      font-size: 30rpx;
+      color: #323233;
+    }
+
+    .picker-arrow {
+      font-size: 36rpx;
+      color: #c8c9cc;
+      transform: rotate(90deg);
+    }
+  }
+
+  &__radio-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24rpx;
+  }
+
+  &__radio {
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+    padding: 16rpx 0;
+
+    &.is-disabled {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    .radio-icon {
+      width: 40rpx;
+      height: 40rpx;
+      border: 4rpx solid #c8c9cc;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: border-color 0.2s ease;
+
+      &__inner {
+        width: 20rpx;
+        height: 20rpx;
+        background-color: #1989fa;
+        border-radius: 50%;
+      }
+    }
+
+    &.is-checked .radio-icon {
+      border-color: #1989fa;
+    }
+
+    .radio-label {
+      font-size: 30rpx;
+      color: #323233;
+    }
+  }
+
+  &__checkbox-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24rpx;
+  }
+
+  &__checkbox {
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+    padding: 16rpx 0;
+
+    &.is-disabled {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    .checkbox-icon {
+      width: 40rpx;
+      height: 40rpx;
+      border: 4rpx solid #c8c9cc;
+      border-radius: 8rpx;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: border-color 0.2s ease, background-color 0.2s ease;
+
+      &__check {
+        font-size: 24rpx;
+        color: #fff;
+        font-weight: bold;
+      }
+    }
+
+    &.is-checked .checkbox-icon {
+      border-color: #1989fa;
+      background-color: #1989fa;
+    }
+
+    .checkbox-label {
+      font-size: 30rpx;
+      color: #323233;
+    }
+  }
+
+  &__error {
+    display: flex;
+    align-items: center;
+    gap: 8rpx;
+    margin-top: 16rpx;
+    padding: 0 8rpx;
+
+    .error-icon {
+      font-size: 24rpx;
+    }
+
+    .error-text {
+      font-size: 24rpx;
+      color: #ee0a24;
+    }
+  }
+}
+</style>

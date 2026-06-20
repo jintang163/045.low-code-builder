@@ -20,6 +20,7 @@ public class Page extends BaseEntity {
     private String pagePath;
     private String layoutType;
     private String pageConfig;
+    private String mobileConfig;
     private String pageSchema;
     private Integer isHome;
     private Integer status;

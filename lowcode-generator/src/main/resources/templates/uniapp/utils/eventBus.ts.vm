@@ -1,0 +1,482 @@
+#set($packageName = "${packageName}")
+#set($author = "${author}")
+#set($date = "${date}")
+/**
+ * @file eventBus.ts
+ * @description 事件总线工具类
+ * @author ${author}
+ * @since ${date}
+ */
+
+import { TouchState } from './touch'
+import { GestureEvent } from './gesture'
+
+/**
+ * 事件回调函数类型
+ */
+export type EventCallback<T = any> = (data: T) => void
+
+/**
+ * 事件对象
+ */
+export interface EventData<T = any> {
+  /** 事件类型 */
+  type: string
+  /** 事件数据 */
+  data: T
+  /** 时间戳 */
+  timestamp: number
+  /** 事件源 */
+  source?: string
+}
+
+/**
+ * 事件配置
+ */
+export interface EventConfig {
+  /** 是否启用调试模式 */
+  debug?: boolean
+  /** 最大监听器数量警告阈值 */
+  maxListeners?: number
+}
+
+/**
+ * 触屏事件类型
+ */
+export interface TouchEventData {
+  /** 触摸状态 */
+  state: TouchState
+  /** 原始事件 */
+  originalEvent?: TouchEvent
+}
+
+/**
+ * 手势事件数据
+ */
+export interface GestureEventData {
+  /** 手势事件 */
+  gesture: GestureEvent
+  /** 元素 ID */
+  elementId?: string
+}
+
+/**
+ * 事件总线类
+ */
+export class EventBus {
+  private events: Map<string, Set<EventCallback>>
+  private onceEvents: Map<string, Set<EventCallback>>
+  private config: Required<EventConfig>
+  private static instance: EventBus | null = null
+
+  /**
+   * 构造函数
+   * @param config 配置
+   */
+  constructor(config: EventConfig = {}) {
+    this.events = new Map()
+    this.onceEvents = new Map()
+    this.config = {
+      debug: false,
+      maxListeners: 100,
+      ...config
+    }
+  }
+
+  /**
+   * 获取单例实例
+   */
+  public static getInstance(config?: EventConfig): EventBus {
+    if (!EventBus.instance) {
+      EventBus.instance = new EventBus(config)
+    }
+    return EventBus.instance
+  }
+
+  /**
+   * 打印调试日志
+   * @param args 日志参数
+   */
+  private log(...args: any[]): void {
+    if (this.config.debug) {
+      console.log('[EventBus]', ...args)
+    }
+  }
+
+  /**
+   * 打印警告日志
+   * @param args 日志参数
+   */
+  private warn(...args: any[]): void {
+    console.warn('[EventBus]', ...args)
+  }
+
+  /**
+   * 注册事件监听
+   * @param type 事件类型
+   * @param callback 回调函数
+   */
+  public on<T = any>(type: string, callback: EventCallback<T>): void {
+    if (!this.events.has(type)) {
+      this.events.set(type, new Set())
+    }
+    const callbacks = this.events.get(type)!
+    callbacks.add(callback)
+
+    const count = callbacks.size
+    if (count > this.config.maxListeners) {
+      this.warn(
+        `事件 "${type}" 监听器数量 (${count}) 超过阈值 (${this.config.maxListeners})，可能存在内存泄漏`
+      )
+    }
+
+    this.log(`注册事件监听:`, type, `当前监听器数量:`, count)
+  }
+
+  /**
+   * 注册一次性事件监听
+   * @param type 事件类型
+   * @param callback 回调函数
+   */
+  public once<T = any>(type: string, callback: EventCallback<T>): void {
+    if (!this.onceEvents.has(type)) {
+      this.onceEvents.set(type, new Set())
+    }
+    this.onceEvents.get(type)!.add(callback)
+    this.log(`注册一次性事件监听:`, type)
+  }
+
+  /**
+   * 移除事件监听
+   * @param type 事件类型
+   * @param callback 回调函数
+   */
+  public off<T = any>(type: string, callback?: EventCallback<T>): void {
+    if (callback) {
+      const callbacks = this.events.get(type)
+      if (callbacks) {
+        callbacks.delete(callback)
+        this.log(`移除事件监听:`, type, `剩余监听器数量:`, callbacks.size)
+      }
+      const onceCallbacks = this.onceEvents.get(type)
+      if (onceCallbacks) {
+        onceCallbacks.delete(callback)
+      }
+    } else {
+      this.events.delete(type)
+      this.onceEvents.delete(type)
+      this.log(`移除事件 "${type}" 的所有监听`)
+    }
+  }
+
+  /**
+   * 触发事件
+   * @param type 事件类型
+   * @param data 事件数据
+   * @param source 事件源
+   */
+  public emit<T = any>(type: string, data?: T, source?: string): void {
+    const eventData: EventData<T> = {
+      type,
+      data: data as T,
+      timestamp: Date.now(),
+      source
+    }
+
+    this.log(`触发事件:`, type, `数据:`, data)
+
+    const callbacks = this.events.get(type)
+    if (callbacks) {
+      callbacks.forEach((cb) => {
+        try {
+          cb(eventData)
+        } catch (e) {
+          this.warn(`事件 "${type}" 回调执行错误:`, e)
+        }
+      })
+    }
+
+    const onceCallbacks = this.onceEvents.get(type)
+    if (onceCallbacks) {
+      onceCallbacks.forEach((cb) => {
+        try {
+          cb(eventData)
+        } catch (e) {
+          this.warn(`一次性事件 "${type}" 回调执行错误:`, e)
+        }
+      })
+      this.onceEvents.delete(type)
+    }
+  }
+
+  /**
+   * 广播事件（全局广播）
+   * @param type 事件类型
+   * @param data 事件数据
+   */
+  public broadcast<T = any>(type: string, data?: T): void {
+    this.emit(type, data, 'broadcast')
+  }
+
+  /**
+   * 检查是否有该事件的监听器
+   * @param type 事件类型
+   */
+  public has(type: string): boolean {
+    const hasNormal = this.events.has(type) && this.events.get(type)!.size > 0
+    const hasOnce =
+      this.onceEvents.has(type) && this.onceEvents.get(type)!.size > 0
+    return hasNormal || hasOnce
+  }
+
+  /**
+   * 获取指定事件的监听器数量
+   * @param type 事件类型
+   */
+  public listenerCount(type: string): number {
+    const normalCount = this.events.get(type)?.size || 0
+    const onceCount = this.onceEvents.get(type)?.size || 0
+    return normalCount + onceCount
+  }
+
+  /**
+   * 获取所有事件类型
+   */
+  public eventNames(): string[] {
+    const names = new Set([
+      ...this.events.keys(),
+      ...this.onceEvents.keys()
+    ])
+    return Array.from(names)
+  }
+
+  /**
+   * 移除所有事件监听
+   * @param type 事件类型，不传则移除所有
+   */
+  public clear(type?: string): void {
+    if (type) {
+      this.events.delete(type)
+      this.onceEvents.delete(type)
+      this.log(`清除事件 "${type}" 的所有监听`)
+    } else {
+      this.events.clear()
+      this.onceEvents.clear()
+      this.log(`清除所有事件监听`)
+    }
+  }
+
+  /**
+   * 发布触屏事件
+   * @param eventType 事件类型
+   * @param touchData 触摸数据
+   */
+  public emitTouchEvent(
+    eventType: string, touchData: TouchEventData): void {
+    this.emit(`touch:${eventType}`, touchData, 'touch')
+  }
+
+  /**
+   * 注册触屏事件监听
+   * @param eventType 事件类型
+   * @param callback 回调函数
+   */
+  public onTouchEvent(
+    eventType: string,
+    callback: EventCallback<TouchEventData>
+  ): void {
+    this.on(`touch:${eventType}`, callback)
+  }
+
+  /**
+   * 发布手势事件
+   * @param gestureType 手势类型
+   * @param gestureData 手势数据
+   */
+  public emitGestureEvent(
+    gestureType: string,
+    gestureData: GestureEventData
+  ): void {
+    this.emit(`gesture:${gestureType}`, gestureData, 'gesture')
+  }
+
+  /**
+   * 注册手势事件监听
+   * @param gestureType 手势类型
+   * @param callback 回调函数
+   */
+  public onGestureEvent(
+    gestureType: string,
+    callback: EventCallback<GestureEventData>
+  ): void {
+    this.on(`gesture:${gestureType}`, callback)
+  }
+
+  /**
+   * 节流包装器 - 对回调函数进行节流处理
+   * @param callback 回调函数
+   * @param delay 节流延迟
+   */
+  public throttle<T = any>(
+    callback: EventCallback<T>,
+    delay: number
+  ): EventCallback<T> {
+    let lastTime = 0
+    return function (this: any, data: T) {
+      const now = Date.now()
+      if (now - lastTime >= delay) {
+        lastTime = now
+        callback.call(this, data)
+      }
+    }
+  }
+
+  /**
+   * 防抖包装器 - 对回调函数进行防抖处理
+   * @param callback 回调函数
+   * @param delay 防抖延迟
+   */
+  public debounce<T = any>(
+    callback: EventCallback<T>,
+    delay: number
+  ): EventCallback<T> {
+    let timer: ReturnType<typeof setTimeout> | null = null
+    return function (this: any, data: T) {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => {
+        callback.call(this, data)
+      }, delay)
+    }
+  }
+
+  /**
+   * 等待某个事件触发
+   * @param type 事件类型
+   * @param timeout 超时时间
+   */
+  public waitFor<T = any>(
+    type: string,
+    timeout?: number
+  ): Promise<EventData<T>> {
+    return new Promise((resolve, reject) => {
+      let timer: ReturnType<typeof setTimeout> | null = null
+
+      const handler: EventCallback<T> = (data) => {
+        if (timer) clearTimeout(timer)
+        resolve(data)
+      }
+
+      this.once(type, handler)
+
+      if (timeout) {
+        timer = setTimeout(() => {
+          this.off(type, handler)
+          reject(new Error(`等待事件 "${type}" 超时 (${timeout}ms)`))
+        }, timeout)
+      }
+    })
+  }
+
+  /**
+   * 销毁事件总线
+   */
+  public destroy(): void {
+    this.clear()
+    if (EventBus.instance === this) {
+      EventBus.instance = null
+    }
+  }
+
+  /**
+   * 更新配置
+   * @param config 新配置
+   */
+  public updateConfig(config: Partial<EventConfig>): void {
+    this.config = { ...this.config, ...config }
+  }
+
+  /**
+   * 获取当前配置
+   */
+  public getConfig(): Readonly<Required<EventConfig>> {
+    return { ...this.config }
+  }
+}
+
+/**
+ * 全局事件总线实例
+ */
+export const eventBus = EventBus.getInstance()
+
+/**
+ * 创建事件总线实例
+ * @param config 配置
+ */
+export function createEventBus(config?: EventConfig): EventBus {
+  return new EventBus(config)
+}
+
+/**
+ * 便捷的触屏事件广播器
+ */
+export class TouchEventBroadcaster {
+  private eventBus: EventBus
+  private elementId: string
+
+  constructor(elementId: string, eventBus?: EventBus) {
+    this.elementId = elementId
+    this.eventBus = eventBus || EventBus.getInstance()
+  }
+
+  /**
+   * 广播触摸开始事件
+   */
+  public broadcastTouchStart(state: TouchState, event?: TouchEvent): void {
+    this.eventBus.emitTouchEvent('start', { state, originalEvent: event })
+    this.eventBus.emitTouchEvent(`${this.elementId}:start`, { state, originalEvent: event })
+  }
+
+  /**
+   * 广播触摸移动事件
+   */
+  public broadcastTouchMove(state: TouchState, event?: TouchEvent): void {
+    this.eventBus.emitTouchEvent('move', { state, originalEvent: event })
+    this.eventBus.emitTouchEvent(`${this.elementId}:move`, { state, originalEvent: event })
+  }
+
+  /**
+   * 广播触摸结束事件
+   */
+  public broadcastTouchEnd(state: TouchState, event?: TouchEvent): void {
+    this.eventBus.emitTouchEvent('end', { state, originalEvent: event })
+    this.eventBus.emitTouchEvent(`${this.elementId}:end`, { state, originalEvent: event })
+  }
+
+  /**
+   * 广播手势事件
+   */
+  public broadcastGesture(gesture: GestureEvent): void {
+    this.eventBus.emitGestureEvent(gesture.type, {
+      gesture,
+      elementId: this.elementId
+    })
+    this.eventBus.emitGestureEvent(`${this.elementId}:${gesture.type}`, {
+      gesture,
+      elementId: this.elementId
+    })
+  }
+}
+
+/**
+ * 创建触屏事件广播器
+ * @param elementId 元素ID
+ * @param eventBus 事件总线实例
+ */
+export function createTouchBroadcaster(
+  elementId: string,
+  eventBus?: EventBus
+): TouchEventBroadcaster {
+  return new TouchEventBroadcaster(elementId, eventBus)
+}
+
+export default EventBus

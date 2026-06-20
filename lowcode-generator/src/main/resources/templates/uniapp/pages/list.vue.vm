@@ -1,0 +1,616 @@
+#set($entityNameLower = ${entityName.substring(0,1).toLowerCase()} + ${entityName.substring(1)})
+#set($entityNameCamel = ${entityNameLower})
+<template>
+  <view
+    class="${entityNameCamel}-list"
+    @touchstart="onTouchStart"
+    @touchmove="onTouchMove"
+    @touchend="onTouchEnd"
+  >
+    <mobile-search-bar
+      v-model="searchParams.keyword"
+      placeholder="请输入搜索关键词"
+      @search="onSearch"
+      @clear="onClear"
+      @cancel="onCancel"
+    />
+
+    <view class="filter-bar">
+      <scroll-view class="filter-scroll" scroll-x show-scrollbar="false">
+        <view class="filter-tabs">
+          <view
+            v-for="(tab, index) in filterTabs"
+            :key="index"
+            class="filter-tab"
+            :class="{ active: activeTab === index }"
+            @tap="onTabChange(index)"
+          >
+            <text>{{ tab.label }}</text>
+            <text v-if="tab.count" class="filter-tab__count">{{ tab.count }}</text>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+
+    <view class="list-container">
+      <mobile-pull-refresh
+        :refreshing="refreshing"
+        :loading="loading"
+        @refresh="onRefresh"
+        @loadmore="onLoadMore"
+      >
+        <view v-if="list.length > 0" class="list-content">
+          <mobile-swipe-cell
+            v-for="(item, index) in list"
+            :key="item.id || index"
+            :right-actions="getSwipeActions(item)"
+            @action="onSwipeAction"
+            @click="onItemClick(item)"
+          >
+            <view class="list-item" :class="{ 'is-active': activeItemId === item.id }">
+              <view class="list-item__content">
+                <view class="list-item__header">
+                  <text class="list-item__title">{{ item.${fields[0].name} || '未命名' }}</text>
+                  <view class="list-item__status">
+                    <text class="status-dot" :class="getStatusClass(item)"></text>
+                    <text class="status-text">{{ getStatusText(item) }}</text>
+                  </view>
+                </view>
+                <view class="list-item__body">
+                  <text v-if="item.${fields[1] != null ? fields[1].name : ''}" class="list-item__desc">
+                    {{ item.${fields[1] != null ? fields[1].name : ''} }}
+                  </text>
+#foreach($field in $fields.subList(2, $fields.size() < 5 ? $fields.size() : 5))
+                  <view class="list-item__meta">
+                    <text class="meta-label">${field.comment}:</text>
+                    <text class="meta-value">{{ item.${field.name} }}</text>
+                  </view>
+#end
+                </view>
+                <view class="list-item__footer">
+                  <text class="list-item__time">{{ formatTime(item.createTime) }}</text>
+                  <view class="list-item__actions">
+                    <view class="action-btn" @tap.stop="onEdit(item)">
+                      <text>编辑</text>
+                    </view>
+                    <view class="action-btn action-btn--danger" @tap.stop="onDelete(item)">
+                      <text>删除</text>
+                    </view>
+                  </view>
+                </view>
+              </view>
+            </view>
+          </mobile-swipe-cell>
+        </view>
+
+        <view v-else-if="!loading && !refreshing" class="empty-state">
+          <text class="empty-icon">📭</text>
+          <text class="empty-text">暂无数据</text>
+          <view class="empty-btn" @tap="onRefresh">
+            <text>点击刷新</text>
+          </view>
+        </view>
+
+        <view v-if="loading" class="loading-state">
+          <text class="loading-text">加载中...</text>
+        </view>
+
+        <view v-if="!hasMore && list.length > 0" class="no-more">
+          <text>没有更多了</text>
+        </view>
+      </mobile-pull-refresh>
+    </view>
+
+    <view class="float-btn" @tap="onAdd">
+      <text class="float-btn__icon">+</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { onShow, onPullDownRefresh, onReachBottom } from '@dcloudio/uni-app'
+import { createTouchHandler, debounce } from '@/utils/touch'
+import { use${entityName}List } from '@/composables/use${entityName}'
+import type { ${entityName} } from '@/api/${entityNameCamel}'
+
+interface FilterTab {
+  label: string
+  value: string
+  count?: number
+}
+
+const searchParams = reactive({
+  keyword: '',
+  status: '',
+  pageNum: 1,
+  pageSize: 10
+})
+
+const filterTabs = ref<FilterTab[]>([
+  { label: '全部', value: '' },
+  { label: '正常', value: '1' },
+  { label: '禁用', value: '0' }
+])
+
+const activeTab = ref(0)
+const activeItemId = ref<string | number | null>(null)
+const refreshing = ref(false)
+const hasMore = ref(true)
+
+const touchHandler = createTouchHandler({
+  minDistance: 30,
+  velocityThreshold: 0.3
+})
+
+const {
+  list,
+  loading,
+  error,
+  total,
+  fetchList,
+  refresh: refreshList,
+  loadMore: loadMoreList,
+  deleteItem
+} = use${entityName}List()
+
+const getSwipeActions = (item: ${entityName}) => [
+  { text: '编辑', color: '#07c160', key: 'edit' },
+  { text: '删除', color: '#ee0a24', key: 'delete' }
+]
+
+const getStatusClass = (item: ${entityName}) => ({
+  'status-dot--success': item.status === 1,
+  'status-dot--danger': item.status === 0,
+  'status-dot--warning': item.status === 2
+})
+
+const getStatusText = (item: ${entityName}) => {
+  const statusMap: Record<number, string> = {
+    0: '禁用',
+    1: '正常',
+    2: '待审核'
+  }
+  return statusMap[item.status ?? 1] || '未知'
+}
+
+const formatTime = (time: string | number | Date) => {
+  if (!time) return ''
+  const date = new Date(time)
+  const now = new Date()
+  const diff = now.getTime() - date.getTime()
+  const minutes = Math.floor(diff / 60000)
+  const hours = Math.floor(diff / 3600000)
+  const days = Math.floor(diff / 86400000)
+
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes}分钟前`
+  if (hours < 24) return `${hours}小时前`
+  if (days < 7) return `${days}天前`
+
+  return date.toLocaleDateString('zh-CN')
+}
+
+const onSearch = debounce(() => {
+  searchParams.pageNum = 1
+  hasMore.value = true
+  fetchList(searchParams)
+}, 300)
+
+const onClear = () => {
+  searchParams.keyword = ''
+  onSearch()
+}
+
+const onCancel = () => {
+  searchParams.keyword = ''
+}
+
+const onTabChange = (index: number) => {
+  activeTab.value = index
+  searchParams.status = filterTabs.value[index].value
+  searchParams.pageNum = 1
+  hasMore.value = true
+  fetchList(searchParams)
+}
+
+const onRefresh = async () => {
+  refreshing.value = true
+  searchParams.pageNum = 1
+  hasMore.value = true
+  try {
+    await refreshList(searchParams)
+  } finally {
+    refreshing.value = false
+    uni.stopPullDownRefresh()
+  }
+}
+
+const onLoadMore = async () => {
+  if (!hasMore.value || loading.value) return
+  searchParams.pageNum++
+  try {
+    const result = await loadMoreList(searchParams)
+    hasMore.value = list.value.length < total.value
+  } catch {
+    searchParams.pageNum--
+  }
+}
+
+const onItemClick = (item: ${entityName}) => {
+  activeItemId.value = item.id
+  uni.navigateTo({
+    url: `/pages/${entityNameCamel}/detail?id=${item.id}`
+  })
+}
+
+const onSwipeAction = (action: { key: string }, _position: string, _index: number, item: ${entityName}) => {
+  if (action.key === 'edit') {
+    onEdit(item)
+  } else if (action.key === 'delete') {
+    onDelete(item)
+  }
+}
+
+const onEdit = (item: ${entityName}) => {
+  uni.navigateTo({
+    url: `/pages/${entityNameCamel}/form?id=${item.id}`
+  })
+}
+
+const onDelete = async (item: ${entityName}) => {
+  uni.showModal({
+    title: '确认删除',
+    content: '确定要删除这条记录吗？',
+    success: async (res) => {
+      if (res.confirm) {
+        try {
+          await deleteItem(item.id!)
+          uni.showToast({ title: '删除成功', icon: 'success' })
+          onRefresh()
+        } catch (err) {
+          uni.showToast({ title: '删除失败', icon: 'none' })
+        }
+      }
+    }
+  })
+}
+
+const onAdd = () => {
+  uni.navigateTo({
+    url: `/pages/${entityNameCamel}/form`
+  })
+}
+
+const onTouchStart = (e: TouchEvent) => {
+  touchHandler.onTouchStart(e)
+}
+
+const onTouchMove = (e: TouchEvent) => {
+  const state = touchHandler.onTouchMove(e)
+  if (state.direction === 'left' && state.isSwipe()) {
+    console.log('swipe left')
+  }
+}
+
+const onTouchEnd = (e: TouchEvent) => {
+  const state = touchHandler.onTouchEnd(e)
+  if (state.isSwipe()) {
+    if (state.direction === 'right') {
+      console.log('swipe right')
+    }
+  }
+}
+
+onShow(() => {
+  if (list.value.length === 0) {
+    fetchList(searchParams)
+  }
+})
+
+onPullDownRefresh(() => {
+  onRefresh()
+})
+
+onReachBottom(() => {
+  onLoadMore()
+})
+
+onMounted(() => {
+  fetchList(searchParams)
+})
+</script>
+
+<style lang="scss" scoped>
+.${entityNameCamel}-list {
+  min-height: 100vh;
+  background-color: #f7f8fa;
+  display: flex;
+  flex-direction: column;
+}
+
+.filter-bar {
+  background-color: #fff;
+  border-bottom: 1rpx solid #ebedf0;
+
+  &__scroll {
+    white-space: nowrap;
+  }
+
+  &__tabs {
+    display: inline-flex;
+    padding: 0 32rpx;
+  }
+
+  &__tab {
+    position: relative;
+    padding: 24rpx 32rpx;
+    font-size: 30rpx;
+    color: #646566;
+    white-space: nowrap;
+    transition: color 0.2s ease;
+
+    &.active {
+      color: #1989fa;
+      font-weight: 600;
+
+      &::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 48rpx;
+        height: 6rpx;
+        background-color: #1989fa;
+        border-radius: 3rpx;
+      }
+    }
+
+    &__count {
+      margin-left: 8rpx;
+      padding: 2rpx 12rpx;
+      font-size: 22rpx;
+      color: #fff;
+      background-color: #ee0a24;
+      border-radius: 20rpx;
+    }
+  }
+}
+
+.list-container {
+  flex: 1;
+  overflow: hidden;
+}
+
+.list-content {
+  padding: 24rpx;
+}
+
+.list-item {
+  background-color: #fff;
+  border-radius: 16rpx;
+  margin-bottom: 24rpx;
+  overflow: hidden;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+  &:active {
+    transform: scale(0.99);
+    box-shadow: 0 1rpx 6rpx rgba(0, 0, 0, 0.08);
+  }
+
+  &.is-active {
+    background-color: #f0f7ff;
+  }
+
+  &__content {
+    padding: 32rpx;
+  }
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20rpx;
+  }
+
+  &__title {
+    font-size: 34rpx;
+    font-weight: 600;
+    color: #323233;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__status {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    margin-left: 16rpx;
+  }
+
+  &__desc {
+    font-size: 28rpx;
+    color: #646566;
+    line-height: 1.6;
+    margin-bottom: 16rpx;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  &__meta {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8rpx;
+
+    .meta-label {
+      font-size: 26rpx;
+      color: #969799;
+      margin-right: 12rpx;
+      flex-shrink: 0;
+    }
+
+    .meta-value {
+      font-size: 26rpx;
+      color: #323233;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  &__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 24rpx;
+    padding-top: 24rpx;
+    border-top: 1rpx solid #ebedf0;
+  }
+
+  &__time {
+    font-size: 24rpx;
+    color: #c8c9cc;
+  }
+
+  &__actions {
+    display: flex;
+    gap: 16rpx;
+  }
+}
+
+.status-dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  margin-right: 8rpx;
+
+  &--success {
+    background-color: #07c160;
+  }
+
+  &--danger {
+    background-color: #ee0a24;
+  }
+
+  &--warning {
+    background-color: #ff976a;
+  }
+}
+
+.status-text {
+  font-size: 24rpx;
+  color: #646566;
+}
+
+.action-btn {
+  padding: 12rpx 24rpx;
+  border-radius: 8rpx;
+  background-color: #f7f8fa;
+  transition: background-color 0.2s ease;
+
+  &:active {
+    background-color: #ebedf0;
+  }
+
+  text {
+    font-size: 26rpx;
+    color: #1989fa;
+  }
+
+  &--danger {
+    text {
+      color: #ee0a24;
+    }
+  }
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 0;
+
+  .empty-icon {
+    font-size: 120rpx;
+    margin-bottom: 32rpx;
+  }
+
+  .empty-text {
+    font-size: 30rpx;
+    color: #969799;
+    margin-bottom: 48rpx;
+  }
+
+  .empty-btn {
+    padding: 24rpx 64rpx;
+    background-color: #1989fa;
+    border-radius: 48rpx;
+    transition: opacity 0.2s ease;
+
+    &:active {
+      opacity: 0.8;
+    }
+
+    text {
+      font-size: 30rpx;
+      color: #fff;
+    }
+  }
+}
+
+.loading-state {
+  padding: 48rpx 0;
+  text-align: center;
+
+  .loading-text {
+    font-size: 28rpx;
+    color: #969799;
+  }
+}
+
+.no-more {
+  padding: 48rpx 0;
+  text-align: center;
+
+  text {
+    font-size: 26rpx;
+    color: #c8c9cc;
+  }
+}
+
+.float-btn {
+  position: fixed;
+  right: 48rpx;
+  bottom: 120rpx;
+  width: 112rpx;
+  height: 112rpx;
+  background: linear-gradient(135deg, #1989fa 0%, #007dff 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8rpx 32rpx rgba(25, 137, 250, 0.4);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  z-index: 999;
+
+  &:active {
+    transform: scale(0.95);
+    box-shadow: 0 4rpx 16rpx rgba(25, 137, 250, 0.4);
+  }
+
+  &__icon {
+    font-size: 64rpx;
+    color: #fff;
+    line-height: 1;
+    margin-top: -4rpx;
+  }
+}
+</style>

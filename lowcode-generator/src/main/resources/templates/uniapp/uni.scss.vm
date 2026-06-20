@@ -1,0 +1,80 @@
+$uni-primary: #007AFF;
+$uni-success: #4CD964;
+$uni-warning: #FF9500;
+$uni-error: #FF3B30;
+$uni-info: #909399;
+
+$uni-primary-light: #ECF5FF;
+$uni-success-light: #F0F9EB;
+$uni-warning-light: #FDF6EC;
+$uni-error-light: #FEF0F0;
+$uni-info-light: #F4F4F5;
+
+$uni-text-color: #303133;
+$uni-text-color-secondary: #606266;
+$uni-text-color-placeholder: #909399;
+$uni-text-color-disabled: #C0C4CC;
+
+$uni-border-color: #DCDFE6;
+$uni-border-color-light: #E4E7ED;
+$uni-border-color-lighter: #EBEEF5;
+$uni-border-color-extra-light: #F2F6FC;
+
+$uni-bg-color: #FFFFFF;
+$uni-bg-color-grey: #F5F5F5;
+$uni-bg-color-hover: #F5F7FA;
+$uni-bg-color-mask: rgba(0, 0, 0, 0.5);
+
+$uni-font-size-xs: 20rpx;
+$uni-font-size-sm: 24rpx;
+$uni-font-size-base: 28rpx;
+$uni-font-size-md: 32rpx;
+$uni-font-size-lg: 36rpx;
+$uni-font-size-xl: 40rpx;
+$uni-font-size-xxl: 48rpx;
+
+$uni-spacing-xs: 8rpx;
+$uni-spacing-sm: 16rpx;
+$uni-spacing-base: 24rpx;
+$uni-spacing-md: 32rpx;
+$uni-spacing-lg: 40rpx;
+$uni-spacing-xl: 48rpx;
+
+$uni-border-radius-sm: 4rpx;
+$uni-border-radius-base: 8rpx;
+$uni-border-radius-md: 12rpx;
+$uni-border-radius-lg: 16rpx;
+$uni-border-radius-round: 50%;
+
+$uni-shadow-sm: 0 2rpx 8rpx rgba(0, 0, 0, 0.08);
+$uni-shadow-base: 0 4rpx 16rpx rgba(0, 0, 0, 0.1);
+$uni-shadow-lg: 0 8rpx 32rpx rgba(0, 0, 0, 0.12);
+
+$uni-transition-base: all 0.3s ease;
+$uni-transition-fast: all 0.15s ease;
+
+$uni-z-index-popup: 1000;
+$uni-z-index-toast: 1500;
+$uni-z-index-modal: 2000;
+
+${responsiveConfig}
+
+$uni-status-bar-height: var(--status-bar-height, 44px);
+$uni-window-width: 750rpx;
+$uni-window-height: 1334rpx;
+
+${enableTouchEvents}
+
+.touch-none {
+  touch-action: none;
+}
+
+.touch-pan-x {
+  touch-action: pan-x;
+}
+
+.touch-pan-y {
+  touch-action: pan-y;
+}
+
+${enableGestures}

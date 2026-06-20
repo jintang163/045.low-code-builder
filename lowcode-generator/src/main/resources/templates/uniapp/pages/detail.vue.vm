@@ -1,0 +1,585 @@
+#set($entityNameLower = ${entityName.substring(0,1).toLowerCase()} + ${entityName.substring(1)})
+#set($entityNameCamel = ${entityNameLower})
+<template>
+  <view
+    class="${entityNameCamel}-detail"
+    @touchstart="onTouchStart"
+    @touchmove="onTouchMove"
+    @touchend="onTouchEnd"
+  >
+    <scroll-view
+      class="detail-scroll"
+      scroll-y
+      :refreshing="refreshing"
+      @refresherrefresh="onRefresh"
+      refresher-enabled
+    >
+      <view v-if="detail" class="detail-content">
+        <view class="detail-header">
+          <view class="detail-title">
+            <text class="title-text">{{ detail.${fields[0].name} || '未命名' }}</text>
+            <view class="detail-status">
+              <text class="status-dot" :class="getStatusClass(detail)"></text>
+              <text class="status-text">{{ getStatusText(detail) }}</text>
+            </view>
+          </view>
+          <view class="detail-meta">
+            <text class="meta-item">
+              <text class="meta-icon">📅</text>
+              创建时间: {{ formatTime(detail.createTime) }}
+            </text>
+            <text v-if="detail.updateTime" class="meta-item">
+              <text class="meta-icon">✏️</text>
+              更新时间: {{ formatTime(detail.updateTime) }}
+            </text>
+          </view>
+        </view>
+
+        <view class="detail-card">
+          <view class="card-header">
+            <text class="card-title">基本信息</text>
+          </view>
+          <view class="card-body">
+#foreach($field in $fields)
+            <view class="info-row">
+              <text class="info-label">${field.comment}</text>
+              <text class="info-value">{{ getFieldValue(detail, '${field.name}') }}</text>
+            </view>
+#end
+          </view>
+        </view>
+
+        <view class="detail-card">
+          <view class="card-header">
+            <text class="card-title">操作记录</text>
+          </view>
+          <view class="card-body">
+            <view class="timeline">
+              <view class="timeline-item">
+                <view class="timeline-dot"></view>
+                <view class="timeline-content">
+                  <text class="timeline-title">创建记录</text>
+                  <text class="timeline-time">{{ formatTime(detail.createTime) }}</text>
+                </view>
+              </view>
+              <view v-if="detail.updateTime" class="timeline-item">
+                <view class="timeline-dot"></view>
+                <view class="timeline-content">
+                  <text class="timeline-title">更新记录</text>
+                  <text class="timeline-time">{{ formatTime(detail.updateTime) }}</text>
+                </view>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view v-else-if="loading" class="loading-state">
+        <text class="loading-icon">⏳</text>
+        <text class="loading-text">加载中...</text>
+      </view>
+
+      <view v-else-if="error" class="error-state">
+        <text class="error-icon">❌</text>
+        <text class="error-text">{{ error }}</text>
+        <view class="error-btn" @tap="onRefresh">
+          <text>重新加载</text>
+        </view>
+      </view>
+    </scroll-view>
+
+    <view class="detail-footer">
+      <view class="footer-btn footer-btn--secondary" @tap="onBack">
+        <text class="btn-icon">←</text>
+        <text>返回</text>
+      </view>
+      <view class="footer-btn footer-btn--primary" @tap="onEdit">
+        <text class="btn-icon">✏️</text>
+        <text>编辑</text>
+      </view>
+      <view class="footer-btn footer-btn--danger" @tap="onDelete">
+        <text class="btn-icon">🗑️</text>
+        <text>删除</text>
+      </view>
+    </view>
+
+    <view v-if="showSwipeHint" class="swipe-hint">
+      <text>← 左滑返回</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { ref, reactive, computed, onMounted } from 'vue'
+import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
+import { createTouchHandler } from '@/utils/touch'
+import { use${entityName}Detail } from '@/composables/use${entityName}'
+import type { ${entityName} } from '@/api/${entityNameCamel}'
+
+const props = defineProps<{
+  id?: string | number
+}>()
+
+const route = useRoute()
+const id = computed(() => props.id || route.query.id)
+
+const refreshing = ref(false)
+const showSwipeHint = ref(false)
+
+const touchHandler = createTouchHandler({
+  minDistance: 50,
+  velocityThreshold: 0.3
+})
+
+const {
+  detail,
+  loading,
+  error,
+  fetchDetail,
+  refresh: refreshDetail,
+  deleteItem
+} = use${entityName}Detail()
+
+const getStatusClass = (item: ${entityName}) => ({
+  'status-dot--success': item.status === 1,
+  'status-dot--danger': item.status === 0,
+  'status-dot--warning': item.status === 2
+})
+
+const getStatusText = (item: ${entityName}) => {
+  const statusMap: Record<number, string> = {
+    0: '禁用',
+    1: '正常',
+    2: '待审核'
+  }
+  return statusMap[item.status ?? 1] || '未知'
+}
+
+const getFieldValue = (item: ${entityName}, fieldName: string) => {
+  const value = item[fieldName as keyof ${entityName}]
+  if (value === null || value === undefined || value === '') {
+    return '-'
+  }
+  if (typeof value === 'boolean') {
+    return value ? '是' : '否'
+  }
+  return String(value)
+}
+
+const formatTime = (time: string | number | Date) => {
+  if (!time) return '-'
+  const date = new Date(time)
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  })
+}
+
+const onRefresh = async () => {
+  refreshing.value = true
+  try {
+    await refreshDetail(id.value!)
+  } finally {
+    refreshing.value = false
+  }
+}
+
+const onBack = () => {
+  uni.navigateBack()
+}
+
+const onEdit = () => {
+  uni.navigateTo({
+    url: `/pages/${entityNameCamel}/form?id=${id.value}`
+  })
+}
+
+const onDelete = async () => {
+  uni.showModal({
+    title: '确认删除',
+    content: '确定要删除这条记录吗？此操作不可恢复。',
+    confirmText: '删除',
+    confirmColor: '#ee0a24',
+    success: async (res) => {
+      if (res.confirm) {
+        try {
+          await deleteItem(id.value!)
+          uni.showToast({ title: '删除成功', icon: 'success' })
+          setTimeout(() => {
+            uni.navigateBack()
+          }, 1500)
+        } catch (err) {
+          uni.showToast({ title: '删除失败', icon: 'none' })
+        }
+      }
+    }
+  })
+}
+
+const onTouchStart = (e: TouchEvent) => {
+  touchHandler.onTouchStart(e)
+}
+
+const onTouchMove = (e: TouchEvent) => {
+  const state = touchHandler.onTouchMove(e)
+  if (state.direction === 'right' && state.distance > 30) {
+    showSwipeHint.value = true
+  }
+}
+
+const onTouchEnd = (e: TouchEvent) => {
+  showSwipeHint.value = false
+  const state = touchHandler.onTouchEnd(e)
+  if (state.isSwipe() && state.direction === 'right') {
+    onBack()
+  }
+}
+
+onShow(() => {
+  if (id.value) {
+    fetchDetail(id.value)
+  }
+})
+
+onPullDownRefresh(() => {
+  onRefresh()
+})
+
+onMounted(() => {
+  if (id.value) {
+    fetchDetail(id.value)
+  } else {
+    uni.showToast({ title: '参数错误', icon: 'none' })
+  }
+})
+</script>
+
+<style lang="scss" scoped>
+.${entityNameCamel}-detail {
+  min-height: 100vh;
+  background-color: #f7f8fa;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 140rpx;
+}
+
+.detail-scroll {
+  flex: 1;
+  height: calc(100vh - 140rpx);
+}
+
+.detail-content {
+  padding: 24rpx;
+}
+
+.detail-header {
+  background: linear-gradient(135deg, #1989fa 0%, #007dff 100%);
+  border-radius: 24rpx;
+  padding: 48rpx 32rpx;
+  margin-bottom: 24rpx;
+  color: #fff;
+
+  .detail-title {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 24rpx;
+  }
+
+  .title-text {
+    font-size: 40rpx;
+    font-weight: 600;
+    line-height: 1.4;
+    flex: 1;
+    margin-right: 24rpx;
+    word-break: break-all;
+  }
+
+  .detail-status {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    background-color: rgba(255, 255, 255, 0.2);
+    padding: 8rpx 20rpx;
+    border-radius: 24rpx;
+  }
+
+  .status-dot {
+    width: 12rpx;
+    height: 12rpx;
+    border-radius: 50%;
+    margin-right: 8rpx;
+
+    &--success {
+      background-color: #07c160;
+    }
+
+    &--danger {
+      background-color: #ee0a24;
+    }
+
+    &--warning {
+      background-color: #ff976a;
+    }
+  }
+
+  .status-text {
+    font-size: 24rpx;
+    color: #fff;
+  }
+
+  .detail-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16rpx;
+  }
+
+  .meta-item {
+    display: flex;
+    align-items: center;
+    font-size: 24rpx;
+    opacity: 0.9;
+    background-color: rgba(255, 255, 255, 0.15);
+    padding: 8rpx 16rpx;
+    border-radius: 16rpx;
+  }
+
+  .meta-icon {
+    margin-right: 8rpx;
+    font-size: 24rpx;
+  }
+}
+
+.detail-card {
+  background-color: #fff;
+  border-radius: 16rpx;
+  margin-bottom: 24rpx;
+  overflow: hidden;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+
+  .card-header {
+    padding: 28rpx 32rpx;
+    border-bottom: 1rpx solid #ebedf0;
+  }
+
+  .card-title {
+    font-size: 32rpx;
+    font-weight: 600;
+    color: #323233;
+  }
+
+  .card-body {
+    padding: 8rpx 32rpx;
+  }
+}
+
+.info-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 24rpx 0;
+  border-bottom: 1rpx solid #f7f8fa;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  .info-label {
+    font-size: 28rpx;
+    color: #646566;
+    width: 180rpx;
+    flex-shrink: 0;
+    line-height: 1.6;
+  }
+
+  .info-value {
+    font-size: 28rpx;
+    color: #323233;
+    flex: 1;
+    line-height: 1.6;
+    word-break: break-all;
+  }
+}
+
+.timeline {
+  padding: 16rpx 0;
+  position: relative;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 10rpx;
+    top: 24rpx;
+    bottom: 24rpx;
+    width: 2rpx;
+    background-color: #ebedf0;
+  }
+
+  &-item {
+    display: flex;
+    align-items: flex-start;
+    padding: 16rpx 0;
+    position: relative;
+  }
+
+  &-dot {
+    width: 22rpx;
+    height: 22rpx;
+    border-radius: 50%;
+    background-color: #1989fa;
+    border: 4rpx solid #fff;
+    box-shadow: 0 0 0 2rpx #1989fa;
+    flex-shrink: 0;
+    margin-right: 24rpx;
+    z-index: 1;
+  }
+
+  &-content {
+    flex: 1;
+  }
+
+  &-title {
+    font-size: 28rpx;
+    color: #323233;
+    font-weight: 500;
+    display: block;
+    margin-bottom: 8rpx;
+  }
+
+  &-time {
+    font-size: 24rpx;
+    color: #969799;
+    display: block;
+  }
+}
+
+.loading-state,
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 160rpx 0;
+
+  .loading-icon,
+  .error-icon {
+    font-size: 120rpx;
+    margin-bottom: 32rpx;
+  }
+
+  .loading-text,
+  .error-text {
+    font-size: 30rpx;
+    color: #969799;
+    margin-bottom: 48rpx;
+  }
+
+  .error-btn {
+    padding: 24rpx 64rpx;
+    background-color: #1989fa;
+    border-radius: 48rpx;
+    transition: opacity 0.2s ease;
+
+    &:active {
+      opacity: 0.8;
+    }
+
+    text {
+      font-size: 30rpx;
+      color: #fff;
+    }
+  }
+}
+
+.detail-footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #fff;
+  padding: 24rpx 32rpx;
+  padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
+  display: flex;
+  gap: 24rpx;
+  box-shadow: 0 -2rpx 20rpx rgba(0, 0, 0, 0.06);
+  z-index: 100;
+
+  .footer-btn {
+    flex: 1;
+    height: 88rpx;
+    border-radius: 44rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8rpx;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+
+    &:active {
+      opacity: 0.8;
+      transform: scale(0.98);
+    }
+
+    text {
+      font-size: 30rpx;
+      font-weight: 500;
+    }
+
+    .btn-icon {
+      font-size: 32rpx;
+    }
+
+    &--secondary {
+      background-color: #f7f8fa;
+
+      text {
+        color: #646566;
+      }
+    }
+
+    &--primary {
+      background-color: #1989fa;
+
+      text {
+        color: #fff;
+      }
+    }
+
+    &--danger {
+      background-color: #ee0a24;
+
+      text {
+        color: #fff;
+      }
+    }
+  }
+}
+
+.swipe-hint {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  padding: 24rpx 48rpx;
+  border-radius: 48rpx;
+  font-size: 28rpx;
+  z-index: 1000;
+  pointer-events: none;
+  animation: fadeIn 0.2s ease;
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(0.9);
+    }
+    to {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+  }
+}
+</style>

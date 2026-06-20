@@ -1,0 +1,795 @@
+#set($packageName = "${packageName}")
+#set($author = "${author}")
+#set($date = "${date}")
+/**
+ * @file nativeBridge.ts
+ * @description 原生桥接工具类
+ * @author ${author}
+ * @since ${date}
+ */
+
+import { throttle, debounce } from './touch'
+
+/**
+ * 平台类型
+ */
+export enum PlatformType {
+  /** 微信小程序 */
+  WECHAT = 'wechat',
+  /** 支付宝小程序 */
+  ALIPAY = 'alipay',
+  /** 百度小程序 */
+  BAIDU = 'baidu',
+  /** 字节跳动小程序 */
+  BYTEDANCE = 'bytedance',
+  /** QQ 小程序 */
+  QQ = 'qq',
+  /** 钉钉小程序 */
+  DINGTALK = 'dingtalk',
+  /** H5 */
+  H5 = 'h5',
+  /** App */
+  APP = 'app',
+  /** 未知平台 */
+  UNKNOWN = 'unknown'
+}
+
+/**
+ * 通用回调结果
+ */
+export interface BridgeResult<T = any> {
+  /** 是否成功 */
+  success: boolean
+  /** 数据 */
+  data?: T
+  /** 错误信息 */
+  error?: string
+  /** 错误码 */
+  errCode?: number
+}
+
+/**
+ * 扫码结果
+ */
+export interface ScanResult {
+  /** 扫描得到的内容 */
+  result: string
+  /** 扫码类型 */
+  scanType: string
+  /** 字符集 */
+  charSet: string
+  /** 原始数据 */
+  rawData?: string
+  /** 二维码路径 */
+  path?: string
+}
+
+/**
+ * 拍照/选择图片结果
+ */
+export interface ImageResult {
+  /** 图片本地路径列表 */
+  tempFilePaths: string[]
+  /** 图片文件列表 */
+  tempFiles: Array<{
+    path: string
+    size: number
+    type?: string
+  }>
+}
+
+/**
+ * 定位结果
+ */
+export interface LocationResult {
+  /** 纬度 */
+  latitude: number
+  /** 经度 */
+  longitude: number
+  /** 速度（m/s） */
+  speed?: number
+  /** 位置精度 */
+  accuracy?: number
+  /** 高度（m） */
+  altitude?: number
+  /** 垂直精度 */
+  verticalAccuracy?: number
+  /** 水平精度 */
+  horizontalAccuracy?: number
+  /** 地址信息 */
+  address?: {
+    /** 国家 */
+    country?: string
+    /** 省份 */
+    province?: string
+    /** 城市 */
+    city?: string
+    /** 区 */
+    district?: string
+    /** 街道 */
+    street?: string
+    /** 详细地址 */
+    detail?: string
+  }
+}
+
+/**
+ * 拍照配置
+ */
+export interface CameraOptions {
+  /** 是否允许裁剪 */
+  allowCrop?: boolean
+  /** 裁剪宽度 */
+  cropWidth?: number
+  /** 裁剪高度 */
+  cropHeight?: number
+  /** 图片质量 */
+  quality?: number
+  /** 是否压缩 */
+  compress?: boolean
+}
+
+/**
+ * 定位配置
+ */
+export interface LocationOptions {
+  /** 定位精度 */
+  accuracy?: 'high' | 'best' | 'low'
+  /** 是否需要地址信息 */
+  needAddress?: boolean
+  /** 超时时间 */
+  timeout?: number
+  /** 是否缓存定位结果 */
+  cache?: boolean
+  /** 缓存有效期 (ms) */
+  cacheExpire?: number
+}
+
+/**
+ * 原生桥接配置
+ */
+export interface BridgeConfig {
+  /** 是否启用调试 */
+  debug?: boolean
+  /** 全局超时时间 (ms) */
+  timeout?: number
+  /** 定位缓存有效期 (ms) */
+  locationCacheExpire?: number
+  /** 防抖延迟 (ms) */
+  debounceDelay?: number
+  /** 节流间隔 (ms) */
+  throttleInterval?: number
+}
+
+/**
+ * 权限类型
+ */
+export enum PermissionType {
+  /** 相机 */
+  CAMERA = 'camera',
+  /** 相册 */
+  PHOTO = 'photo',
+  /** 定位 */
+  LOCATION = 'location',
+  /** 麦克风 */
+  MICROPHONE = 'microphone',
+  /** 通讯录 */
+  CONTACTS = 'contacts',
+  /** 通知 */
+  NOTIFICATION = 'notification'
+}
+
+/**
+ * 默认配置
+ */
+const DEFAULT_CONFIG: Required<BridgeConfig> = {
+  debug: false,
+  timeout: 10000,
+  locationCacheExpire: 300000,
+  debounceDelay: 300,
+  throttleInterval: 500
+}
+
+/**
+ * 原生桥接工具类
+ */
+export class NativeBridge {
+  private config: Required<BridgeConfig>
+  private locationCache: { result: LocationResult; timestamp: number } | null = null
+  private static instance: NativeBridge | null = null
+
+  /**
+   * 构造函数
+   * @param config 配置
+   */
+  constructor(config: BridgeConfig = {}) {
+    this.config = { ...DEFAULT_CONFIG, ...config }
+  }
+
+  /**
+   * 获取单例实例
+   */
+  public static getInstance(config?: BridgeConfig): NativeBridge {
+    if (!NativeBridge.instance) {
+      NativeBridge.instance = new NativeBridge(config)
+    }
+    return NativeBridge.instance
+  }
+
+  /**
+   * 打印调试日志
+   * @param args 日志参数
+   */
+  private log(...args: any[]): void {
+    if (this.config.debug) {
+      console.log('[NativeBridge]', ...args)
+    }
+  }
+
+  /**
+   * 打印错误日志
+   * @param args 日志参数
+   */
+  private error(...args: any[]): void {
+    console.error('[NativeBridge]', ...args)
+  }
+
+  /**
+   * 获取当前平台类型
+   */
+  public getPlatform(): PlatformType {
+    // #ifdef MP-WEIXIN
+    return PlatformType.WECHAT
+    // #endif
+    // #ifdef MP-ALIPAY
+    return PlatformType.ALIPAY
+    // #endif
+    // #ifdef MP-BAIDU
+    return PlatformType.BAIDU
+    // #endif
+    // #ifdef MP-TOUTIAO
+    return PlatformType.BYTEDANCE
+    // #endif
+    // #ifdef MP-QQ
+    return PlatformType.QQ
+    // #endif
+    // #ifdef MP-DINGTALK
+    return PlatformType.DINGTALK
+    // #endif
+    // #ifdef APP-PLUS
+    return PlatformType.APP
+    // #endif
+    // #ifdef H5
+    return PlatformType.H5
+    // #endif
+    // #ifndef MP-WEIXIN || MP-ALIPAY || MP-BAIDU || MP-TOUTIAO || MP-QQ || MP-DINGTALK || APP-PLUS || H5
+    return PlatformType.UNKNOWN
+    // #endif
+  }
+
+  /**
+   * 检查是否为小程序平台
+   */
+  public isMiniProgram(): boolean {
+    const platform = this.getPlatform()
+    return [
+      PlatformType.WECHAT,
+      PlatformType.ALIPAY,
+      PlatformType.BAIDU,
+      PlatformType.BYTEDANCE,
+      PlatformType.QQ,
+      PlatformType.DINGTALK
+    ].includes(platform)
+  }
+
+  /**
+   * 统一的 Promise 包装器
+   * @param fn 执行函数
+   * @param timeout 超时时间
+   */
+  private promisify<T>(
+    fn: (resolve: (value: T) => void, reject: (reason: any) => void) => void,
+    timeout?: number
+  ): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`操作超时 (${timeout || this.config.timeout}ms)`))
+      }, timeout || this.config.timeout)
+
+      fn(
+        (value) => {
+          clearTimeout(timer)
+          resolve(value)
+        },
+        (reason) => {
+          clearTimeout(timer)
+          reject(reason)
+        }
+      )
+    })
+  }
+
+  /**
+   * 统一结果处理
+   * @param promise Promise
+   */
+  private async handleResult<T>(
+    promise: Promise<T>
+  ): Promise<BridgeResult<T>> {
+    try {
+      const data = await promise
+      this.log('操作成功:', data)
+      return { success: true, data }
+    } catch (e: any) {
+      this.error('操作失败:', e)
+      return {
+        success: false,
+        error: e.message || '未知错误',
+        errCode: e.errCode || -1
+      }
+    }
+  }
+
+  /**
+   * 扫码
+   * @param scanType 扫码类型
+   */
+  public scanCode(
+    scanType: Array<'barCode' | 'qrCode'> = ['barCode', 'qrCode']
+  ): Promise<BridgeResult<ScanResult>> {
+    this.log('开始扫码')
+
+    const promise = this.promisify<ScanResult>((resolve, reject) => {
+      uni.scanCode({
+        scanType,
+        success: (res: any) => {
+          resolve({
+            result: res.result,
+            scanType: res.scanType,
+            charSet: res.charSet,
+            rawData: res.rawData,
+            path: res.path
+          })
+        },
+        fail: (err: any) => reject(err)
+      })
+    })
+
+    return this.handleResult(promise)
+  }
+
+  /**
+   * 拍照
+   * @param options 配置
+   */
+  public takePhoto(
+    options: CameraOptions = {}
+  ): Promise<BridgeResult<ImageResult>> {
+    const { quality = 80, compress = true } = options
+    this.log('开始拍照')
+
+    const promise = this.promisify<ImageResult>((resolve, reject) => {
+      uni.chooseImage({
+        count: 1,
+        sourceType: ['camera'],
+        sizeType: compress ? ['compressed'] : ['original'],
+        quality,
+        success: (res: any) => {
+          resolve({
+            tempFilePaths: res.tempFilePaths,
+            tempFiles: res.tempFiles
+          })
+        },
+        fail: (err: any) => reject(err)
+      })
+    })
+
+    return this.handleResult(promise)
+  }
+
+  /**
+   * 从相册选择图片
+   * @param count 选择数量
+   * @param options 配置
+   */
+  public chooseImage(
+    count: number = 9,
+    options: CameraOptions = {}
+  ): Promise<BridgeResult<ImageResult>> {
+    const { quality = 80, compress = true } = options
+    this.log('从相册选择图片，数量:', count)
+
+    const promise = this.promisify<ImageResult>((resolve, reject) => {
+      uni.chooseImage({
+        count,
+        sourceType: ['album'],
+        sizeType: compress ? ['compressed'] : ['original'],
+        quality,
+        success: (res: any) => {
+          resolve({
+            tempFilePaths: res.tempFilePaths,
+            tempFiles: res.tempFiles
+          })
+        },
+        fail: (err: any) => reject(err)
+      })
+    })
+
+    return this.handleResult(promise)
+  }
+
+  /**
+   * 获取当前位置
+   * @param options 配置
+   */
+  public getLocation(
+    options: LocationOptions = {}
+  ): Promise<BridgeResult<LocationResult>> {
+    const {
+      accuracy = 'high',
+      needAddress = false,
+      cache = true,
+      cacheExpire = this.config.locationCacheExpire,
+      timeout = this.config.timeout
+    } = options
+
+    if (cache && this.locationCache) {
+      const now = Date.now()
+      if (now - this.locationCache.timestamp < cacheExpire) {
+        this.log('使用缓存定位结果')
+        return Promise.resolve({
+          success: true,
+          data: this.locationCache.result
+        })
+      }
+    }
+
+    this.log('开始获取定位')
+
+    const promise = this.promisify<LocationResult>((resolve, reject) => {
+      uni.getLocation({
+        type: 'gcj02',
+        isHighAccuracy: accuracy === 'high' || accuracy === 'best',
+        highAccuracyExpireTime: accuracy === 'best' ? 3000 : undefined,
+        geocode: needAddress,
+        success: (res: any) => {
+          const result: LocationResult = {
+            latitude: res.latitude,
+            longitude: res.longitude,
+            speed: res.speed,
+            accuracy: res.accuracy,
+            altitude: res.altitude,
+            verticalAccuracy: res.verticalAccuracy,
+            horizontalAccuracy: res.horizontalAccuracy
+          }
+
+          if (res.address) {
+            result.address = {
+              country: res.address.country,
+              province: res.address.province,
+              city: res.address.city,
+              district: res.address.district,
+              street: res.address.street,
+              detail: res.address.detail
+            }
+          }
+
+          if (cache) {
+            this.locationCache = {
+              result,
+              timestamp: Date.now()
+            }
+          }
+
+          resolve(result)
+        },
+        fail: (err: any) => reject(err)
+      })
+    }, timeout)
+
+    return this.handleResult(promise)
+  }
+
+  /**
+   * 清除定位缓存
+   */
+  public clearLocationCache(): void {
+    this.locationCache = null
+    this.log('定位缓存已清除')
+  }
+
+  /**
+   * 打开地图选择位置
+   */
+  public chooseLocation(): Promise<BridgeResult<LocationResult>> {
+    this.log('打开地图选择位置')
+
+    const promise = this.promisify<LocationResult>((resolve, reject) => {
+      uni.chooseLocation({
+        success: (res: any) => {
+          resolve({
+            latitude: res.latitude,
+            longitude: res.longitude,
+            address: {
+              detail: res.address,
+              city: res.name
+            }
+          })
+        },
+        fail: (err: any) => reject(err)
+      })
+    })
+
+    return this.handleResult(promise)
+  }
+
+  /**
+   * 获取权限状态
+   * @param permission 权限类型
+   */
+  public getPermissionState(permission: PermissionType): Promise<BridgeResult<boolean>> {
+    this.log('检查权限状态:', permission)
+
+    const permissionMap: Record<PermissionType, string> = {
+      [PermissionType.CAMERA]: 'scope.camera',
+      [PermissionType.PHOTO]: 'scope.writePhotosAlbum',
+      [PermissionType.LOCATION]: 'scope.userLocation',
+      [PermissionType.MICROPHONE]: 'scope.record',
+      [PermissionType.CONTACTS]: 'scope.address',
+      [PermissionType.NOTIFICATION]: 'scope.userInfo'
+    }
+
+    const promise = this.promisify<boolean>((resolve) => {
+      uni.getSetting({
+        success: (res: any) => {
+          resolve(res.authSetting[permissionMap[permission]] === true)
+        },
+        fail: () => resolve(false)
+      })
+    })
+
+    return this.handleResult(promise)
+  }
+
+  /**
+   * 请求权限
+   * @param permission 权限类型
+   */
+  public requestPermission(
+    permission: PermissionType
+  ): Promise<BridgeResult<boolean>> {
+    this.log('请求权限:', permission)
+
+    const permissionMap: Record<PermissionType, string> = {
+      [PermissionType.CAMERA]: 'scope.camera',
+      [PermissionType.PHOTO]: 'scope.writePhotosAlbum',
+      [PermissionType.LOCATION]: 'scope.userLocation',
+      [PermissionType.MICROPHONE]: 'scope.record',
+      [PermissionType.CONTACTS]: 'scope.address',
+      [PermissionType.NOTIFICATION]: 'scope.userInfo'
+    }
+
+    const promise = this.promisify<boolean>((resolve, reject) => {
+      uni.authorize({
+        scope: permissionMap[permission],
+        success: () => resolve(true),
+        fail: () => resolve(false)
+      })
+    })
+
+    return this.handleResult(promise)
+  }
+
+  /**
+   * 打开权限设置页面
+   */
+  public openPermissionSetting(): Promise<BridgeResult<boolean>> {
+    this.log('打开权限设置页面')
+
+    const promise = this.promisify<boolean>((resolve) => {
+      uni.openSetting({
+        success: () => resolve(true),
+        fail: () => resolve(false)
+      })
+    })
+
+    return this.handleResult(promise)
+  }
+
+  /**
+   * 震动反馈
+   * @param type 震动类型
+   */
+  public vibrate(type: 'short' | 'long' = 'short'): Promise<BridgeResult<void>> {
+    this.log('震动反馈:', type)
+
+    const promise = this.promisify<void>((resolve, reject) => {
+      if (type === 'short') {
+        uni.vibrateShort({
+          success: () => resolve(),
+          fail: (err: any) => reject(err)
+        })
+      } else {
+        uni.vibrateLong({
+          success: () => resolve(),
+          fail: (err: any) => reject(err)
+        })
+      }
+    })
+
+    return this.handleResult(promise)
+  }
+
+  /**
+   * 复制到剪贴板
+   * @param text 要复制的文本
+   */
+  public copyToClipboard(text: string): Promise<BridgeResult<void>> {
+    this.log('复制到剪贴板:', text)
+
+    const promise = this.promisify<void>((resolve, reject) => {
+      uni.setClipboardData({
+        data: text,
+        success: () => resolve(),
+        fail: (err: any) => reject(err)
+      })
+    })
+
+    return this.handleResult(promise)
+  }
+
+  /**
+   * 从剪贴板获取内容
+   */
+  public getClipboardContent(): Promise<BridgeResult<string>> {
+    this.log('从剪贴板获取内容')
+
+    const promise = this.promisify<string>((resolve, reject) => {
+      uni.getClipboardData({
+        success: (res: any) => resolve(res.data),
+        fail: (err: any) => reject(err)
+      })
+    })
+
+    return this.handleResult(promise)
+  }
+
+  /**
+   * 拨打电话
+   * @param phoneNumber 电话号码
+   */
+  public makePhoneCall(phoneNumber: string): Promise<BridgeResult<void>> {
+    this.log('拨打电话:', phoneNumber)
+
+    const promise = this.promisify<void>((resolve, reject) => {
+      uni.makePhoneCall({
+        phoneNumber,
+        success: () => resolve(),
+        fail: (err: any) => reject(err)
+      })
+    })
+
+    return this.handleResult(promise)
+  }
+
+  /**
+   * 节流包装的扫码
+   */
+  public throttleScanCode = throttle(
+    () => this.scanCode(),
+    this.config.throttleInterval
+  )
+
+  /**
+   * 防抖包装的拍照
+   */
+  public debounceTakePhoto = debounce(
+    (options?: CameraOptions) => this.takePhoto(options),
+    this.config.debounceDelay
+  )
+
+  /**
+   * 获取系统信息
+   */
+  public getSystemInfo(): Promise<BridgeResult<UniApp.GetSystemInfoResult>> {
+    const promise = this.promisify<UniApp.GetSystemInfoResult>((resolve) => {
+      resolve(uni.getSystemInfoSync())
+    })
+    return this.handleResult(promise)
+  }
+
+  /**
+   * 显示加载提示
+   * @param title 提示文字
+   * @param mask 是否显示遮罩
+   */
+  public showLoading(title: string = '加载中...', mask: boolean = true): void {
+    uni.showLoading({ title, mask })
+  }
+
+  /**
+   * 隐藏加载提示
+   */
+  public hideLoading(): void {
+    uni.hideLoading()
+  }
+
+  /**
+   * 显示消息提示
+   * @param title 提示文字
+   * @param icon 图标
+   * @param duration 持续时间
+   */
+  public showToast(
+    title: string,
+    icon: UniApp.ShowToastOptions['icon'] = 'none',
+    duration: number = 2000
+  ): void {
+    uni.showToast({ title, icon, duration })
+  }
+
+  /**
+   * 更新配置
+   * @param config 新配置
+   */
+  public updateConfig(config: Partial<BridgeConfig>): void {
+    this.config = { ...this.config, ...config }
+  }
+
+  /**
+   * 获取当前配置
+   */
+  public getConfig(): Readonly<Required<BridgeConfig>> {
+    return { ...this.config }
+  }
+
+  /**
+   * 销毁实例
+   */
+  public destroy(): void {
+    this.clearLocationCache()
+    if (NativeBridge.instance === this) {
+      NativeBridge.instance = null
+    }
+  }
+}
+
+/**
+ * 全局原生桥接实例
+ */
+export const nativeBridge = NativeBridge.getInstance()
+
+/**
+ * 创建原生桥接实例
+ * @param config 配置
+ */
+export function createNativeBridge(config?: BridgeConfig): NativeBridge {
+  return new NativeBridge(config)
+}
+
+/**
+ * 便捷函数：扫码
+ */
+export async function scanCode(): Promise<BridgeResult<ScanResult>> {
+  return nativeBridge.scanCode()
+}
+
+/**
+ * 便捷函数：拍照
+ */
+export async function takePhoto(
+  options?: CameraOptions
+): Promise<BridgeResult<ImageResult>> {
+  return nativeBridge.takePhoto(options)
+}
+
+/**
+ * 便捷函数：获取定位
+ */
+export async function getLocation(
+  options?: LocationOptions
+): Promise<BridgeResult<LocationResult>> {
+  return nativeBridge.getLocation(options)
+}
+
+export default NativeBridge

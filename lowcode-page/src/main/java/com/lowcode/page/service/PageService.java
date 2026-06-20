@@ -233,6 +233,64 @@ public class PageService extends ServiceImpl<PageMapper, Page> {
         return roots;
     }
 
+    public List<Page> getMobilePages(Long appId) {
+        LambdaQueryWrapper<Page> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Page::getAppId, appId);
+        wrapper.and(w -> w.like(Page::getLayoutType, "MOBILE_")
+                .or().eq(Page::getPageType, "MOBILE"));
+        wrapper.eq(Page::getStatus, 1);
+        wrapper.orderByDesc(Page::getCreatedTime);
+        return list(wrapper);
+    }
+
+    public String generateMobilePageSchema(Long pageId) {
+        Page page = getPageDetail(pageId);
+        Map<String, Object> schema = new LinkedHashMap<>();
+
+        schema.put("pageId", page.getId());
+        schema.put("pageName", page.getPageName());
+        schema.put("pageCode", page.getPageCode());
+        schema.put("layoutType", page.getLayoutType());
+        schema.put("version", page.getVersion());
+
+        if (page.getMobileConfig() != null && !page.getMobileConfig().isEmpty()) {
+            schema.put("mobileConfig", JSON.parse(page.getMobileConfig()));
+        } else {
+            Map<String, Object> defaultMobileConfig = new LinkedHashMap<>();
+            defaultMobileConfig.put("safeArea", true);
+            defaultMobileConfig.put("orientation", "portrait");
+            defaultMobileConfig.put("statusBarColor", "#ffffff");
+            defaultMobileConfig.put("navigationBarColor", "#ffffff");
+            schema.put("mobileConfig", defaultMobileConfig);
+        }
+
+        List<Map<String, Object>> componentSchemas = new ArrayList<>();
+        if (page.getComponents() != null) {
+            for (PageComponent component : page.getComponents()) {
+                Map<String, Object> componentSchema = new LinkedHashMap<>();
+                componentSchema.put("id", component.getComponentId());
+                componentSchema.put("type", component.getComponentType());
+                componentSchema.put("name", component.getComponentName());
+                componentSchema.put("parentId", component.getParentId());
+
+                if (component.getPropsConfig() != null && !component.getPropsConfig().isEmpty()) {
+                    componentSchema.put("props", JSON.parse(component.getPropsConfig()));
+                }
+                if (component.getStyleConfig() != null && !component.getStyleConfig().isEmpty()) {
+                    componentSchema.put("style", JSON.parse(component.getStyleConfig()));
+                }
+                if (component.getEventConfig() != null && !component.getEventConfig().isEmpty()) {
+                    componentSchema.put("events", JSON.parse(component.getEventConfig()));
+                }
+
+                componentSchemas.add(componentSchema);
+            }
+        }
+        schema.put("components", componentSchemas);
+
+        return JSON.toJSONString(schema, true);
+    }
+
     private void clearHomePage(Long appId) {
         LambdaQueryWrapper<Page> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Page::getAppId, appId);

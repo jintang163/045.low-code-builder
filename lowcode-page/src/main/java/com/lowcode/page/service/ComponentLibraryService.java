@@ -75,4 +75,24 @@ public class ComponentLibraryService extends ServiceImpl<ComponentLibraryMapper,
         }
         removeById(id);
     }
+
+    public List<ComponentLibrary> getMobileComponents() {
+        LambdaQueryWrapper<ComponentLibrary> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ComponentLibrary::getStatus, 1);
+        wrapper.and(w -> w.eq(ComponentLibrary::getSupportPlatform, "MOBILE")
+                .or().eq(ComponentLibrary::getSupportPlatform, "ALL"));
+        wrapper.orderByAsc(ComponentLibrary::getComponentCategory, ComponentLibrary::getId);
+        return list(wrapper);
+    }
+
+    public List<ComponentLibrary> getComponentsByPlatform(String platform) {
+        LambdaQueryWrapper<ComponentLibrary> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ComponentLibrary::getStatus, 1);
+        if (platform != null && !platform.isEmpty()) {
+            wrapper.and(w -> w.eq(ComponentLibrary::getSupportPlatform, platform)
+                    .or().eq(ComponentLibrary::getSupportPlatform, "ALL"));
+        }
+        wrapper.orderByAsc(ComponentLibrary::getComponentCategory, ComponentLibrary::getId);
+        return list(wrapper);
+    }
 }

@@ -13,11 +13,15 @@ public class ComponentLibrary extends BaseEntity {
     private String componentType;
     private String componentName;
     private String componentCategory;
+    private String supportPlatform;
     private String icon;
     private String description;
     private String defaultProps;
     private String defaultStyle;
     private String propSchema;
+    private String eventConfig;
+    private String touchEvents;
+    private String gestureSupport;
     private Integer isCustom;
     private String componentCode;
     private Integer status;

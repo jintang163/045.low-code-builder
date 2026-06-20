@@ -1,0 +1,757 @@
+#set($entityNameLower = ${entityName.substring(0,1).toLowerCase()} + ${entityName.substring(1)})
+#set($entityNameCamel = ${entityNameLower})
+<template>
+  <view
+    class="${entityNameCamel}-form"
+    @touchstart="onTouchStart"
+    @touchmove="onTouchMove"
+    @touchend="onTouchEnd"
+  >
+    <scroll-view
+      class="form-scroll"
+      scroll-y
+      :scroll-into-view="scrollIntoView"
+      @scroll="onScroll"
+    >
+      <view class="form-header">
+        <text class="form-title">{{ isEdit ? '编辑' : '新增' }}${entityName}</text>
+        <text class="form-subtitle">请填写以下信息</text>
+      </view>
+
+      <view class="form-content">
+        <form-item
+          v-for="field in formFields"
+          :key="field.name"
+          :label="field.comment"
+          :prop="field.name"
+          :type="getFieldType(field)"
+          :required="field.required"
+          :placeholder="getPlaceholder(field)"
+          :options="field.options || []"
+          :maxlength="field.maxlength"
+          :rows="field.rows || 1"
+          :disabled="field.disabled"
+          :error="errors[field.name]"
+          v-model="formData[field.name]"
+          @change="onFieldChange(field.name, $event)"
+          @focus="onFieldFocus(field.name)"
+          @blur="onFieldBlur(field.name)"
+          @scan="onScan(field.name)"
+          @photo="onTakePhoto(field.name)"
+          @album="onChooseImage(field.name)"
+        />
+
+        <view class="form-section">
+          <view class="section-title">
+            <text class="section-icon">📷</text>
+            <text>图片上传</text>
+          </view>
+          <view class="upload-area">
+            <view
+              v-for="(img, index) in images"
+              :key="index"
+              class="upload-item"
+            >
+              <image :src="img" mode="aspectFill" class="upload-image" />
+              <view class="upload-remove" @tap="removeImage(index)">
+                <text>×</text>
+              </view>
+            </view>
+            <view
+              v-if="images.length < maxImageCount"
+              class="upload-btn"
+              @tap="chooseImage"
+            >
+              <text class="upload-icon">+</text>
+              <text class="upload-text">上传图片</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="form-section">
+          <view class="section-title">
+            <text class="section-icon">📍</text>
+            <text>位置信息</text>
+          </view>
+          <view class="location-picker" @tap="chooseLocation">
+            <text v-if="location" class="location-text">{{ location }}</text>
+            <text v-else class="location-placeholder">点击选择位置</text>
+            <text class="location-arrow">›</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="form-footer">
+        <view class="footer-btn footer-btn--secondary" @tap="onReset">
+          <text>重置</text>
+        </view>
+        <view class="footer-btn footer-btn--primary" :disabled="submitting" @tap="onSubmit">
+          <text v-if="submitting">提交中...</text>
+          <text v-else>{{ isEdit ? '保存修改' : '提交' }}</text>
+        </view>
+      </view>
+
+      <view class="form-safe-area"></view>
+    </scroll-view>
+
+    <view v-if="showSwipeHint" class="swipe-hint">
+      <text>→ 右滑取消</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { onShow, onLoad } from '@dcloudio/uni-app'
+import { createTouchHandler } from '@/utils/touch'
+import { use${entityName}Form } from '@/composables/use${entityName}'
+import FormItem from '@/components/FormItem.vue'
+import type { ${entityName} } from '@/api/${entityNameCamel}'
+
+interface FormField {
+  name: string
+  comment: string
+  type: string
+  required: boolean
+  maxlength?: number
+  rows?: number
+  disabled?: boolean
+  options?: Array<{ label: string; value: any }>
+}
+
+const props = defineProps<{
+  id?: string | number
+}>()
+
+const route = useRoute()
+const id = computed(() => props.id || route.query.id)
+const isEdit = computed(() => !!id.value)
+
+const formData = reactive<Partial<${entityName}>>({})
+const errors = reactive<Record<string, string>>({})
+const images = ref<string[]>([])
+const maxImageCount = 9
+const location = ref('')
+const submitting = ref(false)
+const scrollIntoView = ref('')
+const showSwipeHint = ref(false)
+
+const touchHandler = createTouchHandler({
+  minDistance: 50,
+  velocityThreshold: 0.3
+})
+
+const {
+  loading,
+  error,
+  fetchDetail,
+  createItem,
+  updateItem,
+  validateForm
+} = use${entityName}Form()
+
+const formFields = ref<FormField[]>([
+#foreach($field in $fields)
+#if($field.name != 'id' && $field.name != 'createTime' && $field.name != 'updateTime')
+  {
+    name: '${field.name}',
+    comment: '${field.comment}',
+    type: '${getFieldInputType($field)}',
+    required: ${field.required || false},
+#if($field.maxlength)
+    maxlength: ${field.maxlength},
+#end
+#if($field.type == 'textarea')
+    rows: 4,
+#end
+    disabled: false
+#if($field.options)
+    ,
+    options: [
+#foreach($option in $field.options)
+      { label: '${option.label}', value: ${option.value} }#if($velocityCount < $field.options.size()),#end
+#end
+    ]
+#end
+  }#if($velocityCount < $fields.size() && $field.name != 'createTime' && $field.name != 'updateTime'),#end
+#end
+])
+
+const getFieldInputType = (field: any) => {
+  const typeMap: Record<string, string> = {
+    'String': 'input',
+    'Integer': 'number',
+    'Long': 'number',
+    'Double': 'digit',
+    'Float': 'digit',
+    'BigDecimal': 'digit',
+    'Boolean': 'switch',
+    'Date': 'date',
+    'LocalDate': 'date',
+    'LocalDateTime': 'datetime',
+    'Time': 'time',
+    'textarea': 'textarea',
+    'select': 'select',
+    'radio': 'radio',
+    'checkbox': 'checkbox'
+  }
+  return typeMap[field.type] || 'input'
+}
+
+const getFieldType = (field: FormField) => field.type
+
+const getPlaceholder = (field: FormField) => {
+  const typeText: Record<string, string> = {
+    input: '请输入',
+    number: '请输入数字',
+    digit: '请输入金额',
+    textarea: '请输入内容',
+    select: '请选择',
+    radio: '请选择',
+    checkbox: '请选择',
+    date: '请选择日期',
+    datetime: '请选择日期时间',
+    time: '请选择时间',
+    switch: ''
+  }
+  return `${typeText[field.type] || '请输入'}${field.comment}`
+}
+
+const initFormData = () => {
+  formFields.value.forEach(field => {
+    const defaultValue = getDefaultValue(field.type)
+    if (formData[field.name as keyof ${entityName}] === undefined) {
+      (formData as any)[field.name] = defaultValue
+    }
+  })
+}
+
+const getDefaultValue = (type: string) => {
+  const defaults: Record<string, any> = {
+    input: '',
+    number: null,
+    digit: null,
+    textarea: '',
+    select: null,
+    radio: null,
+    checkbox: [],
+    date: '',
+    datetime: '',
+    time: '',
+    switch: false
+  }
+  return defaults[type] ?? ''
+}
+
+const onFieldChange = (fieldName: string, value: any) => {
+  ;(formData as any)[fieldName] = value
+  if (errors[fieldName]) {
+    delete errors[fieldName]
+  }
+}
+
+const onFieldFocus = (fieldName: string) => {
+  scrollIntoView.value = ''
+  nextTick(() => {
+    scrollIntoView.value = fieldName
+  })
+}
+
+const onFieldBlur = async (fieldName: string) => {
+  const field = formFields.value.find(f => f.name === fieldName)
+  if (field?.required) {
+    const value = (formData as any)[fieldName]
+    if (value === null || value === undefined || value === '') {
+      errors[fieldName] = `${field.comment}不能为空`
+    } else {
+      delete errors[fieldName]
+    }
+  }
+}
+
+const onScan = async (fieldName: string) => {
+  try {
+    const res = await uni.scanCode({
+      onlyFromCamera: false,
+      scanType: ['qrCode', 'barCode']
+    })
+    ;(formData as any)[fieldName] = res.result
+    uni.showToast({ title: '扫描成功', icon: 'success' })
+  } catch {
+    uni.showToast({ title: '扫描取消', icon: 'none' })
+  }
+}
+
+const onTakePhoto = async (fieldName: string) => {
+  try {
+    const res = await uni.chooseImage({
+      count: 1,
+      sourceType: ['camera'],
+      sizeType: ['compressed']
+    })
+    const tempFilePath = res.tempFilePaths[0]
+    const uploadRes = await uploadImage(tempFilePath)
+    ;(formData as any)[fieldName] = uploadRes.url
+  } catch {
+    uni.showToast({ title: '拍照取消', icon: 'none' })
+  }
+}
+
+const onChooseImage = async (fieldName: string) => {
+  try {
+    const res = await uni.chooseImage({
+      count: 1,
+      sourceType: ['album'],
+      sizeType: ['compressed']
+    })
+    const tempFilePath = res.tempFilePaths[0]
+    const uploadRes = await uploadImage(tempFilePath)
+    ;(formData as any)[fieldName] = uploadRes.url
+  } catch {
+    uni.showToast({ title: '选择取消', icon: 'none' })
+  }
+}
+
+const chooseImage = async () => {
+  const remaining = maxImageCount - images.value.length
+  if (remaining <= 0) {
+    uni.showToast({ title: `最多上传${maxImageCount}张图片`, icon: 'none' })
+    return
+  }
+  try {
+    const res = await uni.chooseImage({
+      count: remaining,
+      sourceType: ['album', 'camera'],
+      sizeType: ['compressed']
+    })
+    for (const path of res.tempFilePaths) {
+      const uploadRes = await uploadImage(path)
+      images.value.push(uploadRes.url)
+    }
+  } catch {
+    console.log('选择图片取消')
+  }
+}
+
+const removeImage = (index: number) => {
+  images.value.splice(index, 1)
+}
+
+const uploadImage = async (filePath: string): Promise<{ url: string }> => {
+  return new Promise((resolve, reject) => {
+    uni.showLoading({ title: '上传中...' })
+    uni.uploadFile({
+      url: '/api/upload',
+      filePath,
+      name: 'file',
+      success: (res) => {
+        uni.hideLoading()
+        if (res.statusCode === 200) {
+          try {
+            const data = JSON.parse(res.data)
+            resolve({ url: data.url || data.data })
+          } catch {
+            resolve({ url: res.data })
+          }
+        } else {
+          reject(new Error('上传失败'))
+        }
+      },
+      fail: () => {
+        uni.hideLoading()
+        reject(new Error('上传失败'))
+      }
+    })
+  })
+}
+
+const chooseLocation = async () => {
+  try {
+    const res = await uni.chooseLocation()
+    location.value = res.address || res.name
+    formData.latitude = res.latitude as any
+    formData.longitude = res.longitude as any
+  } catch {
+    console.log('选择位置取消')
+  }
+}
+
+const validate = (): boolean => {
+  const newErrors: Record<string, string> = {}
+  formFields.value.forEach(field => {
+    if (field.required) {
+      const value = (formData as any)[field.name]
+      if (value === null || value === undefined || value === '' || (Array.isArray(value) && value.length === 0)) {
+        newErrors[field.name] = `${field.comment}不能为空`
+      }
+    }
+  })
+  Object.assign(errors, newErrors)
+  return Object.keys(errors).length === 0
+}
+
+const onSubmit = async () => {
+  if (submitting.value) return
+  if (!validate()) {
+    const firstError = Object.keys(errors)[0]
+    scrollIntoView.value = ''
+    nextTick(() => {
+      scrollIntoView.value = firstError
+    })
+    uni.showToast({ title: errors[firstError], icon: 'none' })
+    return
+  }
+
+  submitting.value = true
+  try {
+    const submitData = { ...formData, images: images.value }
+    if (isEdit.value) {
+      await updateItem(id.value!, submitData)
+      uni.showToast({ title: '修改成功', icon: 'success' })
+    } else {
+      await createItem(submitData)
+      uni.showToast({ title: '创建成功', icon: 'success' })
+    }
+    setTimeout(() => {
+      uni.navigateBack()
+    }, 1500)
+  } catch (err) {
+    uni.showToast({ title: err instanceof Error ? err.message : '提交失败', icon: 'none' })
+  } finally {
+    submitting.value = false
+  }
+}
+
+const onReset = () => {
+  uni.showModal({
+    title: '确认重置',
+    content: '确定要重置表单吗？已填写的内容将被清空。',
+    success: (res) => {
+      if (res.confirm) {
+        Object.keys(formData).forEach(key => {
+          delete (formData as any)[key]
+        })
+        images.value = []
+        location.value = ''
+        Object.keys(errors).forEach(key => {
+          delete errors[key]
+        })
+        initFormData()
+        uni.showToast({ title: '已重置', icon: 'success' })
+      }
+    }
+  })
+}
+
+const onScroll = () => {
+  // 滚动时收起键盘
+  uni.hideKeyboard()
+}
+
+const onTouchStart = (e: TouchEvent) => {
+  touchHandler.onTouchStart(e)
+}
+
+const onTouchMove = (e: TouchEvent) => {
+  const state = touchHandler.onTouchMove(e)
+  if (state.direction === 'left' && state.distance > 30) {
+    showSwipeHint.value = true
+  }
+}
+
+const onTouchEnd = (e: TouchEvent) => {
+  showSwipeHint.value = false
+  const state = touchHandler.onTouchEnd(e)
+  if (state.isSwipe() && state.direction === 'left') {
+    onBack()
+  }
+}
+
+const onBack = () => {
+  const hasChanges = Object.keys(formData).some(key => {
+    const value = (formData as any)[key]
+    return value !== null && value !== undefined && value !== '' && (Array.isArray(value) ? value.length > 0 : true)
+  })
+  if (hasChanges) {
+    uni.showModal({
+      title: '确认离开',
+      content: '表单内容尚未保存，确定要离开吗？',
+      success: (res) => {
+        if (res.confirm) {
+          uni.navigateBack()
+        }
+      }
+    })
+  } else {
+    uni.navigateBack()
+  }
+}
+
+onLoad(async (options) => {
+  initFormData()
+  if (options?.id) {
+    try {
+      const data = await fetchDetail(options.id)
+      Object.assign(formData, data)
+      if (data.images) {
+        images.value = Array.isArray(data.images) ? data.images : []
+      }
+    } catch {
+      uni.showToast({ title: '加载失败', icon: 'none' })
+    }
+  }
+})
+
+onShow(() => {
+  if (id.value && !formData.id) {
+    fetchDetail(id.value).then(data => {
+      Object.assign(formData, data)
+    })
+  }
+})
+
+onMounted(() => {
+  initFormData()
+})
+</script>
+
+<style lang="scss" scoped>
+.${entityNameCamel}-form {
+  min-height: 100vh;
+  background-color: #f7f8fa;
+}
+
+.form-scroll {
+  height: 100vh;
+}
+
+.form-header {
+  padding: 48rpx 32rpx 32rpx;
+  background: linear-gradient(135deg, #1989fa 0%, #007dff 100%);
+  color: #fff;
+
+  .form-title {
+    font-size: 44rpx;
+    font-weight: 600;
+    display: block;
+    margin-bottom: 12rpx;
+  }
+
+  .form-subtitle {
+    font-size: 28rpx;
+    opacity: 0.8;
+    display: block;
+  }
+}
+
+.form-content {
+  padding: 24rpx;
+}
+
+.form-section {
+  background-color: #fff;
+  border-radius: 16rpx;
+  padding: 32rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+
+  .section-title {
+    display: flex;
+    align-items: center;
+    margin-bottom: 24rpx;
+
+    .section-icon {
+      font-size: 32rpx;
+      margin-right: 12rpx;
+    }
+
+    text {
+      font-size: 30rpx;
+      font-weight: 600;
+      color: #323233;
+    }
+  }
+}
+
+.upload-area {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.upload-item {
+  position: relative;
+  width: 180rpx;
+  height: 180rpx;
+  border-radius: 12rpx;
+  overflow: hidden;
+
+  .upload-image {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .upload-remove {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 40rpx;
+    height: 40rpx;
+    background-color: rgba(0, 0, 0, 0.6);
+    border-radius: 0 0 0 12rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    text {
+      font-size: 32rpx;
+      color: #fff;
+      line-height: 1;
+      margin-top: -4rpx;
+    }
+  }
+}
+
+.upload-btn {
+  width: 180rpx;
+  height: 180rpx;
+  border: 2rpx dashed #c8c9cc;
+  border-radius: 12rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+
+  &:active {
+    border-color: #1989fa;
+    background-color: #f0f7ff;
+  }
+
+  .upload-icon {
+    font-size: 56rpx;
+    color: #c8c9cc;
+    line-height: 1;
+    margin-bottom: 8rpx;
+  }
+
+  .upload-text {
+    font-size: 24rpx;
+    color: #969799;
+  }
+}
+
+.location-picker {
+  display: flex;
+  align-items: center;
+  padding: 24rpx;
+  background-color: #f7f8fa;
+  border-radius: 12rpx;
+  transition: background-color 0.2s ease;
+
+  &:active {
+    background-color: #ebedf0;
+  }
+
+  .location-text {
+    flex: 1;
+    font-size: 28rpx;
+    color: #323233;
+  }
+
+  .location-placeholder {
+    flex: 1;
+    font-size: 28rpx;
+    color: #969799;
+  }
+
+  .location-arrow {
+    font-size: 32rpx;
+    color: #c8c9cc;
+    margin-left: 16rpx;
+  }
+}
+
+.form-footer {
+  display: flex;
+  gap: 24rpx;
+  padding: 24rpx 32rpx;
+  background-color: #fff;
+  box-shadow: 0 -2rpx 20rpx rgba(0, 0, 0, 0.06);
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+
+  .footer-btn {
+    flex: 1;
+    height: 88rpx;
+    border-radius: 44rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+
+    &:active {
+      opacity: 0.8;
+      transform: scale(0.98);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      pointer-events: none;
+    }
+
+    text {
+      font-size: 30rpx;
+      font-weight: 500;
+    }
+
+    &--secondary {
+      background-color: #f7f8fa;
+
+      text {
+        color: #646566;
+      }
+    }
+
+    &--primary {
+      background-color: #1989fa;
+
+      text {
+        color: #fff;
+      }
+    }
+  }
+}
+
+.form-safe-area {
+  height: env(safe-area-inset-bottom);
+}
+
+.swipe-hint {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  padding: 24rpx 48rpx;
+  border-radius: 48rpx;
+  font-size: 28rpx;
+  z-index: 1000;
+  pointer-events: none;
+  animation: fadeIn 0.2s ease;
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(0.9);
+    }
+    to {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+  }
+}
+</style>

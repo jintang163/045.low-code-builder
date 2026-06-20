@@ -1,0 +1,552 @@
+#set($entityNameLower = ${entityName.substring(0,1).toLowerCase()} + ${entityName.substring(1)})
+#set($entityNameCamel = ${entityNameLower})
+#set($packageName = "${packageName}")
+#set($author = "${author}")
+#set($date = "${date}")
+/**
+ * @file ${entityNameCamel}.ts
+ * @description ${entityName} Pinia 状态管理
+ * @author ${author}
+ * @since ${date}
+ */
+
+import { defineStore } from 'pinia'
+import { ref, computed, reactive } from 'vue'
+import {
+  get${entityName}List,
+  get${entityName}Detail,
+  create${entityName},
+  update${entityName},
+  delete${entityName},
+  batchDelete${entityName},
+  type ${entityName},
+  type ${entityName}QueryParams,
+  type ${entityName}CreateParams,
+  type ${entityName}UpdateParams,
+  type PageResult
+} from '@/api/${entityNameCamel}'
+
+/**
+ * 列表缓存配置
+ */
+interface ListCache {
+  /** 数据列表 */
+  list: ${entityName}[]
+  /** 总记录数 */
+  total: number
+  /** 缓存时间戳 */
+  timestamp: number
+  /** 查询参数哈希 */
+  queryHash: string
+}
+
+/**
+ * 详情缓存配置
+ */
+interface DetailCache {
+  /** 详情数据 */
+  data: ${entityName}
+  /** 缓存时间戳 */
+  timestamp: number
+}
+
+/**
+ * 分页状态
+ */
+interface PaginationState {
+  /** 当前页码 */
+  pageNum: number
+  /** 每页数量 */
+  pageSize: number
+  /** 总记录数 */
+  total: number
+  /** 总页数 */
+  pages: number
+  /** 是否还有更多 */
+  hasMore: boolean
+  /** 是否正在加载 */
+  loading: boolean
+  /** 是否正在刷新 */
+  refreshing: boolean
+}
+
+/**
+ * 生成查询参数哈希
+ */
+const generateQueryHash = (params: Record<string, any>): string => {
+  const sorted = Object.keys(params)
+    .sort()
+    .map(key => `${key}=${params[key]}`)
+    .join('&')
+  return btoa(encodeURIComponent(sorted))
+}
+
+/**
+ * 缓存过期时间（5分钟）
+ */
+const CACHE_EXPIRE_TIME = 5 * 60 * 1000
+
+/**
+ * 是否启用缓存
+ */
+const ENABLE_CACHE = true
+
+export const use${entityName}Store = defineStore('${entityNameCamel}', () => {
+  const listCache = reactive<Map<string, ListCache>>(new Map())
+  const detailCache = reactive<Map<string | number, DetailCache>>(new Map())
+
+  const list = ref<${entityName}[]>([])
+  const detail = ref<${entityName} | null>(null)
+  const selectedItems = ref<${entityName}[]>([])
+  const selectedIds = ref<Array<string | number>>([])
+
+  const listLoading = ref(false)
+  const detailLoading = ref(false)
+  const createLoading = ref(false)
+  const updateLoading = ref(false)
+  const deleteLoading = ref(false)
+
+  const listError = ref<Error | null>(null)
+  const detailError = ref<Error | null>(null)
+  const createError = ref<Error | null>(null)
+  const updateError = ref<Error | null>(null)
+  const deleteError = ref<Error | null>(null)
+
+  const pagination = reactive<PaginationState>({
+    pageNum: 1,
+    pageSize: 10,
+    total: 0,
+    pages: 0,
+    hasMore: true,
+    loading: false,
+    refreshing: false
+  })
+
+  const isEmpty = computed(() => list.value.length === 0 && !listLoading.value)
+  const selectedCount = computed(() => selectedIds.value.length)
+  const hasSelected = computed(() => selectedIds.value.length > 0)
+  const isAllSelected = computed(() => {
+    return list.value.length > 0 && selectedIds.value.length === list.value.length
+  })
+
+  /**
+   * 检查缓存是否有效
+   */
+  const isCacheValid = (timestamp: number): boolean => {
+    if (!ENABLE_CACHE) return false
+    return Date.now() - timestamp < CACHE_EXPIRE_TIME
+  }
+
+  /**
+   * 获取列表（带缓存）
+   */
+  const fetchList = async (
+    params?: ${entityName}QueryParams,
+    forceRefresh = false
+  ): Promise<PageResult<${entityName}>> => {
+    listLoading.value = true
+    listError.value = null
+
+    const queryParams = {
+      pageNum: pagination.pageNum,
+      pageSize: pagination.pageSize,
+      ...params
+    }
+    const queryHash = generateQueryHash(queryParams)
+
+    try {
+      if (!forceRefresh) {
+        const cached = listCache.get(queryHash)
+        if (cached && isCacheValid(cached.timestamp) && cached.queryHash === queryHash) {
+          list.value = cached.list
+          pagination.total = cached.total
+          pagination.pages = Math.ceil(cached.total / pagination.pageSize)
+          pagination.hasMore = pagination.pageNum < pagination.pages
+          return {
+            list: cached.list,
+            total: cached.total,
+            pageNum: pagination.pageNum,
+            pageSize: pagination.pageSize,
+            pages: pagination.pages
+          }
+        }
+      }
+
+      const result = await get${entityName}List(queryParams)
+      const data = result.data
+
+      list.value = pagination.pageNum === 1 ? data.list : [...list.value, ...data.list]
+      pagination.total = data.total
+      pagination.pages = data.pages || Math.ceil(data.total / pagination.pageSize)
+      pagination.hasMore = pagination.pageNum < pagination.pages
+
+      if (ENABLE_CACHE && pagination.pageNum === 1) {
+        listCache.set(queryHash, {
+          list: data.list,
+          total: data.total,
+          timestamp: Date.now(),
+          queryHash
+        })
+      }
+
+      return data
+    } catch (error) {
+      listError.value = error instanceof Error ? error : new Error(String(error))
+      throw listError.value
+    } finally {
+      listLoading.value = false
+    }
+  }
+
+  /**
+   * 刷新列表
+   */
+  const refreshList = async (
+    params?: ${entityName}QueryParams
+  ): Promise<PageResult<${entityName}>> => {
+    pagination.pageNum = 1
+    pagination.hasMore = true
+    return fetchList(params, true)
+  }
+
+  /**
+   * 加载更多
+   */
+  const loadMore = async (
+    params?: ${entityName}QueryParams
+  ): Promise<PageResult<${entityName}>> => {
+    if (!pagination.hasMore || listLoading.value) {
+      return {
+        list: [],
+        total: pagination.total,
+        pageNum: pagination.pageNum,
+        pageSize: pagination.pageSize,
+        pages: pagination.pages
+      }
+    }
+    pagination.pageNum++
+    return fetchList(params)
+  }
+
+  /**
+   * 获取详情（带缓存）
+   */
+  const fetchDetail = async (
+    id: string | number,
+    forceRefresh = false
+  ): Promise<${entityName}> => {
+    detailLoading.value = true
+    detailError.value = null
+
+    try {
+      if (!forceRefresh) {
+        const cached = detailCache.get(id)
+        if (cached && isCacheValid(cached.timestamp)) {
+          detail.value = cached.data
+          return cached.data
+        }
+      }
+
+      const result = await get${entityName}Detail(id)
+      const data = result.data
+
+      detail.value = data
+
+      if (ENABLE_CACHE) {
+        detailCache.set(id, {
+          data,
+          timestamp: Date.now()
+        })
+      }
+
+      return data
+    } catch (error) {
+      detailError.value = error instanceof Error ? error : new Error(String(error))
+      throw detailError.value
+    } finally {
+      detailLoading.value = false
+    }
+  }
+
+  /**
+   * 创建
+   */
+  const create = async (
+    data: ${entityName}CreateParams
+  ): Promise<${entityName}> => {
+    createLoading.value = true
+    createError.value = null
+
+    try {
+      const result = await create${entityName}(data)
+      const created = result.data
+
+      clearCache()
+      list.value.unshift(created)
+      pagination.total++
+
+      return created
+    } catch (error) {
+      createError.value = error instanceof Error ? error : new Error(String(error))
+      throw createError.value
+    } finally {
+      createLoading.value = false
+    }
+  }
+
+  /**
+   * 更新
+   */
+  const update = async (
+    id: string | number,
+    data: ${entityName}UpdateParams
+  ): Promise<${entityName}> => {
+    updateLoading.value = true
+    updateError.value = null
+
+    try {
+      const result = await update${entityName}(id, data)
+      const updated = result.data
+
+      const index = list.value.findIndex(item => item.id === id)
+      if (index !== -1) {
+        list.value[index] = { ...list.value[index], ...updated }
+      }
+
+      if (detail.value?.id === id) {
+        detail.value = { ...detail.value, ...updated }
+      }
+
+      detailCache.delete(id)
+      listCache.clear()
+
+      return updated
+    } catch (error) {
+      updateError.value = error instanceof Error ? error : new Error(String(error))
+      throw updateError.value
+    } finally {
+      updateLoading.value = false
+    }
+  }
+
+  /**
+   * 删除
+   */
+  const remove = async (id: string | number): Promise<void> => {
+    deleteLoading.value = true
+    deleteError.value = null
+
+    try {
+      await delete${entityName}(id)
+
+      const index = list.value.findIndex(item => item.id === id)
+      if (index !== -1) {
+        list.value.splice(index, 1)
+        pagination.total--
+      }
+
+      if (detail.value?.id === id) {
+        detail.value = null
+      }
+
+      const selectedIndex = selectedIds.value.indexOf(id)
+      if (selectedIndex !== -1) {
+        selectedIds.value.splice(selectedIndex, 1)
+        selectedItems.value = selectedItems.value.filter(item => item.id !== id)
+      }
+
+      detailCache.delete(id)
+      listCache.clear()
+    } catch (error) {
+      deleteError.value = error instanceof Error ? error : new Error(String(error))
+      throw deleteError.value
+    } finally {
+      deleteLoading.value = false
+    }
+  }
+
+  /**
+   * 批量删除
+   */
+  const batchRemove = async (ids: Array<string | number>): Promise<void> => {
+    deleteLoading.value = true
+    deleteError.value = null
+
+    try {
+      await batchDelete${entityName}(ids)
+
+      list.value = list.value.filter(item => !ids.includes(item.id!))
+      pagination.total -= ids.length
+
+      if (detail.value && ids.includes(detail.value.id!)) {
+        detail.value = null
+      }
+
+      selectedIds.value = selectedIds.value.filter(id => !ids.includes(id))
+      selectedItems.value = selectedItems.value.filter(item => !ids.includes(item.id!))
+
+      ids.forEach(id => detailCache.delete(id))
+      listCache.clear()
+    } catch (error) {
+      deleteError.value = error instanceof Error ? error : new Error(String(error))
+      throw deleteError.value
+    } finally {
+      deleteLoading.value = false
+    }
+  }
+
+  /**
+   * 选择/取消选择单个
+   */
+  const toggleSelect = (item: ${entityName}): void => {
+    const index = selectedIds.value.indexOf(item.id!)
+    if (index === -1) {
+      selectedIds.value.push(item.id!)
+      selectedItems.value.push(item)
+    } else {
+      selectedIds.value.splice(index, 1)
+      selectedItems.value.splice(index, 1)
+    }
+  }
+
+  /**
+   * 全选/取消全选
+   */
+  const toggleSelectAll = (): void => {
+    if (isAllSelected.value) {
+      selectedIds.value = []
+      selectedItems.value = []
+    } else {
+      selectedIds.value = list.value.map(item => item.id!)
+      selectedItems.value = [...list.value]
+    }
+  }
+
+  /**
+   * 清除选择
+   */
+  const clearSelection = (): void => {
+    selectedIds.value = []
+    selectedItems.value = []
+  }
+
+  /**
+   * 清除缓存
+   */
+  const clearCache = (): void => {
+    listCache.clear()
+    detailCache.clear()
+  }
+
+  /**
+   * 清除列表缓存
+   */
+  const clearListCache = (): void => {
+    listCache.clear()
+  }
+
+  /**
+   * 清除详情缓存
+   */
+  const clearDetailCache = (id?: string | number): void => {
+    if (id) {
+      detailCache.delete(id)
+    } else {
+      detailCache.clear()
+    }
+  }
+
+  /**
+   * 重置分页
+   */
+  const resetPagination = (): void => {
+    pagination.pageNum = 1
+    pagination.pageSize = 10
+    pagination.total = 0
+    pagination.pages = 0
+    pagination.hasMore = true
+    pagination.loading = false
+    pagination.refreshing = false
+  }
+
+  /**
+   * 重置状态
+   */
+  const reset = (): void => {
+    list.value = []
+    detail.value = null
+    selectedItems.value = []
+    selectedIds.value = []
+    listLoading.value = false
+    detailLoading.value = false
+    createLoading.value = false
+    updateLoading.value = false
+    deleteLoading.value = false
+    listError.value = null
+    detailError.value = null
+    createError.value = null
+    updateError.value = null
+    deleteError.value = null
+    resetPagination()
+    clearCache()
+  }
+
+  /**
+   * 按ID查找列表项
+   */
+  const findById = (id: string | number): ${entityName} | undefined => {
+    return list.value.find(item => item.id === id)
+  }
+
+  /**
+   * 更新列表中的单项
+   */
+  const updateListItem = (id: string | number, data: Partial<${entityName}>): void => {
+    const index = list.value.findIndex(item => item.id === id)
+    if (index !== -1) {
+      list.value[index] = { ...list.value[index], ...data }
+    }
+  }
+
+  return {
+    list,
+    detail,
+    selectedItems,
+    selectedIds,
+    listLoading,
+    detailLoading,
+    createLoading,
+    updateLoading,
+    deleteLoading,
+    listError,
+    detailError,
+    createError,
+    updateError,
+    deleteError,
+    pagination,
+    isEmpty,
+    selectedCount,
+    hasSelected,
+    isAllSelected,
+    fetchList,
+    refreshList,
+    loadMore,
+    fetchDetail,
+    create,
+    update,
+    remove,
+    batchRemove,
+    toggleSelect,
+    toggleSelectAll,
+    clearSelection,
+    clearCache,
+    clearListCache,
+    clearDetailCache,
+    resetPagination,
+    reset,
+    findById,
+    updateListItem
+  }
+})
+
+export default use${entityName}Store

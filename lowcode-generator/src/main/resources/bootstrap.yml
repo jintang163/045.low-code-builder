@@ -37,3 +37,8 @@ mybatis-plus:
       logic-delete-field: deleted
       logic-delete-value: 1
       logic-not-delete-value: 0
+
+preview:
+  base-url: http://localhost:8080
+  token-expire-hours: 24
+  qr-code-size: 256

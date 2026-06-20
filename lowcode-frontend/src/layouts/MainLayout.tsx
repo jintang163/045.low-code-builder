@@ -16,6 +16,9 @@ import {
   CodeSandboxOutlined,
   BugOutlined,
   SafetyOutlined,
+  MobileOutlined,
+  CodeOutlined,
+  EyeOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAppStore } from '@/store/appStore'
@@ -92,6 +95,23 @@ const MainLayout: React.FC = ({ children }: { children?: React.ReactNode }) => {
       label: '权限管理',
     },
     {
+      key: '/mobile',
+      icon: <MobileOutlined />,
+      label: '移动端',
+      children: [
+        {
+          key: '/mobile/generator',
+          icon: <CodeOutlined />,
+          label: '代码生成器',
+        },
+        {
+          key: '/mobile/preview',
+          icon: <EyeOutlined />,
+          label: '模拟器预览',
+        },
+      ],
+    },
+    {
       key: '/settings',
       icon: <SettingOutlined />,
       label: '系统设置',
@@ -142,6 +162,9 @@ const MainLayout: React.FC = ({ children }: { children?: React.ReactNode }) => {
       '/component': '组件管理',
       '/component/debugger': '组件调试',
       '/permission': '权限管理',
+      '/mobile': '移动端',
+      '/mobile/generator': '代码生成器',
+      '/mobile/preview': '模拟器预览',
     }
     const parts = location.pathname.split('/').filter(Boolean)
     const items = []

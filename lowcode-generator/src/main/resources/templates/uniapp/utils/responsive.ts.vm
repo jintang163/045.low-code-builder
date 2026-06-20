@@ -1,0 +1,525 @@
+#set($packageName = "${packageName}")
+#set($author = "${author}")
+#set($date = "${date}")
+/**
+ * @file responsive.ts
+ * @description 响应式布局工具类
+ * @author ${author}
+ * @since ${date}
+ */
+
+/**
+ * 设备类型枚举
+ */
+export enum DeviceType {
+  /** 手机 */
+  PHONE = 'phone',
+  /** 平板 */
+  TABLET = 'tablet',
+  /** 桌面端 */
+  DESKTOP = 'desktop'
+}
+
+/**
+ * 屏幕方向枚举
+ */
+export enum Orientation {
+  /** 竖屏 */
+  PORTRAIT = 'portrait',
+  /** 横屏 */
+  LANDSCAPE = 'landscape'
+}
+
+/**
+ * 屏幕尺寸信息
+ */
+export interface ScreenInfo {
+  /** 屏幕宽度 (px) */
+  screenWidth: number
+  /** 屏幕高度 (px) */
+  screenHeight: number
+  /** 可使用窗口宽度 (px) */
+  windowWidth: number
+  /** 可使用窗口高度 (px) */
+  windowHeight: number
+  /** 设备像素比 */
+  pixelRatio: number
+  /** 状态栏高度 (px) */
+  statusBarHeight: number
+  /** 屏幕方向 */
+  orientation: Orientation
+  /** 设备类型 */
+  deviceType: DeviceType
+}
+
+/**
+ * 安全区域信息
+ */
+export interface SafeArea {
+  /** 安全区域左上角横坐标 */
+  left: number
+  /** 安全区域右上角横坐标 */
+  right: number
+  /** 安全区域左上角纵坐标 */
+  top: number
+  /** 安全区域右下角纵坐标 */
+  bottom: number
+  /** 安全区域宽度 */
+  width: number
+  /** 安全区域高度 */
+  height: number
+}
+
+/**
+ * 设备信息
+ */
+export interface DeviceInfo {
+  /** 设备品牌 */
+  brand: string
+  /** 设备型号 */
+  model: string
+  /** 操作系统 */
+  platform: string
+  /** 系统版本 */
+  system: string
+  /** 设备类型 */
+  deviceType: DeviceType
+  /** 是否为 iPhone X 系列 */
+  isIPhoneX: boolean
+  /** 是否为 iPad */
+  isIPad: boolean
+  /** 是否为 Android */
+  isAndroid: boolean
+  /** 是否为 iOS */
+  isIOS: boolean
+}
+
+/**
+ * 响应式配置
+ */
+export interface ResponsiveConfig {
+  /** 设计稿宽度 (px) */
+  designWidth?: number
+  /** 平板判定最小宽度 (px) */
+  tabletMinWidth?: number
+  /** 桌面端判定最小宽度 (px) */
+  desktopMinWidth?: number
+  /** iPhone X 底部安全区域高度 (px) */
+  iPhoneXBottomInset?: number
+}
+
+/**
+ * 默认配置
+ */
+const DEFAULT_CONFIG: Required<ResponsiveConfig> = {
+  designWidth: 750,
+  tabletMinWidth: 768,
+  desktopMinWidth: 1024,
+  iPhoneXBottomInset: 34
+}
+
+/**
+ * 响应式布局工具类
+ */
+export class ResponsiveUtils {
+  private config: Required<ResponsiveConfig>
+  private screenInfo: ScreenInfo | null = null
+  private safeArea: SafeArea | null = null
+  private deviceInfo: DeviceInfo | null = null
+
+  /**
+   * 构造函数
+   * @param config 配置
+   */
+  constructor(config: ResponsiveConfig = {}) {
+    this.config = { ...DEFAULT_CONFIG, ...config }
+    this.init()
+  }
+
+  /**
+   * 初始化
+   */
+  private init(): void {
+    try {
+      this.screenInfo = this.getSystemInfoSync()
+      this.safeArea = this.getSafeAreaSync()
+      this.deviceInfo = this.getDeviceInfoSync()
+    } catch (e) {
+      console.warn('[ResponsiveUtils] 获取设备信息失败:', e)
+    }
+  }
+
+  /**
+   * 获取系统信息
+   */
+  private getSystemInfoSync(): ScreenInfo {
+    const info = uni.getSystemInfoSync()
+    const orientation =
+      info.windowWidth > info.windowHeight
+        ? Orientation.LANDSCAPE
+        : Orientation.PORTRAIT
+    const deviceType = this.detectDeviceType(info.windowWidth)
+
+    return {
+      screenWidth: info.screenWidth,
+      screenHeight: info.screenHeight,
+      windowWidth: info.windowWidth,
+      windowHeight: info.windowHeight,
+      pixelRatio: info.pixelRatio,
+      statusBarHeight: info.statusBarHeight || 0,
+      orientation,
+      deviceType
+    }
+  }
+
+  /**
+   * 获取安全区域
+   */
+  private getSafeAreaSync(): SafeArea {
+    const info = uni.getSystemInfoSync()
+
+    if (info.safeArea) {
+      return {
+        left: info.safeArea.left,
+        right: info.safeArea.right,
+        top: info.safeArea.top,
+        bottom: info.safeArea.bottom,
+        width: info.safeArea.width,
+        height: info.safeArea.height
+      }
+    }
+
+    return {
+      left: 0,
+      right: info.windowWidth,
+      top: info.statusBarHeight || 0,
+      bottom: info.windowHeight,
+      width: info.windowWidth,
+      height: info.windowHeight - (info.statusBarHeight || 0)
+    }
+  }
+
+  /**
+   * 获取设备信息
+   */
+  private getDeviceInfoSync(): DeviceInfo {
+    const info = uni.getSystemInfoSync()
+    const model = info.model || ''
+    const platform = (info.platform || '').toLowerCase()
+    const isIOS = platform === 'ios' || platform === 'devtools' && /ios|iphone|ipad/i.test(model)
+    const isAndroid = platform === 'android'
+    const isIPad = /ipad/i.test(model)
+    const isIPhoneX = this.checkIPhoneX(model, info.windowHeight)
+
+    return {
+      brand: info.brand || '',
+      model,
+      platform,
+      system: info.system || '',
+      deviceType: this.detectDeviceType(info.windowWidth),
+      isIPhoneX,
+      isIPad,
+      isAndroid,
+      isIOS
+    }
+  }
+
+  /**
+   * 检测设备类型
+   * @param width 屏幕宽度
+   */
+  private detectDeviceType(width: number): DeviceType {
+    if (width >= this.config.desktopMinWidth) {
+      return DeviceType.DESKTOP
+    }
+    if (width >= this.config.tabletMinWidth) {
+      return DeviceType.TABLET
+    }
+    return DeviceType.PHONE
+  }
+
+  /**
+   * 检查是否为 iPhone X 系列
+   * @param model 设备型号
+   * @param height 屏幕高度
+   */
+  private checkIPhoneX(model: string, height: number): boolean {
+    const iPhoneXModels = [
+      'iPhone X',
+      'iPhone XS',
+      'iPhone XS Max',
+      'iPhone XR',
+      'iPhone 11',
+      'iPhone 11 Pro',
+      'iPhone 11 Pro Max',
+      'iPhone 12',
+      'iPhone 12 Mini',
+      'iPhone 12 Pro',
+      'iPhone 12 Pro Max',
+      'iPhone 13',
+      'iPhone 13 Mini',
+      'iPhone 13 Pro',
+      'iPhone 13 Pro Max',
+      'iPhone 14',
+      'iPhone 14 Plus',
+      'iPhone 14 Pro',
+      'iPhone 14 Pro Max'
+    ]
+
+    if (iPhoneXModels.some((m) => model.includes(m))) {
+      return true
+    }
+
+    const iPhoneHeights = [812, 896, 844, 926, 852, 932]
+    return iPhoneHeights.includes(height)
+  }
+
+  /**
+   * rpx 转 px
+   * @param rpx rpx 值
+   * @param designWidth 设计稿宽度，默认使用配置值
+   */
+  public rpxToPx(rpx: number, designWidth?: number): number {
+    const dWidth = designWidth || this.config.designWidth
+    const windowWidth = this.screenInfo?.windowWidth || 375
+    return (rpx / dWidth) * windowWidth
+  }
+
+  /**
+   * px 转 rpx
+   * @param px px 值
+   * @param designWidth 设计稿宽度，默认使用配置值
+   */
+  public pxToRpx(px: number, designWidth?: number): number {
+    const dWidth = designWidth || this.config.designWidth
+    const windowWidth = this.screenInfo?.windowWidth || 375
+    return (px / windowWidth) * dWidth
+  }
+
+  /**
+   * 获取屏幕信息
+   */
+  public getScreenInfo(): Readonly<ScreenInfo> {
+    if (!this.screenInfo) {
+      this.screenInfo = this.getSystemInfoSync()
+    }
+    return { ...this.screenInfo }
+  }
+
+  /**
+   * 获取安全区域
+   */
+  public getSafeArea(): Readonly<SafeArea> {
+    if (!this.safeArea) {
+      this.safeArea = this.getSafeAreaSync()
+    }
+    return { ...this.safeArea }
+  }
+
+  /**
+   * 获取设备信息
+   */
+  public getDeviceInfo(): Readonly<DeviceInfo> {
+    if (!this.deviceInfo) {
+      this.deviceInfo = this.getDeviceInfoSync()
+    }
+    return { ...this.deviceInfo }
+  }
+
+  /**
+   * 获取顶部安全距离（状态栏高度）
+   */
+  public getStatusBarHeight(): number {
+    return this.screenInfo?.statusBarHeight || 0
+  }
+
+  /**
+   * 获取底部安全距离
+   */
+  public getBottomSafeArea(): number {
+    if (!this.safeArea || !this.screenInfo) return 0
+    return this.screenInfo.screenHeight - this.safeArea.bottom
+  }
+
+  /**
+   * 获取导航栏高度（包含状态栏）
+   * @param customNavHeight 自定义导航栏高度
+   */
+  public getNavBarHeight(customNavHeight: number = 44): number {
+    return this.getStatusBarHeight() + customNavHeight
+  }
+
+  /**
+   * 获取 TabBar 高度
+   */
+  public getTabBarHeight(): number {
+    const deviceInfo = this.getDeviceInfo()
+    const baseHeight = 50
+    return deviceInfo.isIPhoneX
+      ? baseHeight + this.config.iPhoneXBottomInset
+      : baseHeight
+  }
+
+  /**
+   * 判断是否为手机
+   */
+  public isPhone(): boolean {
+    return this.screenInfo?.deviceType === DeviceType.PHONE
+  }
+
+  /**
+   * 判断是否为平板
+   */
+  public isTablet(): boolean {
+    return this.screenInfo?.deviceType === DeviceType.TABLET
+  }
+
+  /**
+   * 判断是否为桌面端
+   */
+  public isDesktop(): boolean {
+    return this.screenInfo?.deviceType === DeviceType.DESKTOP
+  }
+
+  /**
+   * 判断是否为横屏
+   */
+  public isLandscape(): boolean {
+    return this.screenInfo?.orientation === Orientation.LANDSCAPE
+  }
+
+  /**
+   * 判断是否为竖屏
+   */
+  public isPortrait(): boolean {
+    return this.screenInfo?.orientation === Orientation.PORTRAIT
+  }
+
+  /**
+   * 是否为 iPhone X 系列（刘海屏）
+   */
+  public isIPhoneXSeries(): boolean {
+    return this.deviceInfo?.isIPhoneX || false
+  }
+
+  /**
+   * 适配安全区域的样式
+   * @param position 位置
+   */
+  public getSafeAreaStyle(
+    position: 'top' | 'bottom' | 'left' | 'right' | 'all' = 'all'
+  ): Record<string, string | number> {
+    const safeArea = this.getSafeArea()
+    const style: Record<string, string | number> = {}
+
+    if (position === 'top' || position === 'all') {
+      style.paddingTop = safeArea.top + 'px'
+    }
+    if (position === 'bottom' || position === 'all') {
+      style.paddingBottom = this.getBottomSafeArea() + 'px'
+    }
+    if (position === 'left' || position === 'all') {
+      style.paddingLeft = safeArea.left + 'px'
+    }
+    if (position === 'right' || position === 'all') {
+      style.paddingRight = this.screenInfo
+        ? this.screenInfo.screenWidth - safeArea.right + 'px'
+        : '0px'
+    }
+
+    return style
+  }
+
+  /**
+   * 计算响应式尺寸
+   * @param size 设计稿尺寸 (px)
+   * @param minSize 最小尺寸 (px)
+   * @param maxSize 最大尺寸 (px)
+   */
+  public clamp(size: number, minSize?: number, maxSize?: number): number {
+    const result = this.rpxToPx(size * 2)
+    if (minSize !== undefined && result < minSize) return minSize
+    if (maxSize !== undefined && result > maxSize) return maxSize
+    return result
+  }
+
+  /**
+   * 监听屏幕尺寸变化
+   * @param callback 回调函数
+   */
+  public onWindowResize(callback: (info: ScreenInfo) => void): void {
+    uni.onWindowResize(() => {
+      this.screenInfo = this.getSystemInfoSync()
+      this.safeArea = this.getSafeAreaSync()
+      callback(this.getScreenInfo())
+    })
+  }
+
+  /**
+   * 取消监听屏幕尺寸变化
+   */
+  public offWindowResize(): void {
+    uni.offWindowResize()
+  }
+
+  /**
+   * 刷新设备信息
+   */
+  public refresh(): void {
+    this.screenInfo = this.getSystemInfoSync()
+    this.safeArea = this.getSafeAreaSync()
+    this.deviceInfo = this.getDeviceInfoSync()
+  }
+
+  /**
+   * 更新配置
+   * @param config 新配置
+   */
+  public updateConfig(config: Partial<ResponsiveConfig>): void {
+    this.config = { ...this.config, ...config }
+  }
+
+  /**
+   * 获取当前配置
+   */
+  public getConfig(): Readonly<Required<ResponsiveConfig>> {
+    return { ...this.config }
+  }
+}
+
+/**
+ * rpx 转 px 便捷函数
+ * @param rpx rpx 值
+ * @param designWidth 设计稿宽度
+ */
+export function rpx2px(rpx: number, designWidth: number = 750): number {
+  const windowWidth = uni.getSystemInfoSync().windowWidth
+  return (rpx / designWidth) * windowWidth
+}
+
+/**
+ * px 转 rpx 便捷函数
+ * @param px px 值
+ * @param designWidth 设计稿宽度
+ */
+export function px2rpx(px: number, designWidth: number = 750): number {
+  const windowWidth = uni.getSystemInfoSync().windowWidth
+  return (px / windowWidth) * designWidth
+}
+
+/**
+ * 创建响应式工具实例
+ * @param config 配置
+ */
+export function createResponsiveUtils(
+  config?: ResponsiveConfig
+): ResponsiveUtils {
+  return new ResponsiveUtils(config)
+}
+
+/**
+ * 默认响应式工具实例
+ */
+export const responsive = new ResponsiveUtils()
+
+export default ResponsiveUtils

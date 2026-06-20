@@ -1,0 +1,377 @@
+#set($packageName = "${packageName}")
+#set($author = "${author}")
+#set($date = "${date}")
+/**
+ * @file touch.ts
+ * @description 触屏事件处理工具类
+ * @author ${author}
+ * @since ${date}
+ */
+
+/**
+ * 触摸点坐标信息
+ */
+export interface TouchPoint {
+  /** X 坐标 */
+  x: number
+  /** Y 坐标 */
+  y: number
+  /** 触摸点标识符 */
+  identifier: number
+}
+
+/**
+ * 触摸方向枚举
+ */
+export enum TouchDirection {
+  /** 向上滑动 */
+  UP = 'up',
+  /** 向下滑动 */
+  DOWN = 'down',
+  /** 向左滑动 */
+  LEFT = 'left',
+  /** 向右滑动 */
+  RIGHT = 'right',
+  /** 无方向 */
+  NONE = 'none'
+}
+
+/**
+ * 触摸状态
+ */
+export interface TouchState {
+  /** 起始触摸点 */
+  startPoint: TouchPoint | null
+  /** 当前触摸点 */
+  currentPoint: TouchPoint | null
+  /** 上一个触摸点 */
+  prevPoint: TouchPoint | null
+  /** 起始时间戳 */
+  startTime: number
+  /** 结束时间戳 */
+  endTime: number
+  /** X 轴偏移量 */
+  deltaX: number
+  /** Y 轴偏移量 */
+  deltaY: number
+  /** 移动总距离 */
+  distance: number
+  /** 移动速度 (px/ms) */
+  velocity: number
+  /** 触摸方向 */
+  direction: TouchDirection
+  /** 是否正在触摸 */
+  isTouching: boolean
+}
+
+/**
+ * 触摸事件配置
+ */
+export interface TouchConfig {
+  /** 最小移动距离阈值 (px) */
+  minDistance?: number
+  /** 速度阈值 (px/ms) */
+  velocityThreshold?: number
+  /** 节流时间 (ms) */
+  throttleTime?: number
+}
+
+/**
+ * 默认触摸配置
+ */
+const DEFAULT_CONFIG: Required<TouchConfig> = {
+  minDistance: 10,
+  velocityThreshold: 0.3,
+  throttleTime: 16
+}
+
+/**
+ * 触屏事件处理工具类
+ */
+export class TouchHandler {
+  private config: Required<TouchConfig>
+  private state: TouchState
+  private lastMoveTime: number = 0
+
+  /**
+   * 构造函数
+   * @param config 触摸配置
+   */
+  constructor(config: TouchConfig = {}) {
+    this.config = { ...DEFAULT_CONFIG, ...config }
+    this.state = this.createInitialState()
+  }
+
+  /**
+   * 创建初始触摸状态
+   */
+  private createInitialState(): TouchState {
+    return {
+      startPoint: null,
+      currentPoint: null,
+      prevPoint: null,
+      startTime: 0,
+      endTime: 0,
+      deltaX: 0,
+      deltaY: 0,
+      distance: 0,
+      velocity: 0,
+      direction: TouchDirection.NONE,
+      isTouching: false
+    }
+  }
+
+  /**
+   * 从事件中提取触摸点
+   * @param event 触摸事件
+   */
+  public getTouchPoint(event: TouchEvent): TouchPoint | null {
+    const touch = event.touches[0] || event.changedTouches[0]
+    if (!touch) return null
+    return {
+      x: touch.clientX,
+      y: touch.clientY,
+      identifier: touch.identifier
+    }
+  }
+
+  /**
+   * 计算两点之间的距离
+   * @param p1 点1
+   * @param p2 点2
+   */
+  public getDistance(p1: TouchPoint, p2: TouchPoint): number {
+    const dx = p2.x - p1.x
+    const dy = p2.y - p1.y
+    return Math.sqrt(dx * dx + dy * dy)
+  }
+
+  /**
+   * 计算触摸方向
+   * @param p1 起始点
+   * @param p2 结束点
+   */
+  public getDirection(p1: TouchPoint, p2: TouchPoint): TouchDirection {
+    const dx = p2.x - p1.x
+    const dy = p2.y - p1.y
+    const absDx = Math.abs(dx)
+    const absDy = Math.abs(dy)
+
+    if (Math.max(absDx, absDy) < this.config.minDistance) {
+      return TouchDirection.NONE
+    }
+
+    if (absDx > absDy) {
+      return dx > 0 ? TouchDirection.RIGHT : TouchDirection.LEFT
+    } else {
+      return dy > 0 ? TouchDirection.DOWN : TouchDirection.UP
+    }
+  }
+
+  /**
+   * 计算触摸速度
+   * @param distance 移动距离
+   * @param time 时间间隔 (ms)
+   */
+  public getVelocity(distance: number, time: number): number {
+    if (time <= 0) return 0
+    return distance / time
+  }
+
+  /**
+   * 处理触摸开始事件
+   * @param event 触摸事件
+   */
+  public onTouchStart(event: TouchEvent): TouchState {
+    const point = this.getTouchPoint(event)
+    if (!point) return this.state
+
+    this.state = {
+      startPoint: point,
+      currentPoint: point,
+      prevPoint: point,
+      startTime: Date.now(),
+      endTime: 0,
+      deltaX: 0,
+      deltaY: 0,
+      distance: 0,
+      velocity: 0,
+      direction: TouchDirection.NONE,
+      isTouching: true
+    }
+    this.lastMoveTime = this.state.startTime
+
+    return { ...this.state }
+  }
+
+  /**
+   * 处理触摸移动事件（带节流）
+   * @param event 触摸事件
+   */
+  public onTouchMove(event: TouchEvent): TouchState {
+    if (!this.state.isTouching || !this.state.startPoint) return this.state
+
+    const now = Date.now()
+    if (now - this.lastMoveTime < this.config.throttleTime) {
+      return { ...this.state }
+    }
+    this.lastMoveTime = now
+
+    const currentPoint = this.getTouchPoint(event)
+    if (!currentPoint) return this.state
+
+    const startPoint = this.state.startPoint
+    const prevPoint = this.state.currentPoint || startPoint
+
+    const deltaX = currentPoint.x - startPoint.x
+    const deltaY = currentPoint.y - startPoint.y
+    const distance = this.getDistance(startPoint, currentPoint)
+    const timeDiff = now - this.state.startTime
+    const velocity = this.getVelocity(distance, timeDiff)
+    const direction = this.getDirection(startPoint, currentPoint)
+
+    this.state = {
+      ...this.state,
+      currentPoint,
+      prevPoint,
+      deltaX,
+      deltaY,
+      distance,
+      velocity,
+      direction
+    }
+
+    return { ...this.state }
+  }
+
+  /**
+   * 处理触摸结束事件
+   * @param event 触摸事件
+   */
+  public onTouchEnd(event: TouchEvent): TouchState {
+    if (!this.state.isTouching) return this.state
+
+    const endPoint = this.getTouchPoint(event)
+    const endTime = Date.now()
+
+    if (endPoint && this.state.startPoint) {
+      const deltaX = endPoint.x - this.state.startPoint.x
+      const deltaY = endPoint.y - this.state.startPoint.y
+      const distance = this.getDistance(this.state.startPoint, endPoint)
+      const timeDiff = endTime - this.state.startTime
+      const velocity = this.getVelocity(distance, timeDiff)
+      const direction = this.getDirection(this.state.startPoint, endPoint)
+
+      this.state = {
+        ...this.state,
+        currentPoint: endPoint,
+        endTime,
+        deltaX,
+        deltaY,
+        distance,
+        velocity,
+        direction,
+        isTouching: false
+      }
+    } else {
+      this.state.endTime = endTime
+      this.state.isTouching = false
+    }
+
+    const result = { ...this.state }
+    this.reset()
+    return result
+  }
+
+  /**
+   * 重置触摸状态
+   */
+  public reset(): void {
+    this.state = this.createInitialState()
+    this.lastMoveTime = 0
+  }
+
+  /**
+   * 获取当前触摸状态
+   */
+  public getState(): TouchState {
+    return { ...this.state }
+  }
+
+  /**
+   * 判断是否为快速滑动
+   */
+  public isSwipe(): boolean {
+    return (
+      this.state.distance >= this.config.minDistance &&
+      this.state.velocity >= this.config.velocityThreshold
+    )
+  }
+
+  /**
+   * 判断是否为水平滑动
+   */
+  public isHorizontal(): boolean {
+    return (
+      this.state.direction === TouchDirection.LEFT ||
+      this.state.direction === TouchDirection.RIGHT
+    )
+  }
+
+  /**
+   * 判断是否为垂直滑动
+   */
+  public isVertical(): boolean {
+    return (
+      this.state.direction === TouchDirection.UP ||
+      this.state.direction === TouchDirection.DOWN
+    )
+  }
+}
+
+/**
+ * 防抖函数
+ * @param fn 要防抖的函数
+ * @param delay 延迟时间 (ms)
+ */
+export function debounce<T extends (...args: any[]) => any>(
+  fn: T,
+  delay: number
+): (...args: Parameters<T>) => void {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  return function (this: any, ...args: Parameters<T>) {
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(() => {
+      fn.apply(this, args)
+    }, delay)
+  }
+}
+
+/**
+ * 节流函数
+ * @param fn 要节流的函数
+ * @param delay 节流间隔 (ms)
+ */
+export function throttle<T extends (...args: any[]) => any>(
+  fn: T,
+  delay: number
+): (...args: Parameters<T>) => void {
+  let lastTime = 0
+  return function (this: any, ...args: Parameters<T>) {
+    const now = Date.now()
+    if (now - lastTime >= delay) {
+      lastTime = now
+      fn.apply(this, args)
+    }
+  }
+}
+
+/**
+ * 创建触摸处理实例的工厂函数
+ * @param config 配置
+ */
+export function createTouchHandler(config?: TouchConfig): TouchHandler {
+  return new TouchHandler(config)
+}
+
+export default TouchHandler

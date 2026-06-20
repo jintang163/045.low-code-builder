@@ -1,0 +1,194 @@
+# ${appName}
+
+> ${appDesc}
+
+## 项目简介
+
+本项目基于 [uni-app](https://uniapp.dcloud.net.cn/) 框架开发，支持多端发布：
+- H5 网页端
+- 微信小程序
+- 支付宝小程序
+- App（Android / iOS）
+
+**技术栈：**
+- uni-app ${uniAppVersion}
+- Vue 3.x
+- TypeScript
+- Pinia 状态管理
+- Vite 构建工具
+
+## 快速开始
+
+### 环境要求
+
+- Node.js >= 16.0.0
+- npm >= 8.0.0 或 pnpm >= 7.0.0
+- HBuilderX（推荐用于 App 端开发）
+- 微信开发者工具（用于微信小程序开发）
+
+### 安装依赖
+
+```bash
+npm install
+```
+
+### 本地开发
+
+#### H5 端
+
+```bash
+npm run dev:h5
+```
+
+启动后访问：http://localhost:5173
+
+#### 微信小程序
+
+```bash
+npm run dev:mp-weixin
+```
+
+启动后，使用微信开发者工具打开 `dist/dev/mp-weixin` 目录。
+
+#### 支付宝小程序
+
+```bash
+npm run dev:mp-alipay
+```
+
+启动后，使用支付宝开发者工具打开 `dist/dev/mp-alipay` 目录。
+
+#### App 端
+
+```bash
+npm run dev:app
+```
+
+启动后，使用 HBuilderX 打开项目，连接手机进行调试。
+
+## 多平台构建命令
+
+### 生产构建
+
+```bash
+# H5 端
+npm run build:h5
+
+# 微信小程序
+npm run build:mp-weixin
+
+# 支付宝小程序
+npm run build:mp-alipay
+
+# App 端
+npm run build:app
+```
+
+### 类型检查
+
+```bash
+npm run type-check
+```
+
+## 目录结构说明
+
+```
+${appCode}/
+├── src/
+│   ├── api/                 # 接口请求
+│   │   └── index.ts
+│   ├── components/          # 公共组件
+│   │   ├── MobileCollapse.vue
+│   │   ├── MobileGrid.vue
+│   │   ├── MobileGridItem.vue
+│   │   ├── MobilePullRefresh.vue
+│   │   ├── MobileSearchBar.vue
+│   │   ├── MobileSwipeCell.vue
+│   │   ├── MobileSwiper.vue
+│   │   ├── MobileTabBar.vue
+│   │   └── MobileWaterfall.vue
+│   ├── pages/               # 页面文件
+│   │   └── index/
+│   │       └── index.vue
+│   ├── store/               # Pinia 状态管理
+│   │   └── index.ts
+│   ├── utils/               # 工具函数
+│   │   ├── eventBus.ts
+│   │   ├── gesture.ts
+│   │   ├── nativeBridge.ts
+│   │   ├── responsive.ts
+│   │   └── touch.ts
+│   ├── App.vue              # 应用入口组件
+│   ├── main.ts              # 应用入口文件
+│   └── uni.scss             # 全局样式
+├── static/                  # 静态资源
+├── index.html               # HTML 模板
+├── package.json             # 项目配置
+├── tsconfig.json            # TypeScript 配置
+├── vite.config.ts           # Vite 配置
+├── manifest.json            # 应用配置
+├── pages.json               # 页面路由配置
+├── .eslintrc.js             # ESLint 配置
+└── .prettierrc.js           # Prettier 配置
+```
+
+## 开发规范
+
+### 代码规范
+
+项目使用 ESLint + Prettier 进行代码规范检查：
+
+```bash
+# 代码检查
+npm run lint
+
+# 自动修复
+npm run lint:fix
+```
+
+### 页面开发
+
+1. 在 `src/pages/` 目录下创建页面文件
+2. 在 `pages.json` 中配置页面路由
+3. 页面组件使用 `.vue` 后缀，遵循 Vue 3 Composition API 规范
+
+### 组件开发
+
+1. 公共组件放在 `src/components/` 目录
+2. 组件命名使用 PascalCase 风格
+3. 组件必须包含 `name` 属性
+
+## 部署说明
+
+### H5 部署
+
+执行 `npm run build:h5` 后，将 `dist/build/h5` 目录下的文件部署到静态服务器即可。
+
+### 小程序部署
+
+1. 执行对应平台的构建命令
+2. 使用对应平台的开发者工具打开构建产物
+3. 上传代码并提交审核
+
+### App 部署
+
+1. 使用 HBuilderX 打开项目
+2. 配置云端证书
+3. 进行云打包
+4. 生成 apk/ipa 文件进行发布
+
+## 注意事项
+
+1. 小程序端不支持部分 CSS 特性，开发时请注意兼容性
+2. App 端的原生能力需要使用 uni-app 的 API 进行调用
+3. 各平台的 API 差异请参考 [uni-app 官方文档](https://uniapp.dcloud.net.cn/api/)
+4. 网络请求地址需要在各平台后台配置合法域名
+
+## License
+
+MIT License
+
+---
+
+**生成时间：** ${generateTime}
+**版本：** ${version}
