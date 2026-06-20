@@ -162,6 +162,14 @@ public class DataModelService extends ServiceImpl<DataModelMapper, DataModel> {
             }
         }
 
+        if (versionService != null) {
+            try {
+                versionService.createSnapshot(newModel.getId(), "模型更新", 2);
+            } catch (Exception e) {
+                log.warn("创建版本快照失败", e);
+            }
+        }
+
         return getModelDetail(newModel.getId());
     }
 
@@ -428,6 +436,14 @@ public class DataModelService extends ServiceImpl<DataModelMapper, DataModel> {
             case "LONGBLOB":
             case "BINARY":
             case "VARBINARY":
+                return FieldTypeEnum.BLOB;
+            case "ENUM":
+                return FieldTypeEnum.ENUM;
+            default:
+                return FieldTypeEnum.STRING;
+        }
+    }
+}
                 return FieldTypeEnum.BLOB;
             case "ENUM":
                 return FieldTypeEnum.ENUM;

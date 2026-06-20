@@ -25,6 +25,7 @@ import {
   ArrowLeftOutlined,
   ImportOutlined,
   SyncOutlined,
+  HistoryOutlined,
 } from '@ant-design/icons'
 import { useParams, useNavigate } from 'react-router-dom'
 import { DndProvider, useDrag, useDrop } from 'react-dnd'
@@ -32,6 +33,7 @@ import { HTML5Backend } from 'react-dnd-html5-backend'
 import ReactECharts from 'echarts-for-react'
 import { DataModel, ModelField, dataModelApi, fieldTypeOptions } from '@/api/dataModel'
 import { useAppStore } from '@/store/appStore'
+import { VersionHistoryPanel } from '@/components/dataModelVersion'
 
 const { Header, Sider, Content } = Layout
 const { Option } = Select
@@ -124,6 +126,7 @@ const DataModelDesigner: React.FC = () => {
   const [activeTab, setActiveTab] = useState('design')
   const [erOption, setErOption] = useState<any>({})
   const [importVisible, setImportVisible] = useState(false)
+  const [versionDrawerVisible, setVersionDrawerVisible] = useState(false)
   const [dataSources] = useState([
     { id: 1, name: '主数据库' },
     { id: 2, name: '业务数据库' },
@@ -346,6 +349,9 @@ const DataModelDesigner: React.FC = () => {
             </Form>
           </Space>
           <Space>
+            <Button icon={<HistoryOutlined />} onClick={() => setVersionDrawerVisible(true)}>
+              版本历史
+            </Button>
             <Button icon={<ImportOutlined />} onClick={() => setImportVisible(true)}>
               逆向导入
             </Button>
@@ -538,6 +544,29 @@ const DataModelDesigner: React.FC = () => {
             ))}
           </div>
         </Form>
+      </Drawer>
+
+      <Drawer
+        title="版本历史"
+        placement="right"
+        width={640}
+        open={versionDrawerVisible}
+        onClose={() => setVersionDrawerVisible(false)}
+        destroyOnClose
+      >
+        {model?.id && (
+          <VersionHistoryPanel
+            modelId={model.id}
+            onRollbackSuccess={(rollbackModel) => {
+              setModel(rollbackModel)
+              form.setFieldsValue(rollbackModel)
+              if (rollbackModel.fields && rollbackModel.fields.length > 0) {
+                setSelectedFieldIndex(0)
+                fieldForm.setFieldsValue(rollbackModel.fields[0])
+              }
+            }}
+          />
+        )}
       </Drawer>
     </DndProvider>
   )

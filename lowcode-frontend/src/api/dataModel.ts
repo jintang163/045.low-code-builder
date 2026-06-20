@@ -313,3 +313,76 @@ export const expressionApi = {
   runtimeEvaluate: (expression: string, context?: Record<string, any>) =>
     request.post<ExpressionRuntimeResult>('/expression/runtime/evaluate', { expression, context }),
 }
+
+export interface DataModelVersion {
+  id: number
+  modelId: number
+  version: string
+  versionName: string
+  snapshot?: DataModel
+  changeType: number
+  changeDescription: string
+  operator: string
+  fieldCount: number
+  indexCount: number
+  tableName: string
+  modelName: string
+  createdTime: string
+}
+
+export interface FieldChange {
+  fieldName: string
+  changeType: 'ADD' | 'MODIFY' | 'DELETE'
+  oldValue?: any
+  newValue?: any
+  changedProperties: string[]
+}
+
+export interface IndexChange {
+  indexName: string
+  changeType: 'ADD' | 'MODIFY' | 'DELETE'
+  oldValue?: any
+  newValue?: any
+}
+
+export interface ModelPropertyChange {
+  propertyName: string
+  oldValue: any
+  newValue: any
+}
+
+export interface VersionCompareResult {
+  sourceVersion: string
+  targetVersion: string
+  fieldChanges: FieldChange[]
+  indexChanges: IndexChange[]
+  propertyChanges: ModelPropertyChange[]
+  addCount: number
+  modifyCount: number
+  deleteCount: number
+  isCompatible: boolean
+  compatibilityWarnings: string[]
+}
+
+export interface RollbackCheckResult {
+  canRollback: boolean
+  warnings: string[]
+  errors: string[]
+  affectedFieldCount: number
+  affectedIndexCount: number
+  dataLossRisk: boolean
+  suggestion: string
+}
+
+export const dataModelVersionApi = {
+  getVersions: (modelId: number) => request.get<DataModelVersion[]>(`/model/version/list/${modelId}`),
+  getVersion: (versionId: number) => request.get<DataModelVersion>(`/model/version/${versionId}`),
+  createSnapshot: (modelId: number, description?: string) =>
+    request.post<DataModelVersion>(`/model/version/snapshot/${modelId}`, null, { params: { description } }),
+  compareVersions: (modelId: number, sourceVersion: string, targetVersion: string) =>
+    request.get<VersionCompareResult>(`/model/version/compare`, { params: { modelId, sourceVersion, targetVersion } }),
+  checkRollback: (modelId: number, targetVersionId: number) =>
+    request.get<RollbackCheckResult>(`/model/version/checkRollback`, { params: { modelId, targetVersionId } }),
+  rollback: (modelId: number, targetVersionId: number, reason?: string) =>
+    request.post<DataModel>(`/model/version/rollback`, null, { params: { modelId, targetVersionId, reason } }),
+}

@@ -1,15 +1,28 @@
-.version-history-panel {
+.dm-version-history-panel {
   height: 100%;
   display: flex;
   flex-direction: column;
+  background: #fff;
 
   .panel-header {
     padding: 16px;
     border-bottom: 1px solid #f0f0f0;
     background: #fafafa;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 
-    .search-bar {
-      flex-wrap: wrap;
+    .header-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+
+      .anticon {
+        color: #1677ff;
+      }
     }
   }
 
@@ -29,7 +42,7 @@
         }
 
         .ant-timeline-item-label {
-          width: 200px !important;
+          width: 180px !important;
 
           .timeline-label {
             .label-time {
@@ -40,39 +53,29 @@
         }
 
         .ant-timeline-item-tail {
-          left: 200px;
+          left: 180px;
           margin-left: 4px;
         }
 
         .ant-timeline-item-head {
-          left: 200px;
+          left: 180px;
           margin-left: 4px;
         }
 
         .ant-timeline-item-content {
-          left: 200px;
+          left: 180px;
           margin-left: 24px;
-          width: calc(100% - 224px);
+          width: calc(100% - 204px);
         }
       }
     }
 
-    .snapshot-card {
+    .version-card {
       border-radius: 8px;
       transition: all 0.2s ease;
 
       &:hover {
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-      }
-
-      &.published {
-        border-color: #faad14;
-        background: linear-gradient(to right, #fffbe6, #fff);
-
-        .ant-card-head {
-          background: #fffbe6;
-          border-bottom-color: #ffe58f;
-        }
       }
 
       .ant-card-head {
@@ -88,6 +91,11 @@
             font-size: 15px;
             color: #1677ff;
           }
+
+          .version-name {
+            color: #333;
+            font-weight: 500;
+          }
         }
       }
 
@@ -95,7 +103,7 @@
         padding: 12px;
       }
 
-      .snapshot-info {
+      .version-info {
         .ant-descriptions {
           margin-bottom: 8px;
 
@@ -103,14 +111,9 @@
             color: #666;
             font-weight: 400;
           }
-
-          .git-commit {
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 12px;
-          }
         }
 
-        .snapshot-description {
+        .change-description {
           padding: 8px 12px;
           background: #f5f5f5;
           border-radius: 4px;
@@ -119,27 +122,22 @@
           color: #555;
         }
 
-        .git-message {
-          display: flex;
-          align-items: flex-start;
-          gap: 8px;
-          margin-bottom: 8px;
-          padding: 8px 12px;
-          background: #e6fffb;
-          border-radius: 4px;
-
-          .message-text {
-            font-size: 13px;
-            color: #555;
-            word-break: break-all;
-          }
-        }
-
-        .snapshot-actions {
+        .version-actions {
           margin-top: 12px;
           padding-top: 12px;
           border-top: 1px dashed #f0f0f0;
         }
+      }
+    }
+  }
+
+  .snapshot-form {
+    .form-item {
+      label {
+        display: block;
+        margin-bottom: 8px;
+        color: #333;
+        font-weight: 500;
       }
     }
   }

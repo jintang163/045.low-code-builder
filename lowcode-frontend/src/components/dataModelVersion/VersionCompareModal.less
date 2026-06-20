@@ -1,0 +1,161 @@
+.dm-version-compare-modal {
+  .ant-modal-body {
+    padding: 16px;
+  }
+
+  .compare-container {
+    .compare-stats {
+      margin-bottom: 16px;
+      padding: 16px;
+      background: #fafafa;
+      border-radius: 8px;
+
+      .ant-statistic-title {
+        font-size: 13px;
+        color: #666;
+      }
+
+      .ant-statistic-content {
+        font-size: 24px;
+        font-weight: 600;
+      }
+
+      .compatibility-box {
+        text-align: center;
+        padding: 8px 0;
+
+        .compatibility-label {
+          font-size: 13px;
+          color: #666;
+          margin-bottom: 4px;
+        }
+
+        .compatible {
+          color: #52c41a;
+          font-size: 18px;
+          font-weight: 600;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+        }
+
+        .incompatible {
+          color: #faad14;
+          font-size: 18px;
+          font-weight: 600;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+        }
+      }
+
+      .warnings-box {
+        margin-top: 12px;
+        padding: 12px;
+        background: #fffbe6;
+        border: 1px solid #ffe58f;
+        border-radius: 6px;
+        color: #d48806;
+        font-size: 13px;
+
+        ul {
+          margin: 8px 0 0 0;
+          padding-left: 20px;
+
+          li {
+            margin-bottom: 4px;
+          }
+        }
+      }
+    }
+
+    .ant-tabs {
+      .ant-tabs-nav {
+        margin-bottom: 12px;
+      }
+
+      .change-item {
+        margin-bottom: 8px;
+        padding: 12px;
+        border-radius: 6px;
+        border-left: 4px solid #d9d9d9;
+
+        &:last-child {
+          margin-bottom: 0;
+        }
+
+        &.change-item-added {
+          background: #f6ffed;
+          border-left-color: #52c41a;
+        }
+
+        &.change-item-deleted {
+          background: #fff1f0;
+          border-left-color: #ff4d4f;
+        }
+
+        &.change-item-modified {
+          background: #fffbe6;
+          border-left-color: #faad14;
+        }
+
+        .change-title {
+          font-weight: 500;
+          font-size: 14px;
+          color: #333;
+        }
+
+        .change-content {
+          .change-value {
+            margin-bottom: 4px;
+            font-size: 13px;
+
+            &:last-child {
+              margin-bottom: 0;
+            }
+
+            .change-label {
+              color: #999;
+              margin-right: 8px;
+            }
+
+            code {
+              background: rgba(0, 0, 0, 0.05);
+              padding: 2px 6px;
+              border-radius: 4px;
+              font-family: 'Consolas', 'Monaco', monospace;
+              font-size: 12px;
+            }
+
+            &.old-value {
+              code {
+                color: #ff4d4f;
+                text-decoration: line-through;
+              }
+            }
+
+            &.new-value {
+              code {
+                color: #52c41a;
+              }
+            }
+          }
+
+          .changed-properties {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px dashed #e8e8e8;
+
+            .properties-label {
+              color: #999;
+              margin-right: 8px;
+              font-size: 12px;
+            }
+          }
+        }
+      }
+    }
+  }
+}
