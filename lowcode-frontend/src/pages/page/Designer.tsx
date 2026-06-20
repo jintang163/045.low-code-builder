@@ -61,6 +61,13 @@ import { loadCustomComponent } from '@/utils/componentLoader'
 import AiPagePanel from '@/components/AiPagePanel'
 import PermissionGuard from '@/components/PermissionGuard'
 import ExpressionEditor from '@/components/ExpressionEditor'
+import { useCollaboration } from '@/hooks/useCollaboration'
+import CollaboratorList from '@/components/collaboration/CollaboratorList'
+import CollaboratorCursor from '@/components/collaboration/CollaboratorCursor'
+import ConflictDialog from '@/components/collaboration/ConflictDialog'
+import RemoteComponentHighlight from '@/components/collaboration/RemoteComponentHighlight'
+import { generateColor } from '@/utils/collaboration'
+import type { CRDTOperation, ConflictInfo } from '@/utils/collaboration'
 
 const { Header, Sider, Content } = Layout
 const { Option } = Select
@@ -708,6 +715,27 @@ const PageDesigner: React.FC = () => {
 
   const canvasRef = useRef<HTMLDivElement>(null)
 
+  const {
+    isConnected,
+    collaborators,
+    conflicts,
+    documentVersion,
+    connect,
+    disconnect,
+    sendOperation,
+    sendCursorPosition,
+    resolveConflict,
+    setOnOperation,
+    setOnSync,
+  } = useCollaboration()
+
+  const userInfo = useAppStore(state => state.userInfo)
+  const currentUserId = userInfo?.id ? String(userInfo.id) : 'user_' + Math.random().toString(36).substr(2, 9)
+  const currentUsername = userInfo?.username || '访客用户'
+  const currentAvatar = userInfo?.avatar || ''
+
+  const isRemoteOperationRef = useRef(false)
+
   const loadPage = useCallback(async () => {
       setPage({
         appId: currentApp?.id || 1,
@@ -1157,6 +1185,109 @@ const PageDesigner: React.FC = () => {
     createAiSession()
   }, [loadPage, loadComponentLibrary, loadDataModels, loadExtDataSources, loadExtMappings, loadExprFunctions])
 
+  useEffect(() => {
+    if (id && id !== 'undefined' && userInfo) {
+      connect(String(id), {
+        userId: currentUserId,
+        username: currentUsername,
+        avatar: currentAvatar,
+      })
+    }
+
+    return () => {
+      disconnect()
+    }
+  }, [id, userInfo, connect, disconnect, currentUserId, currentUsername, currentAvatar])
+
+  useEffect(() => {
+    const handleRemoteOperation = (op: CRDTOperation) => {
+      if (op.userId === currentUserId) return
+
+      isRemoteOperationRef.current = true
+
+      try {
+        switch (op.type) {
+          case 'INSERT': {
+            if (op.targetType === 'COMPONENT' && op.data) {
+              setPage(prevPage => {
+                if (!prevPage) return prevPage
+                const newComponents = [...(prevPage.components || []), op.data]
+                const tree = buildComponentTree(newComponents)
+                setComponentTree(tree)
+                return { ...prevPage, components: newComponents }
+              })
+            }
+            break
+          }
+          case 'UPDATE': {
+            if (op.targetType === 'COMPONENT' && op.data) {
+              setPage(prevPage => {
+                if (!prevPage) return prevPage
+                const newComponents = prevPage.components?.map(comp =>
+                  comp.componentId === op.targetId ? { ...comp, ...op.data } : comp
+                ) || []
+                const tree = buildComponentTree(newComponents)
+                setComponentTree(tree)
+                return { ...prevPage, components: newComponents }
+              })
+            }
+            break
+          }
+          case 'DELETE': {
+            if (op.targetType === 'COMPONENT') {
+              setPage(prevPage => {
+                if (!prevPage) return prevPage
+                const deleteRecursive = (id: string, components: PageComponent[]): PageComponent[] => {
+                  return components.filter(comp => {
+                    if (comp.componentId === id) return false
+                    if (comp.parentId === id) return false
+                    return true
+                  })
+                }
+                const newComponents = deleteRecursive(op.targetId, prevPage.components || [])
+                const tree = buildComponentTree(newComponents)
+                setComponentTree(tree)
+                if (selectedComponentId === op.targetId) {
+                  setSelectedComponentId(null)
+                }
+                return { ...prevPage, components: newComponents }
+              })
+            }
+            break
+          }
+          case 'MOVE': {
+            break
+          }
+        }
+      } finally {
+        setTimeout(() => {
+          isRemoteOperationRef.current = false
+        }, 0)
+      }
+    }
+
+    const handleSync = (data: any) => {
+      if (data?.components) {
+        isRemoteOperationRef.current = true
+        try {
+          setPage(prevPage => {
+            if (!prevPage) return prevPage
+            return { ...prevPage, components: data.components }
+          })
+          const tree = buildComponentTree(data.components)
+          setComponentTree(tree)
+        } finally {
+          setTimeout(() => {
+            isRemoteOperationRef.current = false
+          }, 0)
+        }
+      }
+    }
+
+    setOnOperation(handleRemoteOperation)
+    setOnSync(handleSync)
+  }, [setOnOperation, setOnSync, currentUserId, selectedComponentId])
+
   const buildComponentTree = (components: PageComponent[]): any[] => {
     const map = new Map()
     const roots: any[] = []
@@ -1364,6 +1495,17 @@ const PageDesigner: React.FC = () => {
     setComponentTree(tree)
     setSelectedComponentId(newComponent.componentId)
     loadComponentForms(newComponent)
+
+    if (isConnected && !isRemoteOperationRef.current) {
+      sendOperation({
+        type: 'INSERT',
+        targetType: 'COMPONENT',
+        targetId: newComponent.componentId,
+        parentId: parentId || 'root',
+        position: newComponents.length - 1,
+        data: newComponent,
+      })
+    }
   }
 
   const handleCanvasDrop = useCallback((item: any) => {
@@ -1382,6 +1524,8 @@ const PageDesigner: React.FC = () => {
     if (!page) return
     saveHistory()
 
+    const component = page.components?.find(c => c.componentId === componentId)
+
     const deleteRecursive = (id: string, components: PageComponent[]): PageComponent[] => {
       return components.filter(comp => {
         if (comp.componentId === id) return false
@@ -1396,6 +1540,15 @@ const PageDesigner: React.FC = () => {
     setComponentTree(tree)
     if (selectedComponentId === componentId) {
       setSelectedComponentId(null)
+    }
+
+    if (isConnected && !isRemoteOperationRef.current && component) {
+      sendOperation({
+        type: 'DELETE',
+        targetType: 'COMPONENT',
+        targetId: componentId,
+        oldData: component,
+      })
     }
   }
 
@@ -1492,12 +1645,25 @@ const PageDesigner: React.FC = () => {
     if (!page || !selectedComponentId) return
     saveHistory()
 
+    const oldComponent = page.components?.find(c => c.componentId === selectedComponentId)
+
     const newComponents = page.components?.map(comp =>
       comp.componentId === selectedComponentId ? { ...comp, ...updates } : comp
     ) || []
     setPage({ ...page, components: newComponents })
     const tree = buildComponentTree(newComponents)
     setComponentTree(tree)
+
+    if (isConnected && !isRemoteOperationRef.current && oldComponent) {
+      const newComponent = newComponents.find(c => c.componentId === selectedComponentId)
+      sendOperation({
+        type: 'UPDATE',
+        targetType: 'COMPONENT',
+        targetId: selectedComponentId,
+        data: newComponent,
+        oldData: oldComponent,
+      })
+    }
   }
 
   const selectedComponent = page?.components?.find(c => c.componentId === selectedComponentId)
@@ -2583,9 +2749,26 @@ const PageDesigner: React.FC = () => {
     const maxWidth = isMobile ? 375 : 'none'
     const margin = isMobile ? '0 auto' : '0'
 
+    const handleCanvasMouseMove = (e: React.MouseEvent) => {
+      if (!isConnected) return
+      const rect = e.currentTarget.getBoundingClientRect()
+      const x = e.clientX - rect.left
+      const y = e.clientY - rect.top
+      sendCursorPosition({
+        x,
+        y,
+        componentId: selectedComponentId || undefined,
+      })
+    }
+
     return (
       <div
-        ref={(node) => canvasDrop(node)}
+        ref={(node) => {
+          canvasDrop(node)
+          if (canvasRef && canvasRef.current !== node) {
+            canvasRef.current = node
+          }
+        }}
         className="designer-canvas"
         style={{
           width: '100%',
@@ -2593,9 +2776,20 @@ const PageDesigner: React.FC = () => {
           padding: 24,
           overflow: 'auto',
           background: isOver ? 'rgba(22, 119, 255, 0.05)' : undefined,
+          position: 'relative',
         }}
         onClick={() => setSelectedComponentId(null)}
+        onMouseMove={handleCanvasMouseMove}
       >
+        {collaborators
+          .filter(c => c.userId !== currentUserId && c.cursorPosition && c.isOnline)
+          .map(collaborator => (
+            <CollaboratorCursor
+              key={collaborator.userId}
+              collaborator={collaborator}
+              position={collaborator.cursorPosition as any}
+            />
+          ))}
         {isMobile ? (
           <div
             style={{
@@ -2827,6 +3021,8 @@ const PageDesigner: React.FC = () => {
             <Button icon={<PlayCircleOutlined />} type="primary" onClick={handlePublish}>
               发布
             </Button>
+            <Divider type="vertical" />
+            <CollaboratorList collaborators={collaborators} />
           </Space>
         </Header>
         <Layout>
@@ -3488,6 +3684,17 @@ const PageDesigner: React.FC = () => {
           {codeContent}
         </pre>
       </Modal>
+
+      <ConflictDialog
+        open={conflicts.length > 0}
+        conflict={conflicts[0] || null}
+        currentUserId={currentUserId}
+        onResolve={(conflictId, resolution) => {
+          resolveConflict(conflictId, resolution)
+        }}
+        onClose={() => {
+        }}
+      />
     </DndProvider>
   )
 }

@@ -1,0 +1,85 @@
+.remote-component-highlight {
+  position: absolute;
+  pointer-events: none;
+  z-index: 100;
+
+  .highlight-border {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border: 2px dashed;
+    border-radius: 4px;
+    animation: highlight-pulse 2s ease-in-out infinite;
+  }
+
+  .highlight-label {
+    position: absolute;
+    top: -24px;
+    left: -2px;
+    padding: 2px 10px;
+    border-radius: 4px 4px 0 0;
+    color: white;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
+
+    .highlight-username {
+      font-weight: 600;
+    }
+
+    .highlight-status {
+      opacity: 0.9;
+      font-size: 11px;
+    }
+  }
+
+  &.active {
+    .highlight-border {
+      animation: highlight-pulse 1.5s ease-in-out infinite;
+    }
+  }
+
+  &.fading {
+    opacity: 0.5;
+    transition: opacity 0.5s ease-out;
+
+    .highlight-border {
+      animation: none;
+    }
+  }
+}
+
+@keyframes highlight-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes highlight-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes highlight-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}

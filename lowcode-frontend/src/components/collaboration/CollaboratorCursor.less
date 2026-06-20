@@ -1,0 +1,53 @@
+.collaborator-cursor {
+  position: absolute;
+  pointer-events: none;
+  z-index: 1000;
+  transition: left 0.05s linear, top 0.05s linear;
+
+  .cursor-pointer {
+    display: block;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+  }
+
+  .cursor-label {
+    position: absolute;
+    left: 14px;
+    top: 18px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: white;
+    white-space: nowrap;
+    line-height: 1.4;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    animation: cursor-label-fade-in 0.2s ease-out;
+  }
+
+  .cursor-selection {
+    position: absolute;
+    border: 2px dashed;
+    border-radius: 2px;
+    opacity: 0.6;
+    animation: cursor-selection-blink 1s ease-in-out infinite;
+  }
+}
+
+@keyframes cursor-label-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes cursor-selection-blink {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
