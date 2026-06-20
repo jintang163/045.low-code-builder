@@ -29,7 +29,7 @@ spring:
         - id: lowcode-page
           uri: lb://lowcode-page
           predicates:
-            - Path=/api/page/**,/api/component/**
+            - Path=/api/page/**,/api/component/**,/api/version/**,/api/custom-component/**,/api/ai/**
         - id: lowcode-flow
           uri: lb://lowcode-flow
           predicates:

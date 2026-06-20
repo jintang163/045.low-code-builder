@@ -1,12 +1,19 @@
 package com.lowcode.page.service.impl;
 
+import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.lowcode.common.exception.BusinessException;
 import com.lowcode.common.exception.ErrorCode;
 import com.lowcode.page.entity.GrayReleaseConfig;
+import com.lowcode.page.entity.Page;
+import com.lowcode.page.entity.ReleaseRecord;
+import com.lowcode.page.entity.VersionSnapshot;
 import com.lowcode.page.mapper.GrayReleaseConfigMapper;
+import com.lowcode.page.mapper.ReleaseRecordMapper;
 import com.lowcode.page.service.GrayReleaseService;
+import com.lowcode.page.service.PageService;
+import com.lowcode.page.service.VersionSnapshotService;
 import com.lowcode.page.vo.GrayReleaseResultVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,10 +33,25 @@ public class GrayReleaseServiceImpl extends ServiceImpl<GrayReleaseConfigMapper,
     @Autowired
     private GrayReleaseConfigMapper grayReleaseConfigMapper;
 
+    @Autowired
+    private VersionSnapshotService versionSnapshotService;
+
+    @Autowired
+    private PageService pageService;
+
+    @Autowired
+    private ReleaseRecordMapper releaseRecordMapper;
+
     private static final int GRAY_STATUS_INACTIVE = 0;
     private static final int GRAY_STATUS_ACTIVE = 1;
     private static final int GRAY_STATUS_STOPPED = 2;
     private static final int GRAY_STATUS_CANCELLED = 3;
+
+    private static final int RELEASE_STATUS_PUBLISHED = 1;
+    private static final int RELEASE_STATUS_ROLLED_BACK = 4;
+
+    private static final int RELEASE_TYPE_FORMAL = 1;
+    private static final int RELEASE_TYPE_ROLLBACK = 2;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -165,9 +187,56 @@ public class GrayReleaseServiceImpl extends ServiceImpl<GrayReleaseConfigMapper,
             throw new BusinessException(ErrorCode.PARAM_ERROR, "当前灰度配置状态不允许停止");
         }
 
+        VersionSnapshot newSnapshot = null;
+        if (config.getNewSnapshotId() != null) {
+            newSnapshot = versionSnapshotService.getSnapshotDetail(config.getNewSnapshotId());
+            if (newSnapshot == null) {
+                log.warn("新版本快照不存在，snapshotId: {}", config.getNewSnapshotId());
+            }
+        }
+
+        if (newSnapshot != null && newSnapshot.getPageSnapshot() != null 
+                && "PAGE".equals(config.getResourceType())) {
+            log.info("将新版本快照内容恢复到实际页面，snapshotId: {}", config.getNewSnapshotId());
+            Page page = JSON.parseObject(newSnapshot.getPageSnapshot(), Page.class);
+            page.setId(config.getResourceId());
+            pageService.updatePage(page);
+            log.info("页面内容已更新为新版本，pageId: {}", config.getResourceId());
+        }
+
+        if (newSnapshot != null) {
+            newSnapshot.setIsPublished(1);
+            newSnapshot.setPublishedVersion(config.getNewVersion());
+            versionSnapshotService.updateById(newSnapshot);
+            log.info("更新快照发布状态，snapshotId: {}, version: {}", newSnapshot.getId(), config.getNewVersion());
+        }
+
         config.setStatus(GRAY_STATUS_STOPPED);
         config.setEndTime(LocalDateTime.now());
         updateById(config);
+
+        ReleaseRecord releaseRecord = new ReleaseRecord();
+        releaseRecord.setAppId(config.getAppId());
+        releaseRecord.setResourceType(config.getResourceType());
+        releaseRecord.setResourceId(config.getResourceId());
+        if (newSnapshot != null) {
+            releaseRecord.setResourceName(newSnapshot.getResourceName());
+        }
+        releaseRecord.setSnapshotId(config.getNewSnapshotId());
+        releaseRecord.setVersion(config.getNewVersion());
+        releaseRecord.setReleaseTitle("灰度发布全量-版本 " + config.getNewVersion());
+        releaseRecord.setReleaseNote("灰度发布停止，全量发布新版本");
+        releaseRecord.setReleaseType(RELEASE_TYPE_FORMAL);
+        releaseRecord.setReleaseStatus(RELEASE_STATUS_PUBLISHED);
+        releaseRecord.setReleaseTime(LocalDateTime.now());
+        releaseRecord.setIsRollback(0);
+        if (newSnapshot != null) {
+            releaseRecord.setGitCommitId(newSnapshot.getGitCommitId());
+            releaseRecord.setGitCommitMessage(newSnapshot.getGitCommitMessage());
+            releaseRecord.setGitBranch(newSnapshot.getGitBranch());
+        }
+        releaseRecordMapper.insert(releaseRecord);
+        log.info("创建发布记录成功，recordId: {}", releaseRecord.getId());
 
         log.info("灰度发布已停止，已全量发布新版本，configId: {}", configId);
         return config;
@@ -187,9 +256,55 @@ public class GrayReleaseServiceImpl extends ServiceImpl<GrayReleaseConfigMapper,
             throw new BusinessException(ErrorCode.PARAM_ERROR, "当前灰度配置状态不允许取消");
         }
 
+        VersionSnapshot oldSnapshot = null;
+        if (config.getOldSnapshotId() != null) {
+            oldSnapshot = versionSnapshotService.getSnapshotDetail(config.getOldSnapshotId());
+            if (oldSnapshot == null) {
+                log.warn("旧版本快照不存在，snapshotId: {}", config.getOldSnapshotId());
+            }
+        }
+
+        if (oldSnapshot != null && "PAGE".equals(config.getResourceType())) {
+            log.info("将旧版本快照内容恢复到实际页面，snapshotId: {}", config.getOldSnapshotId());
+            if (oldSnapshot.getPageSnapshot() != null) {
+                Page page = JSON.parseObject(oldSnapshot.getPageSnapshot(), Page.class);
+                page.setId(config.getResourceId());
+                pageService.updatePage(page);
+                log.info("页面内容已回滚到旧版本，pageId: {}", config.getResourceId());
+            } else {
+                versionSnapshotService.rollbackToSnapshot(config.getOldSnapshotId(), "取消灰度发布，回滚到旧版本", false);
+                log.info("通过 rollbackToSnapshot 回滚页面，pageId: {}", config.getResourceId());
+            }
+        }
+
         config.setStatus(GRAY_STATUS_CANCELLED);
         config.setEndTime(LocalDateTime.now());
         updateById(config);
+
+        ReleaseRecord releaseRecord = new ReleaseRecord();
+        releaseRecord.setAppId(config.getAppId());
+        releaseRecord.setResourceType(config.getResourceType());
+        releaseRecord.setResourceId(config.getResourceId());
+        if (oldSnapshot != null) {
+            releaseRecord.setResourceName(oldSnapshot.getResourceName());
+        }
+        releaseRecord.setSnapshotId(config.getOldSnapshotId());
+        releaseRecord.setVersion(config.getOldVersion());
+        releaseRecord.setReleaseTitle("取消灰度发布-回滚到版本 " + config.getOldVersion());
+        releaseRecord.setReleaseNote("灰度发布取消，回滚到旧版本");
+        releaseRecord.setReleaseType(RELEASE_TYPE_ROLLBACK);
+        releaseRecord.setReleaseStatus(RELEASE_STATUS_ROLLED_BACK);
+        releaseRecord.setRollbackTime(LocalDateTime.now());
+        releaseRecord.setRollbackFromSnapshotId(config.getOldSnapshotId());
+        releaseRecord.setRollbackReason("取消灰度发布");
+        releaseRecord.setIsRollback(1);
+        if (oldSnapshot != null) {
+            releaseRecord.setGitCommitId(oldSnapshot.getGitCommitId());
+            releaseRecord.setGitCommitMessage(oldSnapshot.getGitCommitMessage());
+            releaseRecord.setGitBranch(oldSnapshot.getGitBranch());
+        }
+        releaseRecordMapper.insert(releaseRecord);
+        log.info("创建回滚发布记录成功，recordId: {}", releaseRecord.getId());
 
         log.info("灰度发布已取消，已回滚到旧版本，configId: {}", configId);
         return config;

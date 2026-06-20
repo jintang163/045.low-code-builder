@@ -7,6 +7,7 @@ import com.lowcode.common.exception.BusinessException;
 import com.lowcode.common.exception.ErrorCode;
 import com.lowcode.page.entity.Page;
 import com.lowcode.page.entity.PageComponent;
+import com.lowcode.page.entity.VersionSnapshot;
 import com.lowcode.page.mapper.PageMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -188,7 +189,24 @@ public class PageService extends ServiceImpl<PageMapper, Page> {
     }
 
     public Map<String, Object> getPagePreviewData(Long id) {
-        Page page = getPageDetail(id);
+        return getPagePreviewData(id, null);
+    }
+
+    public Map<String, Object> getPagePreviewData(Long pageId, Long snapshotId) {
+        log.info("获取页面预览数据，pageId: {}, snapshotId: {}", pageId, snapshotId);
+
+        Page page;
+        if (snapshotId != null) {
+            VersionSnapshot snapshot = versionSnapshotService.getSnapshotDetail(snapshotId);
+            if (snapshot == null || snapshot.getPageSnapshot() == null) {
+                throw new BusinessException(ErrorCode.NOT_FOUND, "快照数据不存在");
+            }
+            page = JSON.parseObject(snapshot.getPageSnapshot(), Page.class);
+            log.info("从快照获取页面数据成功，snapshotId: {}, version: {}", snapshotId, snapshot.getVersion());
+        } else {
+            page = getPageDetail(pageId);
+        }
+
         Map<String, Object> result = new HashMap<>();
         result.put("page", page);
 

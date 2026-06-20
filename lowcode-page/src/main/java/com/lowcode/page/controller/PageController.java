@@ -3,15 +3,20 @@ package com.lowcode.page.controller;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.lowcode.common.result.Result;
+import com.lowcode.page.service.GrayReleaseService;
 import com.lowcode.page.service.PageService;
+import com.lowcode.page.vo.GrayReleaseResultVO;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @Api(tags = "页面管理")
 @RestController
 @RequestMapping("/api/page")
@@ -19,6 +24,9 @@ public class PageController {
 
     @Autowired
     private PageService pageService;
+
+    @Autowired
+    private GrayReleaseService grayReleaseService;
 
     @ApiOperation("保存页面")
     @PostMapping
@@ -79,5 +87,31 @@ public class PageController {
     @GetMapping("/{id}/preview")
     public Result<Map<String, Object>> getPreviewData(@PathVariable Long id) {
         return Result.success(pageService.getPagePreviewData(id));
+    }
+
+    @ApiOperation("获取灰度版本页面预览数据")
+    @GetMapping("/{id}/preview/gray")
+    public Result<Map<String, Object>> getGrayPreviewData(@PathVariable Long id,
+                                                          @RequestParam(required = false) Long userId,
+                                                          @RequestParam(required = false) String userGroup) {
+        log.info("获取灰度版本页面预览数据，pageId: {}, userId: {}, userGroup: {}", id, userId, userGroup);
+
+        GrayReleaseResultVO grayResult = grayReleaseService.checkGrayRelease(id, "PAGE", userId, userGroup);
+
+        Map<String, Object> result;
+        if (Boolean.TRUE.equals(grayResult.getShouldUseNewVersion())) {
+            log.info("命中灰度发布，使用新版本快照，snapshotId: {}, version: {}", 
+                    grayResult.getActiveSnapshotId(), grayResult.getActiveVersion());
+            result = pageService.getPagePreviewData(id, grayResult.getActiveSnapshotId());
+        } else {
+            log.info("未命中灰度发布，使用当前版本");
+            result = pageService.getPagePreviewData(id);
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("data", result);
+        response.put("grayInfo", grayResult);
+
+        return Result.success(response);
     }
 }

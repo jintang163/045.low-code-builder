@@ -34,9 +34,15 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
+import com.lowcode.page.entity.PageComponent;
 
 @Slf4j
 @Service
@@ -56,6 +62,9 @@ public class VersionSnapshotServiceImpl extends ServiceImpl<VersionSnapshotMappe
 
     @Autowired
     private BusinessLogicFeignClient businessLogicFeignClient;
+
+    @Autowired
+    private PageComponentService componentService;
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -273,6 +282,70 @@ public class VersionSnapshotServiceImpl extends ServiceImpl<VersionSnapshotMappe
         return String.format("v%d.%d.%d", major, minor, patch);
     }
 
+    private Set<Long> extractDataModelIds(List<PageComponent> components) {
+        Set<Long> modelIds = new HashSet<>();
+        if (components == null || components.isEmpty()) {
+            return modelIds;
+        }
+
+        for (PageComponent component : components) {
+            try {
+                String dataSourceConfig = component.getDataSourceConfig();
+                if (dataSourceConfig != null && !dataSourceConfig.isEmpty()) {
+                    JSONObject dsConfig = JSON.parseObject(dataSourceConfig);
+                    if (dsConfig != null) {
+                        String type = dsConfig.getString("type");
+                        if ("model".equals(type) && dsConfig.getLong("modelId") != null) {
+                            modelIds.add(dsConfig.getLong("modelId"));
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("解析组件 dataSourceConfig 失败，componentId: {}", component.getComponentId(), e);
+            }
+        }
+
+        return modelIds;
+    }
+
+    private Set<Long> extractLogicIds(List<PageComponent> components) {
+        Set<Long> logicIds = new HashSet<>();
+        if (components == null || components.isEmpty()) {
+            return logicIds;
+        }
+
+        for (PageComponent component : components) {
+            try {
+                String eventConfig = component.getEventConfig();
+                if (eventConfig != null && !eventConfig.isEmpty()) {
+                    JSONArray events = JSON.parseArray(eventConfig);
+                    if (events != null) {
+                        for (int i = 0; i < events.size(); i++) {
+                            JSONObject event = events.getJSONObject(i);
+                            if (event != null) {
+                                String actionType = event.getString("actionType");
+                                if ("logic".equals(actionType) || "callLogic".equals(actionType) || "invokeLogic".equals(actionType)) {
+                                    Long logicId = event.getLong("logicId");
+                                    if (logicId != null) {
+                                        logicIds.add(logicId);
+                                    }
+                                }
+                                JSONObject actionConfig = event.getJSONObject("actionConfig");
+                                if (actionConfig != null && actionConfig.getLong("logicId") != null) {
+                                    logicIds.add(actionConfig.getLong("logicId"));
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("解析组件 eventConfig 失败，componentId: {}", component.getComponentId(), e);
+            }
+        }
+
+        return logicIds;
+    }
+
     private void collectSnapshotData(VersionSnapshot snapshot, String resourceType, Long resourceId) {
         try {
             switch (resourceType) {
@@ -280,9 +353,51 @@ public class VersionSnapshotServiceImpl extends ServiceImpl<VersionSnapshotMappe
                     Page page = pageService.getPageDetail(resourceId);
                     if (page != null) {
                         snapshot.setPageSnapshot(JSON.toJSONString(page));
+
+                        List<PageComponent> components = page.getComponents();
+                        Set<Long> dataModelIds = extractDataModelIds(components);
+                        Set<Long> logicIds = extractLogicIds(components);
+
+                        log.info("页面关联数据模型ID列表: {}, 业务逻辑ID列表: {}", dataModelIds, logicIds);
+
+                        List<DataModel> dataModels = new ArrayList<>();
+                        for (Long modelId : dataModelIds) {
+                            try {
+                                Result<DataModel> modelResult = dataModelFeignClient.getById(modelId);
+                                if (modelResult != null && modelResult.getData() != null) {
+                                    dataModels.add(modelResult.getData());
+                                }
+                            } catch (Exception e) {
+                                log.warn("获取数据模型失败，modelId: {}", modelId, e);
+                            }
+                        }
+
+                        List<BusinessLogic> businessLogics = new ArrayList<>();
+                        for (Long logicId : logicIds) {
+                            try {
+                                Result<BusinessLogic> logicResult = businessLogicFeignClient.getById(logicId);
+                                if (logicResult != null && logicResult.getData() != null) {
+                                    businessLogics.add(logicResult.getData());
+                                }
+                            } catch (Exception e) {
+                                log.warn("获取业务逻辑失败，logicId: {}", logicId, e);
+                            }
+                        }
+
+                        if (!dataModels.isEmpty()) {
+                            snapshot.setDataModelSnapshot(JSON.toJSONString(dataModels));
+                        }
+                        if (!businessLogics.isEmpty()) {
+                            snapshot.setLogicSnapshot(JSON.toJSONString(businessLogics));
+                        }
+
                         Map<String, Object> snapshotData = new java.util.HashMap<>();
                         snapshotData.put("page", page);
+                        snapshotData.put("dataModels", dataModels);
+                        snapshotData.put("businessLogics", businessLogics);
                         snapshot.setSnapshotData(JSON.toJSONString(snapshotData));
+
+                        log.info("页面快照收集完成，包含数据模型: {} 个，业务逻辑: {} 个", dataModels.size(), businessLogics.size());
                     }
                     break;
                 case RESOURCE_TYPE_DATA_MODEL:
