@@ -1,0 +1,183 @@
+.version-diff-modal {
+  .ant-modal-body {
+    padding: 16px;
+  }
+
+  .diff-container {
+    .diff-stats {
+      margin-bottom: 16px;
+      padding: 16px;
+      background: #fafafa;
+      border-radius: 8px;
+
+      .ant-statistic-title {
+        font-size: 13px;
+        color: #666;
+      }
+
+      .ant-statistic-content {
+        font-size: 24px;
+        font-weight: 600;
+      }
+    }
+
+    .diff-versions {
+      margin-bottom: 16px;
+
+      .version-box {
+        padding: 16px;
+        border-radius: 8px;
+        text-align: center;
+
+        .version-label {
+          font-size: 12px;
+          color: #999;
+          margin-bottom: 4px;
+        }
+
+        .version-number {
+          font-size: 20px;
+          font-weight: 600;
+          margin-bottom: 4px;
+        }
+
+        .version-id {
+          font-size: 12px;
+          color: #999;
+          font-family: 'Consolas', 'Monaco', monospace;
+        }
+
+        &.old-version {
+          background: #fff1f0;
+          border: 1px solid #ffa39e;
+
+          .version-number {
+            color: #ff4d4f;
+          }
+        }
+
+        &.new-version {
+          background: #f6ffed;
+          border: 1px solid #b7eb8f;
+
+          .version-number {
+            color: #52c41a;
+          }
+        }
+      }
+    }
+
+    .ant-tabs {
+      .ant-tabs-nav {
+        margin-bottom: 12px;
+      }
+
+      .ant-collapse {
+        background: transparent;
+        border: none;
+
+        .ant-collapse-item {
+          border: 1px solid #f0f0f0;
+          border-radius: 8px;
+          margin-bottom: 8px;
+
+          &:last-child {
+            margin-bottom: 0;
+          }
+
+          .ant-collapse-header {
+            background: #fafafa;
+            border-radius: 8px;
+            font-weight: 500;
+          }
+
+          .ant-collapse-content {
+            border-top: 1px solid #f0f0f0;
+            border-radius: 0 0 8px 8px;
+          }
+        }
+      }
+
+      .diff-list {
+        .diff-item {
+          margin-bottom: 8px;
+          padding: 12px;
+          border-radius: 6px;
+          border-left: 4px solid #d9d9d9;
+
+          &:last-child {
+            margin-bottom: 0;
+          }
+
+          &.diff-item-added {
+            background: #f6ffed;
+            border-left-color: #52c41a;
+          }
+
+          &.diff-item-removed {
+            background: #fff1f0;
+            border-left-color: #ff4d4f;
+          }
+
+          &.diff-item-modified {
+            background: #fffbe6;
+            border-left-color: #faad14;
+          }
+
+          .ant-list-item-meta-title {
+            .diff-field {
+              font-weight: 500;
+              font-size: 14px;
+              color: #333;
+            }
+          }
+
+          .diff-content {
+            .diff-value {
+              margin-bottom: 4px;
+              font-size: 13px;
+
+              &:last-child {
+                margin-bottom: 0;
+              }
+
+              .diff-label {
+                color: #999;
+                margin-right: 8px;
+              }
+
+              code {
+                background: rgba(0, 0, 0, 0.05);
+                padding: 2px 6px;
+                border-radius: 4px;
+                font-family: 'Consolas', 'Monaco', monospace;
+                font-size: 12px;
+              }
+
+              &.old-value {
+                code {
+                  color: #ff4d4f;
+                  text-decoration: line-through;
+                }
+              }
+
+              &.new-value {
+                code {
+                  color: #52c41a;
+                }
+              }
+            }
+
+            .diff-path {
+              margin-top: 8px;
+              padding-top: 8px;
+              border-top: 1px dashed #e8e8e8;
+              font-size: 12px;
+              color: #999;
+            }
+          }
+        }
+      }
+    }
+  }
+}

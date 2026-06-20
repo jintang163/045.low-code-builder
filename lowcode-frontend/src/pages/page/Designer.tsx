@@ -47,6 +47,8 @@ import {
   ArrowRightOutlined,
   ExperimentOutlined,
   SafetyOutlined,
+  HistoryOutlined,
+  CloudServerOutlined,
 } from '@ant-design/icons'
 import { useParams, useNavigate } from 'react-router-dom'
 import { DndProvider, useDrag, useDrop } from 'react-dnd'
@@ -55,6 +57,7 @@ import { createForm, Field } from '@formily/core'
 import { createSchemaField, FormProvider, FormItem, Input as FormilyInput, Select as FormilySelect, NumberPicker, Switch as FormilySwitch } from '@formily/antd'
 import { PageInfo, PageComponent, ComponentLibrary, pageApi, componentApi, customComponentApi, CustomComponent } from '@/api/page'
 import { dataModelApi, dataSourceApi, fieldMappingApi, expressionApi, DataSource, FieldMapping, TableColumnInfo, ExpressionFunctionDef, ExpressionCategoryDef } from '@/api/dataModel'
+import { versionApi } from '@/api/version'
 import { useAppStore } from '@/store/appStore'
 import CustomComponentWrapper, { CustomComponentPreview, useCustomComponentSchema } from '@/components/CustomComponentWrapper'
 import { loadCustomComponent } from '@/utils/componentLoader'
@@ -66,6 +69,8 @@ import CollaboratorList from '@/components/collaboration/CollaboratorList'
 import CollaboratorCursor from '@/components/collaboration/CollaboratorCursor'
 import ConflictDialog from '@/components/collaboration/ConflictDialog'
 import RemoteComponentHighlight from '@/components/collaboration/RemoteComponentHighlight'
+import VersionHistoryPanel from '@/components/version/VersionHistoryPanel'
+import ReleaseManagementPanel from '@/components/version/ReleaseManagementPanel'
 import { generateColor } from '@/utils/collaboration'
 import type { CRDTOperation, ConflictInfo } from '@/utils/collaboration'
 
@@ -712,6 +717,8 @@ const PageDesigner: React.FC = () => {
   const [historyIndex, setHistoryIndex] = useState(-1)
   const [aiPanelVisible, setAiPanelVisible] = useState(false)
   const [aiSessionId, setAiSessionId] = useState('')
+  const [versionHistoryVisible, setVersionHistoryVisible] = useState(false)
+  const [releaseManagementVisible, setReleaseManagementVisible] = useState(false)
 
   const [extDataSources, setExtDataSources] = useState<DataSource[]>([])
   const [selectedExtDataSourceId, setSelectedExtDataSourceId] = useState<number | null>(null)
@@ -1384,6 +1391,18 @@ const PageDesigner: React.FC = () => {
       if (page.id) {
         await pageApi.update(data)
         message.success('保存成功')
+        try {
+          await versionApi.createSnapshot({
+            appId: currentApp?.id || 1,
+            resourceType: 'PAGE',
+            resourceId: page.id,
+            description: `保存页面: ${values.pageName}`,
+            autoCreate: true,
+          })
+          message.info('已自动创建版本快照')
+        } catch (snapshotError) {
+          console.warn('创建自动快照失败:', snapshotError)
+        }
       } else {
         const res = await pageApi.save(data)
         setPage(res.data)
@@ -3076,6 +3095,19 @@ const PageDesigner: React.FC = () => {
             </Button>
             <Divider type="vertical" />
             <Button 
+              icon={<HistoryOutlined />} 
+              onClick={() => setVersionHistoryVisible(true)}
+            >
+              版本历史
+            </Button>
+            <Button 
+              icon={<CloudServerOutlined />} 
+              onClick={() => setReleaseManagementVisible(true)}
+            >
+              发布管理
+            </Button>
+            <Divider type="vertical" />
+            <Button 
               icon={<RobotOutlined />} 
               onClick={() => setAiPanelVisible(true)}
               type="dashed"
@@ -3789,6 +3821,50 @@ const PageDesigner: React.FC = () => {
         onClose={() => {
         }}
       />
+
+      <Drawer
+        title="版本历史"
+        placement="right"
+        width={720}
+        open={versionHistoryVisible}
+        onClose={() => setVersionHistoryVisible(false)}
+        mask={false}
+        bodyStyle={{ padding: 0 }}
+      >
+        {page?.id && currentApp?.id && (
+          <VersionHistoryPanel
+            resourceId={page.id}
+            resourceType="PAGE"
+            appId={currentApp.id}
+            onClose={() => setVersionHistoryVisible(false)}
+            onRollbackSuccess={() => {
+              loadPage()
+            }}
+          />
+        )}
+      </Drawer>
+
+      <Drawer
+        title="发布管理"
+        placement="right"
+        width={900}
+        open={releaseManagementVisible}
+        onClose={() => setReleaseManagementVisible(false)}
+        mask={false}
+        bodyStyle={{ padding: 0 }}
+      >
+        {page?.id && currentApp?.id && (
+          <ReleaseManagementPanel
+            resourceId={page.id}
+            resourceType="PAGE"
+            appId={currentApp.id}
+            onClose={() => setReleaseManagementVisible(false)}
+            onPublishSuccess={() => {
+              loadPage()
+            }}
+          />
+        )}
+      </Drawer>
     </DndProvider>
   )
 }

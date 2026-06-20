@@ -10,6 +10,7 @@ import com.lowcode.page.entity.PageComponent;
 import com.lowcode.page.mapper.PageMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +23,10 @@ public class PageService extends ServiceImpl<PageMapper, Page> {
 
     @Autowired
     private PageComponentService componentService;
+
+    @Autowired
+    @Lazy
+    private VersionSnapshotService versionSnapshotService;
 
     public Page getPageDetail(Long id) {
         Page page = getById(id);
@@ -69,6 +74,8 @@ public class PageService extends ServiceImpl<PageMapper, Page> {
             }
         }
 
+        versionSnapshotService.createAutoSnapshot("PAGE", page.getId(), page.getAppId());
+
         return getPageDetail(page.getId());
     }
 
@@ -95,6 +102,8 @@ public class PageService extends ServiceImpl<PageMapper, Page> {
                 componentService.save(component);
             }
         }
+
+        versionSnapshotService.createAutoSnapshot("PAGE", page.getId(), page.getAppId());
 
         return getPageDetail(page.getId());
     }
