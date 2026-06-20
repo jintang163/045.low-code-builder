@@ -1,0 +1,4 @@
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+  com.lowcode.common.monitor.config.MonitorAutoConfiguration,\
+  com.lowcode.common.monitor.report.MonitorReportClient,\
+  com.lowcode.common.monitor.interceptor.RequestLogInterceptor

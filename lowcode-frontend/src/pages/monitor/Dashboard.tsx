@@ -649,6 +649,7 @@ const MonitorDashboard: React.FC = () => {
                 <Select>
                   <Option value="error_rate">错误率告警</Option>
                   <Option value="slow_api">慢接口告警</Option>
+                  <Option value="slow_sql">慢SQL告警</Option>
                 </Select>
               </Form.Item>
             </Col>

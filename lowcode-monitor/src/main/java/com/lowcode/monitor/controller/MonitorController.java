@@ -30,9 +30,51 @@ public class MonitorController {
         return Result.ok(MonitorDataStore.getSlowSqlLogs(limit));
     }
 
+    @GetMapping("/slowSql/trace/{traceId}")
+    public Result<List<SlowSqlLog>> getSlowSqlLogsByTraceId(@PathVariable String traceId) {
+        return Result.ok(MonitorDataStore.getSlowSqlLogsByTraceId(traceId));
+    }
+
     @PostMapping("/pageVisit")
     public Result<Void> addPageVisitLog(@RequestBody PageVisitLog pageVisitLog) {
         MonitorDataStore.addPageVisitLog(pageVisitLog);
+        return Result.ok();
+    }
+
+    @PostMapping("/report/request")
+    public Result<Void> reportRequestLogs(@RequestBody List<RequestLog> logs,
+                                          @RequestHeader(value = "X-Service-Name", required = false) String serviceName) {
+        if (logs != null && !logs.isEmpty()) {
+            if (serviceName != null && !serviceName.isEmpty()) {
+                for (RequestLog logItem : logs) {
+                    if (logItem.getServiceName() == null || logItem.getServiceName().isEmpty()) {
+                        logItem.setServiceName(serviceName);
+                    }
+                }
+            }
+            MonitorDataStore.addRequestLogs(logs);
+            log.debug("接收请求日志上报: {} 条, 来源服务: {}", logs.size(), serviceName);
+        }
+        return Result.ok();
+    }
+
+    @PostMapping("/report/slowSql")
+    public Result<Void> reportSlowSqlLogs(@RequestBody List<SlowSqlLog> logs,
+                                          @RequestHeader(value = "X-Service-Name", required = false) String serviceName) {
+        if (logs != null && !logs.isEmpty()) {
+            MonitorDataStore.addSlowSqlLogs(logs);
+            log.debug("接收慢SQL上报: {} 条, 来源服务: {}", logs.size(), serviceName);
+        }
+        return Result.ok();
+    }
+
+    @PostMapping("/report/pageVisit")
+    public Result<Void> reportPageVisitLogs(@RequestBody List<PageVisitLog> logs,
+                                            @RequestHeader(value = "X-Service-Name", required = false) String serviceName) {
+        if (logs != null && !logs.isEmpty()) {
+            MonitorDataStore.addPageVisitLogs(logs);
+            log.debug("接收页面访问上报: {} 条, 来源服务: {}", logs.size(), serviceName);
+        }
         return Result.ok();
     }
 
@@ -69,5 +111,11 @@ public class MonitorController {
     public Result<Map<String, Object>> testAlert(@RequestBody Map<String, Object> params) {
         log.info("测试告警: {}", params);
         return Result.ok(params);
+    }
+
+    @PostMapping("/clear")
+    public Result<Void> clearAll() {
+        MonitorDataStore.clearAll();
+        return Result.ok();
     }
 }

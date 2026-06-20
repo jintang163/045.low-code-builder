@@ -22,8 +22,12 @@ public class MybatisPlusConfig {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
         interceptor.addInnerInterceptor(new PaginationInnerInterceptor(DbType.MYSQL));
         interceptor.addInnerInterceptor(new OptimisticLockerInnerInterceptor());
-        interceptor.addInnerInterceptor(new SlowSqlInterceptor());
         return interceptor;
+    }
+
+    @Bean
+    public SlowSqlInterceptor slowSqlInterceptor() {
+        return new SlowSqlInterceptor();
     }
 
     @Bean

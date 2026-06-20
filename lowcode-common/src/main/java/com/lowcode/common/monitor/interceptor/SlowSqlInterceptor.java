@@ -1,56 +1,61 @@
 package com.lowcode.common.monitor.interceptor;
 
-import com.baomidou.mybatisplus.core.toolkit.PluginUtils;
-import com.baomidou.mybatisplus.extension.plugins.inner.InnerInterceptor;
 import com.lowcode.common.monitor.entity.SlowSqlLog;
+import com.lowcode.common.monitor.report.MonitorReportClient;
 import com.lowcode.common.monitor.store.MonitorDataStore;
 import com.lowcode.common.monitor.util.TraceIdUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ibatis.executor.Executor;
 import org.apache.ibatis.mapping.BoundSql;
 import org.apache.ibatis.mapping.MappedStatement;
+import org.apache.ibatis.plugin.*;
 import org.apache.ibatis.session.ResultHandler;
 import org.apache.ibatis.session.RowBounds;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 
-import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.Properties;
 
 @Slf4j
-public class SlowSqlInterceptor implements InnerInterceptor {
+@Intercepts({
+        @Signature(type = Executor.class, method = "update", args = {MappedStatement.class, Object.class}),
+        @Signature(type = Executor.class, method = "query", args = {MappedStatement.class, Object.class, RowBounds.class, ResultHandler.class}),
+        @Signature(type = Executor.class, method = "queryCursor", args = {MappedStatement.class, Object.class, RowBounds.class, ResultHandler.class})
+})
+public class SlowSqlInterceptor implements Interceptor {
 
     private long threshold = MonitorDataStore.getSlowSqlThreshold();
 
-    @Override
-    public void beforeQuery(Executor executor, MappedStatement ms, Object parameter, RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql) throws SQLException {
-        String sql = boundSql.getSql();
-        String mapperId = ms.getId();
-        long startTime = System.currentTimeMillis();
-
-        try {
-            InnerInterceptor.super.beforeQuery(executor, ms, parameter, rowBounds, resultHandler, boundSql);
-        } finally {
-            long cost = System.currentTimeMillis() - startTime;
-            checkSlowSql(sql, mapperId, parameter, cost);
-        }
-    }
+    @Autowired(required = false)
+    @Lazy
+    private MonitorReportClient reportClient;
 
     @Override
-    public void beforeUpdate(Executor executor, MappedStatement ms, Object parameter) throws SQLException {
+    public Object intercept(Invocation invocation) throws Throwable {
+        Object[] args = invocation.getArgs();
+        MappedStatement ms = (MappedStatement) args[0];
+        Object parameter = args[1];
         BoundSql boundSql = ms.getBoundSql(parameter);
-        String sql = boundSql.getSql();
-        String mapperId = ms.getId();
-        long startTime = System.currentTimeMillis();
 
+        long startTime = System.currentTimeMillis();
         try {
-            InnerInterceptor.super.beforeUpdate(executor, ms, parameter);
+            return invocation.proceed();
         } finally {
             long cost = System.currentTimeMillis() - startTime;
-            checkSlowSql(sql, mapperId, parameter, cost);
+            checkSlowSql(ms, parameter, boundSql, cost);
         }
     }
 
-    private void checkSlowSql(String sql, String mapperId, Object parameter, long cost) {
+    @Override
+    public Object plugin(Object target) {
+        return Plugin.wrap(target, this);
+    }
+
+    private void checkSlowSql(MappedStatement ms, Object parameter, BoundSql boundSql, long cost) {
+        String sql = boundSql != null ? boundSql.getSql() : "";
+        String mapperId = ms.getId();
+
         if (cost >= threshold) {
             SlowSqlLog slowSqlLog = new SlowSqlLog();
             slowSqlLog.setId(String.valueOf(System.currentTimeMillis()));
@@ -63,12 +68,28 @@ public class SlowSqlInterceptor implements InnerInterceptor {
             }
             slowSqlLog.setExecuteTime(cost);
             slowSqlLog.setThreshold(threshold);
-            slowSqlLog.setMapperName(mapperId.substring(0, mapperId.lastIndexOf('.')));
-            slowSqlLog.setMethodName(mapperId.substring(mapperId.lastIndexOf('.') + 1));
+            int lastDotIdx = mapperId.lastIndexOf('.');
+            slowSqlLog.setMapperName(lastDotIdx > 0 ? mapperId.substring(0, lastDotIdx) : mapperId);
+            slowSqlLog.setMethodName(lastDotIdx > 0 ? mapperId.substring(lastDotIdx + 1) : mapperId);
             slowSqlLog.setHappenTime(LocalDateTime.now());
+            slowSqlLog.setDataSource(getDataSourceName(ms));
 
             MonitorDataStore.addSlowSqlLog(slowSqlLog);
-            log.warn("[SlowSQL] {}ms {} - {}", cost, mapperId, slowSqlLog.getSql());
+
+            if (reportClient != null) {
+                reportClient.reportSlowSql(slowSqlLog);
+            }
+
+            org.slf4j.Logger slowSqlLogger = org.slf4j.LoggerFactory.getLogger("SLOW_SQL");
+            slowSqlLogger.info("{}ms | {} | {}", cost, mapperId, slowSqlLog.getSql());
+        }
+    }
+
+    private String getDataSourceName(MappedStatement ms) {
+        try {
+            return ms.getConfiguration().getEnvironment().getId();
+        } catch (Exception e) {
+            return "default";
         }
     }
 
@@ -77,6 +98,7 @@ public class SlowSqlInterceptor implements InnerInterceptor {
         return sql.replaceAll("\\s+", " ").trim();
     }
 
+    @Override
     public void setProperties(Properties properties) {
         String thresholdStr = properties.getProperty("threshold");
         if (thresholdStr != null && !thresholdStr.isEmpty()) {

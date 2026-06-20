@@ -7,7 +7,7 @@ import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 import org.springframework.cloud.openfeign.EnableFeignClients;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
-@SpringBootApplication(scanBasePackages = {"com.lowcode.generator", "com.lowcode.model"})
+@SpringBootApplication(scanBasePackages = {"com.lowcode"})
 @EnableDiscoveryClient
 @EnableFeignClients
 @EnableScheduling
