@@ -15,6 +15,7 @@ import {
   Tag,
   Spin,
   Alert,
+  Checkbox,
 } from 'antd'
 import {
   MobileOutlined,
@@ -28,18 +29,31 @@ import {
   AppstoreOutlined,
   DatabaseOutlined,
   FormOutlined,
+  DownloadOutlined,
+  FileTextOutlined,
+  WechatOutlined,
+  AlipayCircleOutlined,
+  Html5Outlined,
+  GlobalOutlined,
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '@/store/appStore'
 import { appApi, AppInfo } from '@/api'
 import { dataModelApi, DataModel } from '@/api/dataModel'
 import { pageApi, PageInfo } from '@/api/page'
-import { uniappApi, UniAppConfig, UniAppGenerateResult } from '@/api/uniapp'
+import { uniappApi, UniAppConfig, UniAppGenerateResult, TargetPlatform, PreviewInfo } from '@/api/uniapp'
 import type { Platform } from '@/hooks/useMobileSimulator'
 
 const { Title, Text } = Typography
 const { Option } = Select
 const { TextArea } = Input
+
+const targetPlatformOptions: { label: string; value: TargetPlatform; icon: React.ReactNode }[] = [
+  { label: '微信小程序', value: 'wechat', icon: <WechatOutlined /> },
+  { label: '支付宝小程序', value: 'alipay', icon: <AlipayCircleOutlined /> },
+  { label: 'H5', value: 'h5', icon: <Html5Outlined /> },
+  { label: 'App', value: 'app', icon: <GlobalOutlined /> },
+]
 
 const platformOptions = [
   { label: 'iOS', value: 'ios', icon: <AppleOutlined /> },
@@ -59,17 +73,33 @@ const platformNames: Record<Platform, string> = {
   harmony: 'HarmonyOS',
 }
 
+const targetPlatformIcons: Record<TargetPlatform, React.ReactNode> = {
+  wechat: <WechatOutlined />,
+  alipay: <AlipayCircleOutlined />,
+  h5: <Html5Outlined />,
+  app: <GlobalOutlined />,
+}
+
+const targetPlatformNames: Record<TargetPlatform, string> = {
+  wechat: '微信小程序',
+  alipay: '支付宝小程序',
+  h5: 'H5',
+  app: 'App',
+}
+
 const MobileGenerator: React.FC = () => {
   const navigate = useNavigate()
   const { currentApp } = useAppStore()
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
+  const [creatingPreview, setCreatingPreview] = useState(false)
   const [appList, setAppList] = useState<AppInfo[]>([])
   const [dataModelList, setDataModelList] = useState<DataModel[]>([])
   const [pageList, setPageList] = useState<PageInfo[]>([])
   const [selectedApp, setSelectedApp] = useState<AppInfo | null>(null)
   const [generateResult, setGenerateResult] = useState<UniAppGenerateResult | null>(null)
+  const [previewInfo, setPreviewInfo] = useState<PreviewInfo | null>(null)
 
   const fetchAppList = async () => {
     try {
@@ -136,16 +166,39 @@ const MobileGenerator: React.FC = () => {
     }
   }
 
+  const createPreviewSession = async (result: UniAppGenerateResult) => {
+    try {
+      setCreatingPreview(true)
+      const res = await uniappApi.createPreview({
+        appId: result.appId || selectedApp?.id || 1,
+        pageId: 1,
+        platform: 'h5',
+        appCode: result.appCode,
+      })
+      if (res.code === 0 || res.code === 200) {
+        setPreviewInfo(res.data)
+        message.success('预览会话创建成功')
+      }
+    } catch (e: any) {
+      console.error('创建预览会话失败:', e)
+      message.warning('预览会话创建失败: ' + (e.message || '未知错误'))
+    } finally {
+      setCreatingPreview(false)
+    }
+  }
+
   const handleGenerate = async () => {
     try {
       const values = await form.validateFields()
       setGenerating(true)
       setGenerateResult(null)
+      setPreviewInfo(null)
 
       const config: UniAppConfig = {
         appName: values.appName,
         appId: values.appId,
         platforms: values.platforms,
+        targetPlatforms: values.targetPlatforms,
         dataModelIds: values.dataModelIds,
         pageIds: values.pageIds,
         touchEventsEnabled: values.touchEventsEnabled ?? true,
@@ -159,6 +212,8 @@ const MobileGenerator: React.FC = () => {
         const result: UniAppGenerateResult = res.data
         setGenerateResult(result)
         message.success('uni-app 项目生成成功！')
+
+        await createPreviewSession(result)
       }
     } catch (e: any) {
       message.error('生成失败: ' + e.message)
@@ -168,16 +223,28 @@ const MobileGenerator: React.FC = () => {
   }
 
   const handleGoToPreview = () => {
-    if (generateResult?.previewToken) {
-      navigate(`/mobile/preview?token=${generateResult.previewToken}`)
+    const token = previewInfo?.previewToken || generateResult?.previewToken
+    if (token) {
+      navigate(`/mobile/preview?token=${encodeURIComponent(token)}`)
     } else {
       navigate('/mobile/preview')
     }
   }
 
   const handleDownload = async () => {
-    if (!generateResult?.appCode) return
     try {
+      if (generateResult?.downloadUrl) {
+        const link = document.createElement('a')
+        link.href = generateResult.downloadUrl
+        link.download = `${generateResult.appCode}.zip`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        message.success('下载已开始')
+        return
+      }
+
+      if (!generateResult?.appCode) return
       const res = await uniappApi.downloadUniApp(generateResult.appCode)
       const blob = new Blob([res.data as BlobPart], {
         type: 'application/zip',
@@ -210,6 +277,9 @@ const MobileGenerator: React.FC = () => {
             </Text>
           </div>
         </Space>
+        <Button icon={<EyeOutlined />} onClick={() => navigate('/mobile/preview')}>
+          预览页面
+        </Button>
       </div>
 
       <Spin spinning={loading}>
@@ -284,16 +354,16 @@ const MobileGenerator: React.FC = () => {
               </Form>
             </Card>
 
-            <Card title="目标平台" style={{ marginBottom: 24 }}>
+            <Card title="运行平台（App 操作系统）" style={{ marginBottom: 24 }}>
               <Form form={form} layout="vertical">
                 <Form.Item
                   name="platforms"
-                  label="选择目标平台"
+                  label="选择 App 运行平台"
                   rules={[{ required: true, message: '请至少选择一个平台' }]}
                 >
                   <Select
                     mode="multiple"
-                    placeholder="请选择要生成的平台"
+                    placeholder="请选择 App 运行的操作系统平台"
                     style={{ width: '100%' }}
                     optionLabelProp="label"
                   >
@@ -307,6 +377,34 @@ const MobileGenerator: React.FC = () => {
                     ))}
                   </Select>
                 </Form.Item>
+              </Form>
+            </Card>
+
+            <Card title="目标发布平台" style={{ marginBottom: 24 }}>
+              <Form form={form} layout="vertical">
+                <Form.Item
+                  name="targetPlatforms"
+                  label="选择目标发布平台"
+                  rules={[{ required: true, message: '请至少选择一个目标发布平台' }]}
+                >
+                  <Checkbox.Group style={{ width: '100%' }}>
+                    <Row gutter={[16, 16]}>
+                      {targetPlatformOptions.map(option => (
+                        <Col span={12} key={option.value}>
+                          <Checkbox value={option.value} style={{ width: '100%' }}>
+                            <Space>
+                              {option.icon}
+                              <span>{option.label}</span>
+                            </Space>
+                          </Checkbox>
+                        </Col>
+                      ))}
+                    </Row>
+                  </Checkbox.Group>
+                </Form.Item>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  选择需要发布的目标平台，将对应生成各平台的代码和配置
+                </Text>
               </Form>
             </Card>
 
@@ -448,6 +546,7 @@ const MobileGenerator: React.FC = () => {
                 </Space>
               }
               style={{ marginBottom: 24 }}
+              extra={creatingPreview && <Spin size="small" />}
             >
               {!generateResult ? (
                 <div style={{ textAlign: 'center', padding: '40px 0' }}>
@@ -468,6 +567,16 @@ const MobileGenerator: React.FC = () => {
                     style={{ marginBottom: 16 }}
                   />
 
+                  {previewInfo && (
+                    <Alert
+                      type="info"
+                      showIcon
+                      message="预览就绪"
+                      description="预览会话已创建，可前往预览页面查看"
+                      style={{ marginBottom: 16 }}
+                    />
+                  )}
+
                   <Divider style={{ margin: '12px 0' }} />
 
                   <div style={{ marginBottom: 16 }}>
@@ -475,8 +584,20 @@ const MobileGenerator: React.FC = () => {
                     <div style={{ fontSize: 16, fontWeight: 500 }}>{generateResult.appCode}</div>
                   </div>
 
+                  {generateResult.fileCount !== undefined && (
+                    <div style={{ marginBottom: 16 }}>
+                      <Text type="secondary" style={{ fontSize: 12 }}>生成文件数</Text>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <FileTextOutlined style={{ color: '#52c41a' }} />
+                        <span style={{ fontSize: 16, fontWeight: 500 }}>
+                          {generateResult.fileCount} 个文件
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                   <div style={{ marginBottom: 16 }}>
-                    <Text type="secondary" style={{ fontSize: 12 }}>目标平台</Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>运行平台</Text>
                     <div style={{ marginTop: 4 }}>
                       <Space wrap>
                         {generateResult.platforms.map(platform => (
@@ -488,10 +609,25 @@ const MobileGenerator: React.FC = () => {
                     </div>
                   </div>
 
+                  {generateResult.targetPlatforms && generateResult.targetPlatforms.length > 0 && (
+                    <div style={{ marginBottom: 16 }}>
+                      <Text type="secondary" style={{ fontSize: 12 }}>发布平台</Text>
+                      <div style={{ marginTop: 4 }}>
+                        <Space wrap>
+                          {generateResult.targetPlatforms.map(tp => (
+                            <Tag key={tp} icon={targetPlatformIcons[tp]} color="green">
+                              {targetPlatformNames[tp]}
+                            </Tag>
+                          ))}
+                        </Space>
+                      </div>
+                    </div>
+                  )}
+
                   <div style={{ marginBottom: 16 }}>
                     <Text type="secondary" style={{ fontSize: 12 }}>预览Token</Text>
-                    <div style={{ fontFamily: 'monospace', fontSize: 12, background: '#f5f5f5', padding: 8, borderRadius: 4, marginTop: 4 }}>
-                      {generateResult.previewToken}
+                    <div style={{ fontFamily: 'monospace', fontSize: 12, background: '#f5f5f5', padding: 8, borderRadius: 4, marginTop: 4, wordBreak: 'break-all' }}>
+                      {previewInfo?.previewToken || generateResult.previewToken || '暂无'}
                     </div>
                   </div>
 
@@ -501,6 +637,15 @@ const MobileGenerator: React.FC = () => {
                       {generateResult.projectPath}
                     </div>
                   </div>
+
+                  {previewInfo?.previewUrl && (
+                    <div style={{ marginBottom: 16 }}>
+                      <Text type="secondary" style={{ fontSize: 12 }}>预览地址</Text>
+                      <div style={{ fontFamily: 'monospace', fontSize: 11, background: '#f5f5f5', padding: 8, borderRadius: 4, marginTop: 4, wordBreak: 'break-all', color: '#1677ff' }}>
+                        {previewInfo.previewUrl}
+                      </div>
+                    </div>
+                  )}
 
                   <div style={{ marginBottom: 16 }}>
                     <Text type="secondary" style={{ fontSize: 12 }}>包大小</Text>
@@ -522,16 +667,22 @@ const MobileGenerator: React.FC = () => {
                       block
                       icon={<EyeOutlined />}
                       onClick={handleGoToPreview}
+                      loading={creatingPreview}
                     >
                       前往预览
                     </Button>
                     <Button
                       block
-                      icon={<CodeOutlined />}
+                      icon={<DownloadOutlined />}
                       onClick={handleDownload}
                     >
-                      下载项目包
+                      {generateResult.downloadUrl ? '下载项目包' : '下载项目 ZIP'}
                     </Button>
+                    {generateResult.downloadUrl && (
+                      <div style={{ fontSize: 11, color: '#8c8c8c', padding: '0 8px', wordBreak: 'break-all' }}>
+                        下载链接: {generateResult.downloadUrl}
+                      </div>
+                    )}
                   </Space>
                 </div>
               )}
@@ -554,14 +705,22 @@ const MobileGenerator: React.FC = () => {
                 </ul>
                 <Divider style={{ margin: '12px 0' }} />
                 <div style={{ marginBottom: 8 }}>
-                  <strong>支持的平台：</strong>
+                  <strong>目标发布平台：</strong>
                 </div>
                 <ul style={{ paddingLeft: 20, margin: 0 }}>
-                  <li>iOS - App Store</li>
-                  <li>Android - 应用商店</li>
-                  <li>HarmonyOS - 华为应用市场</li>
-                  <li>微信小程序</li>
-                  <li>H5 - 移动端网页</li>
+                  <li><WechatOutlined /> 微信小程序</li>
+                  <li><AlipayCircleOutlined /> 支付宝小程序</li>
+                  <li><Html5Outlined /> H5 - 移动端网页</li>
+                  <li><GlobalOutlined /> App - iOS / Android / HarmonyOS</li>
+                </ul>
+                <Divider style={{ margin: '12px 0' }} />
+                <div style={{ marginBottom: 8 }}>
+                  <strong>App 运行平台：</strong>
+                </div>
+                <ul style={{ paddingLeft: 20, margin: 0 }}>
+                  <li><AppleOutlined /> iOS - App Store</li>
+                  <li><AndroidOutlined /> Android - 应用商店</li>
+                  <li><StarOutlined /> HarmonyOS - 华为应用市场</li>
                 </ul>
               </div>
             </Card>

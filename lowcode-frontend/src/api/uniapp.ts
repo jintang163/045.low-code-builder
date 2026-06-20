@@ -1,10 +1,16 @@
 import request from '@/utils/request'
 import type { Platform, DeviceConfig } from '@/hooks/useMobileSimulator'
 
+export type TargetPlatform = 'wechat' | 'alipay' | 'h5' | 'app'
+
 export interface UniAppConfig {
   appName: string
   appId: string
+  appid?: string
+  wechatAppid?: string
+  alipayAppid?: string
   platforms: Platform[]
+  targetPlatforms?: TargetPlatform[]
   dataModelIds?: number[]
   pageIds?: number[]
   touchEventsEnabled?: boolean
@@ -15,17 +21,25 @@ export interface UniAppConfig {
 
 export interface UniAppGenerateResult {
   appCode: string
+  appId: number
   previewToken: string
   projectPath: string
   packageSize: number
   generatedTime: string
   platforms: Platform[]
+  targetPlatforms?: TargetPlatform[]
+  downloadUrl?: string
+  fileCount?: number
+  previewUrl?: string
+  qrCodeBase64?: string
 }
 
 export interface PreviewCreateParams {
-  appCode: string
+  appId?: number
+  pageId?: number
+  appCode?: string
   deviceType?: string
-  platform?: Platform
+  platform?: 'h5' | Platform
   url?: string
 }
 
@@ -33,10 +47,13 @@ export interface PreviewInfo {
   previewToken: string
   appCode: string
   appName: string
-  platform: Platform
+  appId?: number
+  pageId?: number
+  platform: 'h5' | Platform
   deviceType: string
   previewUrl: string
-  qrCodeUrl: string
+  qrCodeUrl?: string
+  qrCodeBase64?: string
   expireTime: string
   createTime: string
   status: 'active' | 'expired' | 'error'
@@ -60,6 +77,7 @@ export interface PlatformInfo {
 export interface QRCodeResult {
   url: string
   base64: string
+  qrCodeBase64?: string
   size: number
 }
 

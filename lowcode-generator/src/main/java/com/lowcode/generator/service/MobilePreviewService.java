@@ -10,6 +10,7 @@ import com.google.zxing.qrcode.QRCodeWriter;
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -30,12 +31,20 @@ import java.util.stream.Collectors;
 @Service
 public class MobilePreviewService {
 
-    private static final long DEFAULT_EXPIRE_HOURS = 24;
-    private static final String PREVIEW_URL_TEMPLATE = "/mobile/preview/%s?appId=%d&pageId=%d&platform=%s";
+    private static final String PREVIEW_PATH_TEMPLATE = "/mobile/preview/%s?token=%s&appId=%d&pageId=%d&platform=%s";
     private static final String BASE64_PREFIX = "data:image/png;base64,";
 
+    @Value("${preview.base-url:http://localhost:8080}")
+    private String baseUrl;
+
+    @Value("${preview.token-expire-hours:24}")
+    private int tokenExpireHours;
+
+    @Value("${preview.qr-code-size:256}")
+    private int qrCodeSize;
+
     private final ConcurrentHashMap<String, MobilePreview> previewStore = new ConcurrentHashMap<>();
-    private final List<DeviceInfo> deviceList = initDeviceList();
+    private final List<DeviceConfig> deviceList = initDeviceList();
 
     public MobilePreview createPreview(Long appId, Long pageId, String platform) {
         log.info("创建预览会话 - appId: {}, pageId: {}, platform: {}", appId, pageId, platform);
@@ -51,21 +60,22 @@ public class MobilePreviewService {
         }
 
         String previewToken = IdUtil.fastSimpleUUID();
-        String previewUrl = String.format(PREVIEW_URL_TEMPLATE, previewToken, appId, pageId, platform);
+        String previewPath = String.format(PREVIEW_PATH_TEMPLATE, previewToken, previewToken, appId, pageId, platform);
+        String fullPreviewUrl = baseUrl + previewPath;
 
         MobilePreview preview = new MobilePreview();
         preview.setPreviewToken(previewToken);
         preview.setAppId(appId);
         preview.setPageId(pageId);
         preview.setPlatform(platform);
-        preview.setPreviewUrl(previewUrl);
+        preview.setPreviewUrl(fullPreviewUrl);
         preview.setCreateTime(LocalDateTime.now());
-        preview.setExpireTime(LocalDateTime.now().plusHours(DEFAULT_EXPIRE_HOURS));
+        preview.setExpireTime(LocalDateTime.now().plusHours(tokenExpireHours));
         preview.setVisitCount(0);
         preview.setExpired(false);
 
         try {
-            String qrCodeBase64 = generateQRCode(previewUrl, 300, 300, null);
+            String qrCodeBase64 = generateQRCode(fullPreviewUrl, qrCodeSize, qrCodeSize, null);
             preview.setQrCodeBase64(qrCodeBase64);
         } catch (Exception e) {
             log.error("生成二维码失败 - previewToken: {}", previewToken, e);
@@ -166,7 +176,7 @@ public class MobilePreviewService {
         }
     }
 
-    public List<DeviceInfo> listDevices() {
+    public List<DeviceConfig> listDevices() {
         log.debug("获取支持的模拟器设备列表 - count: {}", deviceList.size());
         return Collections.unmodifiableList(deviceList);
     }
@@ -272,7 +282,7 @@ public class MobilePreviewService {
         return qrImage;
     }
 
-    private DeviceInfo getDefaultDevice(String platform) {
+    private DeviceConfig getDefaultDevice(String platform) {
         if ("ios".equalsIgnoreCase(platform)) {
             return deviceList.stream()
                     .filter(d -> "iPhone 14".equals(d.getName()))
@@ -292,10 +302,10 @@ public class MobilePreviewService {
         return deviceList.get(0);
     }
 
-    private List<DeviceInfo> initDeviceList() {
-        List<DeviceInfo> devices = new ArrayList<>();
+    private List<DeviceConfig> initDeviceList() {
+        List<DeviceConfig> devices = new ArrayList<>();
 
-        DeviceInfo iPhone14 = new DeviceInfo();
+        DeviceConfig iPhone14 = new DeviceConfig();
         iPhone14.setId("iphone14");
         iPhone14.setName("iPhone 14");
         iPhone14.setPlatform("ios");
@@ -306,7 +316,7 @@ public class MobilePreviewService {
         iPhone14.setUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1");
         devices.add(iPhone14);
 
-        DeviceInfo iPhone14ProMax = new DeviceInfo();
+        DeviceConfig iPhone14ProMax = new DeviceConfig();
         iPhone14ProMax.setId("iphone14promax");
         iPhone14ProMax.setName("iPhone 14 Pro Max");
         iPhone14ProMax.setPlatform("ios");
@@ -317,7 +327,7 @@ public class MobilePreviewService {
         iPhone14ProMax.setUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1");
         devices.add(iPhone14ProMax);
 
-        DeviceInfo samsungS23 = new DeviceInfo();
+        DeviceConfig samsungS23 = new DeviceConfig();
         samsungS23.setId("samsungs23");
         samsungS23.setName("Samsung Galaxy S23");
         samsungS23.setPlatform("android");
@@ -328,7 +338,7 @@ public class MobilePreviewService {
         samsungS23.setUserAgent("Mozilla/5.0 (Linux; Android 13; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36");
         devices.add(samsungS23);
 
-        DeviceInfo huaweiMate60Pro = new DeviceInfo();
+        DeviceConfig huaweiMate60Pro = new DeviceConfig();
         huaweiMate60Pro.setId("huaweimate60pro");
         huaweiMate60Pro.setName("Huawei Mate 60 Pro");
         huaweiMate60Pro.setPlatform("harmony");
@@ -339,7 +349,7 @@ public class MobilePreviewService {
         huaweiMate60Pro.setUserAgent("Mozilla/5.0 (Linux; HarmonyOS 4.0; LIO-AN00) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36");
         devices.add(huaweiMate60Pro);
 
-        DeviceInfo iPadPro11 = new DeviceInfo();
+        DeviceConfig iPadPro11 = new DeviceConfig();
         iPadPro11.setId("ipadpro11");
         iPadPro11.setName("iPad Pro 11");
         iPadPro11.setPlatform("ios");
@@ -350,7 +360,7 @@ public class MobilePreviewService {
         iPadPro11.setUserAgent("Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1");
         devices.add(iPadPro11);
 
-        DeviceInfo tablet = new DeviceInfo();
+        DeviceConfig tablet = new DeviceConfig();
         tablet.setId("tablet");
         tablet.setName("通用平板");
         tablet.setPlatform("android");
@@ -380,7 +390,7 @@ public class MobilePreviewService {
     }
 
     @Data
-    public static class DeviceInfo {
+    public static class DeviceConfig {
         private String id;
         private String name;
         private String platform;
@@ -398,8 +408,48 @@ public class MobilePreviewService {
         private Long pageId;
         private String platform;
         private String previewUrl;
-        private List<DeviceInfo> deviceList;
-        private DeviceInfo defaultDevice;
+        private List<DeviceConfig> deviceList;
+        private DeviceConfig defaultDevice;
         private LocalDateTime startTime;
+    }
+
+    public SimulatorConfig getSimulatorConfig(String previewToken, String deviceType) {
+        log.info("获取模拟器配置 - previewToken: {}, deviceType: {}", previewToken, deviceType);
+
+        SimulatorConfig config = startSimulator(previewToken);
+
+        if (deviceType != null && !deviceType.isEmpty()) {
+            Optional<DeviceConfig> matchedDevice = deviceList.stream()
+                    .filter(d -> d.getId().equalsIgnoreCase(deviceType)
+                            || d.getName().equalsIgnoreCase(deviceType))
+                    .findFirst();
+            matchedDevice.ifPresent(config::setDefaultDevice);
+        }
+
+        log.info("模拟器配置获取成功 - defaultDevice: {}", config.getDefaultDevice().getName());
+        return config;
+    }
+
+    public List<DeviceConfig> getSupportedDevices() {
+        return listDevices();
+    }
+
+    public String getFullPreviewUrl(String previewToken) {
+        log.info("获取完整预览URL - previewToken: {}", previewToken);
+        MobilePreview preview = getPreview(previewToken);
+        return preview.getPreviewUrl();
+    }
+
+    public byte[] getQrCode(String previewToken, int size) {
+        log.info("获取二维码字节数组 - previewToken: {}, size: {}", previewToken, size);
+
+        MobilePreview preview = getPreview(previewToken);
+
+        String fullPreviewUrl = preview.getPreviewUrl();
+
+        String base64WithPrefix = generateQRCode(fullPreviewUrl, size, size, null);
+
+        String base64Data = base64WithPrefix.substring(BASE64_PREFIX.length());
+        return Base64.getDecoder().decode(base64Data);
     }
 }

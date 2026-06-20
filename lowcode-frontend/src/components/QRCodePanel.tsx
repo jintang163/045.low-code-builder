@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { Card, Button, Input, Space, message, Typography } from 'antd'
+import React, { useState, useMemo } from 'react'
+import { Card, Button, Input, Space, message, Typography, Spin } from 'antd'
 import {
   QrcodeOutlined,
   DownloadOutlined,
@@ -7,20 +7,36 @@ import {
   CheckOutlined,
 } from '@ant-design/icons'
 
-const { Text, Paragraph } = Typography
+const { Text } = Typography
 
 interface QRCodePanelProps {
   url: string
   title?: string
+  qrCodeBase64?: string
+  previewToken?: string
 }
 
 const QRCodePanel: React.FC<QRCodePanelProps> = ({
   url,
   title = '扫码预览',
+  qrCodeBase64,
+  previewToken,
 }) => {
   const [copied, setCopied] = useState(false)
+  const [imageError, setImageError] = useState(false)
 
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`
+  const qrCodeImageSrc = useMemo(() => {
+    if (qrCodeBase64 && !imageError) {
+      return qrCodeBase64.startsWith('data:') ? qrCodeBase64 : `data:image/png;base64,${qrCodeBase64}`
+    }
+    if (previewToken && !imageError) {
+      return `/api/uniapp/preview/${previewToken}/qrcode?size=300`
+    }
+    if (url) {
+      return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`
+    }
+    return ''
+  }, [qrCodeBase64, previewToken, url, imageError])
 
   const handleCopy = async () => {
     try {
@@ -33,13 +49,34 @@ const QRCodePanel: React.FC<QRCodePanelProps> = ({
     }
   }
 
-  const handleDownload = () => {
-    const link = document.createElement('a')
-    link.href = qrCodeUrl
-    link.download = 'qrcode.png'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+  const handleDownload = async () => {
+    try {
+      let href = qrCodeImageSrc
+      let downloadName = 'qrcode.png'
+
+      if (qrCodeBase64) {
+        href = qrCodeBase64.startsWith('data:') ? qrCodeBase64 : `data:image/png;base64,${qrCodeBase64}`
+      } else if (previewToken) {
+        const apiUrl = `/api/uniapp/preview/${previewToken}/qrcode?size=300`
+        const response = await fetch(apiUrl)
+        const blob = await response.blob()
+        href = URL.createObjectURL(blob)
+      }
+
+      const link = document.createElement('a')
+      link.href = href
+      link.download = downloadName
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+
+      if (previewToken && !qrCodeBase64) {
+        setTimeout(() => URL.revokeObjectURL(href), 1000)
+      }
+    } catch (e) {
+      console.error('下载二维码失败:', e)
+      message.error('下载二维码失败')
+    }
   }
 
   return (
@@ -67,11 +104,16 @@ const QRCodePanel: React.FC<QRCodePanelProps> = ({
             justifyContent: 'center',
           }}
         >
-          <img
-            src={qrCodeUrl}
-            alt="QR Code"
-            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-          />
+          {qrCodeImageSrc ? (
+            <img
+              src={qrCodeImageSrc}
+              alt="QR Code"
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              onError={() => setImageError(true)}
+            />
+          ) : (
+            <Spin />
+          )}
         </div>
 
         <div style={{ marginBottom: 16 }}>
@@ -101,6 +143,7 @@ const QRCodePanel: React.FC<QRCodePanelProps> = ({
             icon={<DownloadOutlined />}
             onClick={handleDownload}
             block
+            disabled={!qrCodeImageSrc}
           >
             下载二维码
           </Button>

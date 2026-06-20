@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { Layout, Space, Button, Card, Switch, Form, Select, Tag, message, Divider, Typography } from 'antd'
+import React, { useState, useEffect, useCallback } from 'react'
+import { Layout, Space, Button, Card, Switch, Form, Select, Tag, message, Divider, Typography, Spin } from 'antd'
 import {
   CodeOutlined,
   DownloadOutlined,
@@ -11,12 +11,15 @@ import {
   AppleOutlined,
   AndroidOutlined,
   StarOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMobileSimulator, Platform, DeviceConfig } from '@/hooks/useMobileSimulator'
 import MobileSimulator from '@/components/MobileSimulator'
 import DeviceSelector from '@/components/DeviceSelector'
 import QRCodePanel from '@/components/QRCodePanel'
 import { TouchPoint, GestureEvent } from '@/components/TouchEventHandler'
+import { uniappApi, PreviewInfo } from '@/api/uniapp'
 
 const { Sider, Content, Header } = Layout
 const { Title, Text } = Typography
@@ -34,6 +37,8 @@ const platformNames: Record<Platform, string> = {
 }
 
 const MobilePreview: React.FC = () => {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const {
     state,
     deviceList,
@@ -44,12 +49,90 @@ const MobilePreview: React.FC = () => {
     setUrl,
     setTouchEventsEnabled,
     setGesturesEnabled,
+    setPreviewToken,
+    setPreviewInfo,
+    createPreview,
     refresh,
     goBack,
   } = useMobileSimulator()
 
   const [showQRCode, setShowQRCode] = useState(false)
   const [touchLog, setTouchLog] = useState<string[]>([])
+  const [loading, setLoading] = useState(false)
+  const [platformFilter, setPlatformFilter] = useState<Platform | 'all'>('all')
+
+  const urlToken = searchParams.get('token')
+  const urlAppId = searchParams.get('appId')
+  const urlPageId = searchParams.get('pageId')
+
+  const initPreviewSession = useCallback(async () => {
+    setLoading(true)
+    try {
+      if (urlToken) {
+        const res = await uniappApi.getPreview(urlToken)
+        if (res.code === 0 || res.code === 200) {
+          const info: PreviewInfo = res.data
+          setPreviewInfo(info)
+          message.success('预览会话已恢复')
+        } else {
+          await createNewPreview()
+        }
+      } else {
+        await createNewPreview()
+      }
+    } catch (e: any) {
+      console.error('初始化预览会话失败:', e)
+      message.error('初始化预览会话失败: ' + (e.message || '未知错误'))
+    } finally {
+      setLoading(false)
+    }
+  }, [urlToken, urlAppId, urlPageId, setPreviewInfo, createPreview])
+
+  const createNewPreview = useCallback(async () => {
+    try {
+      const appId = urlAppId ? parseInt(urlAppId, 10) : 1
+      const pageId = urlPageId ? parseInt(urlPageId, 10) : 1
+
+      const previewUrl = await createPreview({
+        appId,
+        pageId,
+        platform: 'h5',
+        deviceType: state.device.id,
+      })
+
+      if (previewUrl) {
+        message.success('预览会话创建成功')
+      } else {
+        message.warning('预览会话创建失败，请稍后重试')
+      }
+    } catch (e: any) {
+      console.error('创建预览会话失败:', e)
+      throw e
+    }
+  }, [urlAppId, urlPageId, state.device.id, createPreview])
+
+  const refreshPreviewSession = useCallback(async () => {
+    setLoading(true)
+    try {
+      await createNewPreview()
+    } finally {
+      setLoading(false)
+    }
+  }, [createNewPreview])
+
+  useEffect(() => {
+    initPreviewSession()
+  }, [])
+
+  useEffect(() => {
+    if (state.previewToken && !loading) {
+      refreshPreviewSession()
+    }
+  }, [state.device.id, state.device.platform])
+
+  const handleDeviceChange = (device: DeviceConfig) => {
+    setDevice(device)
+  }
 
   const handleTouchStart = (touches: TouchPoint[]) => {
     const log = `[touchstart] ${touches.map(t => `(${t.x.toFixed(0)}, ${t.y.toFixed(0)})`).join(', ')}`
@@ -85,6 +168,7 @@ const deviceConfig = {
   scale: ${state.scale},
   rotation: '${state.rotation}',
   url: '${state.url}',
+  previewToken: '${state.previewToken || ''}',
   touchEvents: ${state.touchEventsEnabled},
   gestures: ${state.gesturesEnabled},
 };`
@@ -101,6 +185,7 @@ const deviceConfig = {
       scale: state.scale,
       rotation: state.rotation,
       url: state.url,
+      previewToken: state.previewToken,
       timestamp: Date.now(),
     }
     const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' })
@@ -115,12 +200,15 @@ const deviceConfig = {
     message.success('配置已下载')
   }
 
+  const handleGoToGenerator = () => {
+    navigate('/mobile/generator')
+  }
+
   const filterDevicesByPlatform = (platform: Platform | 'all') => {
     if (platform === 'all') return deviceList
     return deviceList.filter(d => d.platform === platform)
   }
 
-  const [platformFilter, setPlatformFilter] = useState<Platform | 'all'>('all')
   const filteredDevices = filterDevicesByPlatform(platformFilter)
 
   return (
@@ -144,9 +232,22 @@ const deviceConfig = {
           <Tag icon={platformIcons[state.device.platform]}>
             {platformNames[state.device.platform]}
           </Tag>
+          {state.previewToken && (
+            <Tag color="green">
+              Token: {state.previewToken.substring(0, 8)}...
+            </Tag>
+          )}
+          {loading && <Spin size="small" />}
         </Space>
 
         <Space>
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={refreshPreviewSession}
+            loading={loading}
+          >
+            刷新预览
+          </Button>
           <Button
             icon={<QrcodeOutlined />}
             onClick={() => setShowQRCode(!showQRCode)}
@@ -156,6 +257,9 @@ const deviceConfig = {
           </Button>
           <Button icon={<DownloadOutlined />} onClick={handleDownload}>
             下载配置
+          </Button>
+          <Button icon={<CodeOutlined />} onClick={handleGoToGenerator}>
+            代码生成
           </Button>
           <Button type="primary" icon={<CodeOutlined />} onClick={handleGenerateCode}>
             生成代码
@@ -201,7 +305,7 @@ const deviceConfig = {
             <DeviceSelector
               deviceList={filteredDevices}
               selectedDevice={state.device}
-              onSelect={setDevice}
+              onSelect={handleDeviceChange}
             />
           </div>
         </Sider>
@@ -217,7 +321,11 @@ const deviceConfig = {
         >
           {showQRCode && (
             <div style={{ margin: 24, width: 280 }}>
-              <QRCodePanel url={state.url} />
+              <QRCodePanel
+                url={state.url}
+                qrCodeBase64={state.previewInfo?.qrCodeBase64}
+                previewToken={state.previewToken || undefined}
+              />
             </div>
           )}
 
@@ -229,7 +337,7 @@ const deviceConfig = {
             touchEventsEnabled={state.touchEventsEnabled}
             gesturesEnabled={state.gesturesEnabled}
             deviceList={deviceList}
-            onDeviceChange={setDevice}
+            onDeviceChange={handleDeviceChange}
             onRotationChange={setRotation}
             onScaleChange={setScale}
             onUrlChange={setUrl}
@@ -256,6 +364,33 @@ const deviceConfig = {
               <Text strong style={{ fontSize: 14 }}>属性配置</Text>
             </Space>
 
+            {state.previewInfo && (
+              <Card size="small" style={{ marginBottom: 16 }}>
+                <Space style={{ marginBottom: 12 }}>
+                  <QrcodeOutlined />
+                  <Text strong>预览信息</Text>
+                </Space>
+                <div style={{ fontSize: 12, color: '#595959' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span>应用</span>
+                    <span style={{ color: '#000' }}>{state.previewInfo.appName}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span>状态</span>
+                    <Tag color={state.previewInfo.status === 'active' ? 'green' : 'red'}>
+                      {state.previewInfo.status === 'active' ? '活跃' : state.previewInfo.status}
+                    </Tag>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span>过期时间</span>
+                    <span style={{ color: '#000', fontSize: 11 }}>
+                      {new Date(state.previewInfo.expireTime).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              </Card>
+            )}
+
             <Card size="small" style={{ marginBottom: 16 }}>
               <Form layout="vertical">
                 <Form.Item label="平台配置">
@@ -264,7 +399,7 @@ const deviceConfig = {
                     onChange={(value: Platform) => {
                       const samePlatformDevices = deviceList.filter(d => d.platform === value)
                       if (samePlatformDevices.length > 0) {
-                        setDevice(samePlatformDevices[0])
+                        handleDeviceChange(samePlatformDevices[0])
                       }
                     }}
                     options={(Object.keys(platformNames) as Platform[]).map(platform => ({
@@ -284,7 +419,7 @@ const deviceConfig = {
                     value={state.device.id}
                     onChange={(value) => {
                       const device = deviceList.find(d => d.id === value)
-                      if (device) setDevice(device)
+                      if (device) handleDeviceChange(device)
                     }}
                     options={deviceList.map(device => ({
                       value: device.id,

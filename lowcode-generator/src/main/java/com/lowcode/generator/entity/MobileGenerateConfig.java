@@ -13,6 +13,10 @@ public class MobileGenerateConfig extends AppGenerateConfig {
 
     private String appid;
 
+    private String wechatAppid;
+
+    private String alipayAppid;
+
     private String uniAppVersion;
 
     private Boolean enableTouchEvents;

@@ -82,6 +82,7 @@ const componentCategories = [
   { key: 'data', name: '数据展示', icon: '📊' },
   { key: 'chart', name: '图表组件', icon: '📈' },
   { key: 'advanced', name: '高级组件', icon: '⚡' },
+  { key: 'mobile', name: '移动端组件', icon: '📱' },
   { key: 'custom', name: '自定义组件', icon: '🔧' },
 ]
 
@@ -123,6 +124,14 @@ const componentIconMap: Record<string, string> = {
   AREACHART: '📈',
   SCATTERCHART: '🔵',
   RADARCHART: '🕸️',
+  MOBILEGRID: '📐',
+  MOBILECOLLAPSE: '📁',
+  MOBILETABBAR: '📑',
+  MOBILESWIPER: '🖼️',
+  MOBILESEARCHBAR: '🔍',
+  MOBILEPULLREFRESH: '🔄',
+  MOBILESWIPECELL: '↔️',
+  MOBILEWATERFALL: '🌊',
 }
 
 interface ComponentItemProps {
@@ -211,7 +220,7 @@ const CanvasComponent: React.FC<CanvasComponentProps> = ({ component, isSelected
       ...style,
     }
 
-    const systemTypes = ['INPUT', 'TEXTAREA', 'NUMBER', 'SELECT', 'DATE', 'DATETIME', 'TIME', 'SWITCH', 'CHECKBOX', 'RADIO', 'UPLOAD', 'RICHTEXT', 'TABLE', 'BUTTON', 'LINK', 'IMAGE', 'TEXT', 'TITLE', 'ICON', 'DIVIDER', 'TABS', 'CARD', 'GRID', 'FLEX', 'MODAL', 'FORM', 'STEPS', 'TIMELINE', 'PROGRESS', 'RATE', 'SLIDER', 'LINECHART', 'BARCHART', 'PIECHART', 'AREACHART', 'SCATTERCHART', 'RADARCHART']
+    const systemTypes = ['INPUT', 'TEXTAREA', 'NUMBER', 'SELECT', 'DATE', 'DATETIME', 'TIME', 'SWITCH', 'CHECKBOX', 'RADIO', 'UPLOAD', 'RICHTEXT', 'TABLE', 'BUTTON', 'LINK', 'IMAGE', 'TEXT', 'TITLE', 'ICON', 'DIVIDER', 'TABS', 'CARD', 'GRID', 'FLEX', 'MODAL', 'FORM', 'STEPS', 'TIMELINE', 'PROGRESS', 'RATE', 'SLIDER', 'LINECHART', 'BARCHART', 'PIECHART', 'AREACHART', 'SCATTERCHART', 'RADARCHART', 'MOBILEGRID', 'MOBILECOLLAPSE', 'MOBILETABBAR', 'MOBILESWIPER', 'MOBILESEARCHBAR', 'MOBILEPULLREFRESH', 'MOBILESWIPECELL', 'MOBILEWATERFALL']
 
     if (!systemTypes.includes(component.componentType)) {
       return (
@@ -298,6 +307,324 @@ const CanvasComponent: React.FC<CanvasComponentProps> = ({ component, isSelected
             <span style={{ color: '#999' }}>📈 {component.componentName}</span>
           </div>
         )
+      case 'MOBILEGRID': {
+        const columns = props.columns || 4
+        const gap = props.gap || 8
+        const items = props.items || []
+        return (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${columns}, 1fr)`,
+              gap: `${gap}px`,
+              padding: 12,
+              background: '#fff',
+              borderRadius: 8,
+            }}
+          >
+            {items.map((item: any, i: number) => (
+              <div
+                key={i}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: props.square ? 0 : '12px 4px',
+                  aspectRatio: props.square ? '1' : undefined,
+                  border: props.border ? '1px solid #f0f0f0' : 'none',
+                  borderRadius: 8,
+                  background: props.border ? '#fafafa' : 'transparent',
+                }}
+              >
+                <span style={{ fontSize: 24, marginBottom: 4 }}>{item.icon || '📦'}</span>
+                <span style={{ fontSize: 12, color: '#666' }}>{item.text || `条目${i + 1}`}</span>
+              </div>
+            ))}
+          </div>
+        )
+      }
+      case 'MOBILECOLLAPSE': {
+        const items = props.items || []
+        const accordion = props.accordion
+        return (
+          <div style={{ background: '#fff', borderRadius: 8, overflow: 'hidden' }}>
+            {items.map((item: any, i: number) => (
+              <div key={i} style={{ borderBottom: i < items.length - 1 ? '1px solid #f0f0f0' : 'none' }}>
+                <div
+                  style={{
+                    padding: '12px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    background: '#fafafa',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                  }}
+                >
+                  <span style={{ fontWeight: 500 }}>{item.title || `面板${i + 1}`}</span>
+                  <span style={{ transition: 'transform 0.2s', transform: i === 0 ? 'rotate(180deg)' : 'none' }}>▼</span>
+                </div>
+                {i === 0 && (
+                  <div style={{ padding: 12, fontSize: 13, color: '#666', whiteSpace: 'pre-line' }}>
+                    {item.content || '内容区域'}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )
+      }
+      case 'MOBILETABBAR': {
+        const items = props.items || []
+        const activeColor = props.activeColor || '#1677ff'
+        return (
+          <div
+            style={{
+              display: 'flex',
+              background: '#fff',
+              borderTop: '1px solid #f0f0f0',
+              borderRadius: 8,
+              overflow: 'hidden',
+              paddingBottom: props.safeAreaInsetBottom ? 16 : 0,
+            }}
+          >
+            {items.map((item: any, i: number) => (
+              <div
+                key={i}
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  padding: '8px 4px',
+                  position: 'relative',
+                  color: item.active ? activeColor : '#7d7e80',
+                }}
+              >
+                <div style={{ position: 'relative' }}>
+                  <span style={{ fontSize: 22 }}>{item.icon || '📦'}</span>
+                  {item.badge !== undefined && item.badge > 0 && (
+                    <span
+                      style={{
+                        position: 'absolute',
+                        top: -4,
+                        right: -8,
+                        background: '#ee0a24',
+                        color: '#fff',
+                        fontSize: 10,
+                        padding: '0 4px',
+                        borderRadius: 10,
+                        minWidth: 16,
+                        textAlign: 'center',
+                      }}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
+                </div>
+                <span style={{ fontSize: 11, marginTop: 2 }}>{item.text || `Tab${i + 1}`}</span>
+              </div>
+            ))}
+          </div>
+        )
+      }
+      case 'MOBILESWIPER': {
+        const items = props.items || []
+        const indicatorDots = props.indicatorDots !== false
+        return (
+          <div style={{ borderRadius: 8, overflow: 'hidden', position: 'relative' }}>
+            <div
+              style={{
+                height: 160,
+                background: items[0]?.color || '#1677ff',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fff',
+              }}
+            >
+              <div style={{ fontSize: 22, fontWeight: 'bold', marginBottom: 8 }}>
+                {items[0]?.title || '轮播图'}
+              </div>
+              <div style={{ fontSize: 14, opacity: 0.9 }}>
+                {items[0]?.subtitle || ''}
+              </div>
+            </div>
+            {indicatorDots && items.length > 1 && (
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 8,
+                  left: 0,
+                  right: 0,
+                  display: 'flex',
+                  justifyContent: 'center',
+                  gap: 6,
+                }}
+              >
+                {items.map((_: any, i: number) => (
+                  <div
+                    key={i}
+                    style={{
+                      width: i === 0 ? 16 : 6,
+                      height: 6,
+                      borderRadius: 3,
+                      background: i === 0 ? '#fff' : 'rgba(255,255,255,0.5)',
+                      transition: 'all 0.2s',
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      }
+      case 'MOBILESEARCHBAR': {
+        const shape = props.shape || 'round'
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 8 }}>
+            <div
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                background: props.background || '#f5f5f5',
+                borderRadius: shape === 'round' ? 20 : 6,
+                padding: '8px 14px',
+                gap: 8,
+              }}
+            >
+              <span>🔍</span>
+              <span style={{ color: '#999', fontSize: 14, flex: 1 }}>
+                {props.placeholder || '搜索'}
+              </span>
+            </div>
+            {props.showAction && (
+              <span style={{ color: '#1677ff', fontSize: 14, whiteSpace: 'nowrap' }}>
+                {props.actionText || '搜索'}
+              </span>
+            )}
+          </div>
+        )
+      }
+      case 'MOBILEPULLREFRESH': {
+        return (
+          <div style={{ border: '1px dashed #e8e8e8', borderRadius: 8, overflow: 'hidden' }}>
+            <div
+              style={{
+                padding: '12px 0',
+                textAlign: 'center',
+                color: '#999',
+                fontSize: 13,
+                background: '#fafafa',
+                borderBottom: '1px solid #f0f0f0',
+              }}
+            >
+              ↓ {props.pullingText || '下拉即可刷新...'}
+            </div>
+            <div style={{ padding: 20, textAlign: 'center', color: '#666' }}>
+              下拉刷新容器
+              <div style={{ marginTop: 8, fontSize: 12, color: '#999' }}>
+                （将内容放置在此容器内）
+              </div>
+            </div>
+          </div>
+        )
+      }
+      case 'MOBILESWIPECELL': {
+        const rightActions = props.rightActions || []
+        return (
+          <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden' }}>
+            <div
+              style={{
+                flex: 1,
+                background: '#fff',
+                padding: '12px 16px',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                borderRight: '1px solid #f0f0f0',
+              }}
+            >
+              <div style={{ fontWeight: 500, fontSize: 15 }}>{props.title || '条目标题'}</div>
+              {props.desc && (
+                <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>{props.desc}</div>
+              )}
+            </div>
+            <div style={{ display: 'flex' }}>
+              {rightActions.map((action: any, i: number) => (
+                <div
+                  key={i}
+                  style={{
+                    width: 64,
+                    background: action.color || '#ee0a24',
+                    color: '#fff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 13,
+                    fontWeight: 500,
+                  }}
+                >
+                  {action.text || '操作'}
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      }
+      case 'MOBILEWATERFALL': {
+        const columns = props.columns || 2
+        const gap = props.gap || 8
+        const items = props.items || []
+        return (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${columns}, 1fr)`,
+              gap: `${gap}px`,
+            }}
+          >
+            {items.map((item: any, i: number) => (
+              <div
+                key={i}
+                style={{
+                  borderRadius: 8,
+                  overflow: 'hidden',
+                  background: '#fff',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+                }}
+              >
+                <div
+                  style={{
+                    height: item.height || 160,
+                    background: item.color || '#f5f5f5',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#fff',
+                    fontSize: 24,
+                  }}
+                >
+                  📦
+                </div>
+                <div style={{ padding: 8 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>
+                    {item.title || `商品${i + 1}`}
+                  </div>
+                  {item.price && (
+                    <div style={{ fontSize: 14, color: '#ee0a24', fontWeight: 'bold' }}>
+                      {item.price}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      }
       default:
         return (
           <div style={{ color: '#999', textAlign: 'center', padding: 16 }}>
@@ -418,17 +745,190 @@ const PageDesigner: React.FC = () => {
   }, [id, currentApp])
 
   const loadComponentLibrary = useCallback(async () => {
+    const defaultMobileComponents: ComponentLibrary[] = [
+      {
+        id: 1001,
+        appId: 0,
+        componentType: 'MOBILEGRID',
+        componentName: '移动端栅格',
+        category: 'mobile',
+        defaultProps: JSON.stringify({
+          columns: 4,
+          gap: 8,
+          border: true,
+          square: true,
+          items: [
+            { icon: '🏠', text: '首页' },
+            { icon: '🔍', text: '搜索' },
+            { icon: '🛒', text: '购物车' },
+            { icon: '👤', text: '我的' },
+          ],
+        }),
+        description: '移动端栅格布局，用于宫格导航',
+        sortOrder: 1,
+        status: 1,
+      },
+      {
+        id: 1002,
+        appId: 0,
+        componentType: 'MOBILECOLLAPSE',
+        componentName: '折叠面板',
+        category: 'mobile',
+        defaultProps: JSON.stringify({
+          accordion: true,
+          items: [
+            { title: '帮助中心', content: '这里是帮助中心的内容，可以包含常见问题解答...' },
+            { title: '关于我们', content: '关于我们的详细介绍内容...' },
+            { title: '联系客服', content: '客服电话：400-xxx-xxxx\n工作时间：9:00-18:00' },
+          ],
+        }),
+        description: '可折叠的内容面板',
+        sortOrder: 2,
+        status: 1,
+      },
+      {
+        id: 1003,
+        appId: 0,
+        componentType: 'MOBILETABBAR',
+        componentName: '底部导航',
+        category: 'mobile',
+        defaultProps: JSON.stringify({
+          fixed: true,
+          safeAreaInsetBottom: true,
+          activeColor: '#1677ff',
+          inactiveColor: '#7d7e80',
+          items: [
+            { icon: '🏠', text: '首页', active: true },
+            { icon: '📋', text: '分类' },
+            { icon: '🛒', text: '购物车', badge: 3 },
+            { icon: '👤', text: '我的' },
+          ],
+        }),
+        description: '移动端底部导航栏',
+        sortOrder: 3,
+        status: 1,
+      },
+      {
+        id: 1004,
+        appId: 0,
+        componentType: 'MOBILESWIPER',
+        componentName: '轮播图',
+        category: 'mobile',
+        defaultProps: JSON.stringify({
+          autoplay: true,
+          interval: 3000,
+          indicatorDots: true,
+          circular: true,
+          items: [
+            { title: '新品上市', subtitle: '全场低至5折起', color: '#ff6b6b' },
+            { title: '限时特惠', subtitle: '爆款秒杀', color: '#4ecdc4' },
+            { title: '会员专享', subtitle: '注册即送好礼', color: '#a8e6cf' },
+          ],
+        }),
+        description: '移动端轮播图组件',
+        sortOrder: 4,
+        status: 1,
+      },
+      {
+        id: 1005,
+        appId: 0,
+        componentType: 'MOBILESEARCHBAR',
+        componentName: '搜索栏',
+        category: 'mobile',
+        defaultProps: JSON.stringify({
+          placeholder: '搜索商品、商家',
+          shape: 'round',
+          showAction: true,
+          actionText: '搜索',
+          background: '#f5f5f5',
+        }),
+        description: '移动端搜索栏',
+        sortOrder: 5,
+        status: 1,
+      },
+      {
+        id: 1006,
+        appId: 0,
+        componentType: 'MOBILEPULLREFRESH',
+        componentName: '下拉刷新',
+        category: 'mobile',
+        defaultProps: JSON.stringify({
+          headHeight: 50,
+          pullingText: '下拉即可刷新...',
+          refreshingText: '加载中...',
+          loosingText: '释放立即刷新...',
+        }),
+        description: '移动端下拉刷新容器',
+        sortOrder: 6,
+        status: 1,
+      },
+      {
+        id: 1007,
+        appId: 0,
+        componentType: 'MOBILESWIPECELL',
+        componentName: '滑动单元格',
+        category: 'mobile',
+        defaultProps: JSON.stringify({
+          title: '示例条目',
+          desc: '左滑可显示操作按钮',
+          leftActions: [],
+          rightActions: [
+            { text: '删除', color: '#ee0a24' },
+            { text: '收藏', color: '#07c160' },
+          ],
+        }),
+        description: '可滑动显示操作按钮的单元格',
+        sortOrder: 7,
+        status: 1,
+      },
+      {
+        id: 1008,
+        appId: 0,
+        componentType: 'MOBILEWATERFALL',
+        componentName: '瀑布流',
+        category: 'mobile',
+        defaultProps: JSON.stringify({
+          columns: 2,
+          gap: 8,
+          items: [
+            { title: '商品1', price: '¥99', height: 180, color: '#ffb8b8' },
+            { title: '商品2', price: '¥199', height: 220, color: '#b8d4ff' },
+            { title: '商品3', price: '¥59', height: 160, color: '#b8ffc5' },
+            { title: '商品4', price: '¥299', height: 200, color: '#ffe8b8' },
+            { title: '商品5', price: '¥159', height: 190, color: '#e0b8ff' },
+            { title: '商品6', price: '¥89', height: 170, color: '#ffb8e4' },
+          ],
+        }),
+        description: '瀑布流布局组件',
+        sortOrder: 8,
+        status: 1,
+      },
+    ]
+
     try {
       const [systemRes, customRes] = await Promise.all([
         componentApi.tree(),
         customComponentApi.tree(),
       ])
-      setComponentLibrary(systemRes.data || {})
+
+      const systemData = systemRes.data || {}
+      if (!systemData.mobile || systemData.mobile.length === 0) {
+        systemData.mobile = defaultMobileComponents
+      } else {
+        const existingTypes = new Set(systemData.mobile.map((c: any) => c.componentType))
+        defaultMobileComponents.forEach(dmc => {
+          if (!existingTypes.has(dmc.componentType)) {
+            systemData.mobile.push(dmc)
+          }
+        })
+      }
+
+      setComponentLibrary(systemData)
       setCustomComponents(customRes.data || {})
 
       const merged: Record<string, (ComponentLibrary | CustomComponent)[]> = {}
       componentCategories.forEach((cat) => {
-        const systemComponents = systemRes.data?.[cat.key] || []
+        const systemComponents = systemData[cat.key] || []
         const customComponentsList = customRes.data?.[cat.key] || []
         if (systemComponents.length > 0 || customComponentsList.length > 0) {
           merged[cat.key] = [...systemComponents, ...customComponentsList]
@@ -451,6 +951,15 @@ const PageDesigner: React.FC = () => {
       setCustomComponentSchemas(schemas)
     } catch (e) {
       console.error(e)
+      const systemData: Record<string, ComponentLibrary[]> = { mobile: defaultMobileComponents }
+      setComponentLibrary(systemData)
+      const merged: Record<string, (ComponentLibrary | CustomComponent)[]> = { mobile: defaultMobileComponents }
+      componentCategories.forEach((cat) => {
+        if (cat.key !== 'mobile') {
+          merged[cat.key] = []
+        }
+      })
+      setMergedComponentLibrary(merged)
     }
   }, [])
 
@@ -1067,7 +1576,7 @@ const PageDesigner: React.FC = () => {
   const getPropsSchema = () => {
     const type = selectedComponent?.componentType
 
-    const systemTypes = ['INPUT', 'TEXTAREA', 'NUMBER', 'SELECT', 'DATE', 'DATETIME', 'TIME', 'SWITCH', 'CHECKBOX', 'RADIO', 'UPLOAD', 'RICHTEXT', 'TABLE', 'BUTTON', 'LINK', 'IMAGE', 'TEXT', 'TITLE', 'ICON', 'DIVIDER', 'TABS', 'CARD', 'GRID', 'FLEX', 'MODAL', 'FORM', 'STEPS', 'TIMELINE', 'PROGRESS', 'RATE', 'SLIDER', 'LINECHART', 'BARCHART', 'PIECHART', 'AREACHART', 'SCATTERCHART', 'RADARCHART']
+    const systemTypes = ['INPUT', 'TEXTAREA', 'NUMBER', 'SELECT', 'DATE', 'DATETIME', 'TIME', 'SWITCH', 'CHECKBOX', 'RADIO', 'UPLOAD', 'RICHTEXT', 'TABLE', 'BUTTON', 'LINK', 'IMAGE', 'TEXT', 'TITLE', 'ICON', 'DIVIDER', 'TABS', 'CARD', 'GRID', 'FLEX', 'MODAL', 'FORM', 'STEPS', 'TIMELINE', 'PROGRESS', 'RATE', 'SLIDER', 'LINECHART', 'BARCHART', 'PIECHART', 'AREACHART', 'SCATTERCHART', 'RADARCHART', 'MOBILEGRID', 'MOBILECOLLAPSE', 'MOBILETABBAR', 'MOBILESWIPER', 'MOBILESEARCHBAR', 'MOBILEPULLREFRESH', 'MOBILESWIPECELL', 'MOBILEWATERFALL']
 
     if (type && !systemTypes.includes(type)) {
       return {
@@ -1177,6 +1686,82 @@ const PageDesigner: React.FC = () => {
       case 'GRID':
         baseProps.properties = {
           columns: { type: 'number', title: '列数', default: 2, 'x-decorator': 'FormItem', 'x-component': 'NumberPicker', 'x-component-props': { min: 1, max: 12 } },
+          gap: { type: 'number', title: '间距', default: 8, 'x-decorator': 'FormItem', 'x-component': 'NumberPicker' },
+          ...commonProps,
+        }
+        break
+      case 'MOBILEGRID':
+        baseProps.properties = {
+          columns: { type: 'number', title: '列数', default: 4, 'x-decorator': 'FormItem', 'x-component': 'NumberPicker', 'x-component-props': { min: 2, max: 6 } },
+          gap: { type: 'number', title: '间距', default: 8, 'x-decorator': 'FormItem', 'x-component': 'NumberPicker' },
+          border: { type: 'boolean', title: '显示边框', default: true, 'x-decorator': 'FormItem', 'x-component': 'Switch' },
+          square: { type: 'boolean', title: '正方形格子', default: true, 'x-decorator': 'FormItem', 'x-component': 'Switch' },
+          ...commonProps,
+        }
+        break
+      case 'MOBILECOLLAPSE':
+        baseProps.properties = {
+          accordion: { type: 'boolean', title: '手风琴模式', default: true, 'x-decorator': 'FormItem', 'x-component': 'Switch' },
+          ...commonProps,
+        }
+        break
+      case 'MOBILETABBAR':
+        baseProps.properties = {
+          fixed: { type: 'boolean', title: '固定底部', default: true, 'x-decorator': 'FormItem', 'x-component': 'Switch' },
+          safeAreaInsetBottom: { type: 'boolean', title: '底部安全区', default: true, 'x-decorator': 'FormItem', 'x-component': 'Switch' },
+          activeColor: { type: 'string', title: '激活颜色', default: '#1677ff', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+          inactiveColor: { type: 'string', title: '未激活颜色', default: '#7d7e80', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+          ...commonProps,
+        }
+        break
+      case 'MOBILESWIPER':
+        baseProps.properties = {
+          autoplay: { type: 'boolean', title: '自动轮播', default: true, 'x-decorator': 'FormItem', 'x-component': 'Switch' },
+          interval: { type: 'number', title: '轮播间隔(ms)', default: 3000, 'x-decorator': 'FormItem', 'x-component': 'NumberPicker', 'x-component-props': { min: 1000, step: 500 } },
+          indicatorDots: { type: 'boolean', title: '显示指示器', default: true, 'x-decorator': 'FormItem', 'x-component': 'Switch' },
+          circular: { type: 'boolean', title: '循环播放', default: true, 'x-decorator': 'FormItem', 'x-component': 'Switch' },
+          ...commonProps,
+        }
+        break
+      case 'MOBILESEARCHBAR':
+        baseProps.properties = {
+          placeholder: { type: 'string', title: '占位符', default: '搜索', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+          shape: {
+            type: 'string',
+            title: '形状',
+            default: 'round',
+            'x-decorator': 'FormItem',
+            'x-component': 'Select',
+            enum: [
+              { label: '圆角', value: 'round' },
+              { label: '方形', value: 'square' },
+            ],
+          },
+          showAction: { type: 'boolean', title: '显示搜索按钮', default: true, 'x-decorator': 'FormItem', 'x-component': 'Switch' },
+          actionText: { type: 'string', title: '按钮文本', default: '搜索', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+          background: { type: 'string', title: '背景颜色', default: '#f5f5f5', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+          ...commonProps,
+        }
+        break
+      case 'MOBILEPULLREFRESH':
+        baseProps.properties = {
+          headHeight: { type: 'number', title: '头部高度', default: 50, 'x-decorator': 'FormItem', 'x-component': 'NumberPicker' },
+          pullingText: { type: 'string', title: '下拉提示', default: '下拉即可刷新...', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+          refreshingText: { type: 'string', title: '刷新中提示', default: '加载中...', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+          loosingText: { type: 'string', title: '释放提示', default: '释放立即刷新...', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+          ...commonProps,
+        }
+        break
+      case 'MOBILESWIPECELL':
+        baseProps.properties = {
+          title: { type: 'string', title: '标题', default: '示例条目', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+          desc: { type: 'string', title: '描述', default: '左滑可显示操作按钮', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+          ...commonProps,
+        }
+        break
+      case 'MOBILEWATERFALL':
+        baseProps.properties = {
+          columns: { type: 'number', title: '列数', default: 2, 'x-decorator': 'FormItem', 'x-component': 'NumberPicker', 'x-component-props': { min: 2, max: 4 } },
           gap: { type: 'number', title: '间距', default: 8, 'x-decorator': 'FormItem', 'x-component': 'NumberPicker' },
           ...commonProps,
         }
@@ -1394,7 +1979,7 @@ const PageDesigner: React.FC = () => {
     if (!selectedComponent) return []
 
     const type = selectedComponent.componentType
-    const systemTypes = ['INPUT', 'TEXTAREA', 'NUMBER', 'SELECT', 'DATE', 'DATETIME', 'TIME', 'SWITCH', 'CHECKBOX', 'RADIO', 'UPLOAD', 'RICHTEXT', 'TABLE', 'BUTTON', 'LINK', 'IMAGE', 'TEXT', 'TITLE', 'ICON', 'DIVIDER', 'TABS', 'CARD', 'GRID', 'FLEX', 'MODAL', 'FORM', 'STEPS', 'TIMELINE', 'PROGRESS', 'RATE', 'SLIDER', 'LINECHART', 'BARCHART', 'PIECHART', 'AREACHART', 'SCATTERCHART', 'RADARCHART']
+    const systemTypes = ['INPUT', 'TEXTAREA', 'NUMBER', 'SELECT', 'DATE', 'DATETIME', 'TIME', 'SWITCH', 'CHECKBOX', 'RADIO', 'UPLOAD', 'RICHTEXT', 'TABLE', 'BUTTON', 'LINK', 'IMAGE', 'TEXT', 'TITLE', 'ICON', 'DIVIDER', 'TABS', 'CARD', 'GRID', 'FLEX', 'MODAL', 'FORM', 'STEPS', 'TIMELINE', 'PROGRESS', 'RATE', 'SLIDER', 'LINECHART', 'BARCHART', 'PIECHART', 'AREACHART', 'SCATTERCHART', 'RADARCHART', 'MOBILEGRID', 'MOBILECOLLAPSE', 'MOBILETABBAR', 'MOBILESWIPER', 'MOBILESEARCHBAR', 'MOBILEPULLREFRESH', 'MOBILESWIPECELL', 'MOBILEWATERFALL']
 
     if (type && !systemTypes.includes(type)) {
       const customSchema = customComponentSchemas[type]
@@ -1993,9 +2578,10 @@ const PageDesigner: React.FC = () => {
   }
 
   const renderCanvas = () => {
-    const width = previewMode === 'mobile' ? 375 : '100%'
-    const maxWidth = previewMode === 'mobile' ? 375 : 'none'
-    const margin = previewMode === 'mobile' ? '0 auto' : '0'
+    const isMobile = previewMode === 'mobile'
+    const width = isMobile ? 375 : '100%'
+    const maxWidth = isMobile ? 375 : 'none'
+    const margin = isMobile ? '0 auto' : '0'
 
     return (
       <div
@@ -2010,50 +2596,159 @@ const PageDesigner: React.FC = () => {
         }}
         onClick={() => setSelectedComponentId(null)}
       >
-        <div
-          style={{
-            width,
-            maxWidth,
-            margin,
-            minHeight: '100%',
-            background: '#fff',
-            borderRadius: 8,
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
-            padding: 24,
-            position: 'relative',
-          }}
-        >
-          {previewMode === 'mobile' && (
-            <div style={{ textAlign: 'center', color: '#999', marginBottom: 16, fontSize: 12 }}>
-              📱 移动端预览 (375px)
-            </div>
-          )}
-          {(!page?.components || page.components.length === 0) && (
-            <div style={{
-              textAlign: 'center',
-              padding: '60px 20px',
-              color: '#999',
-              border: '2px dashed #d9d9d9',
-              borderRadius: 8,
-              background: '#fafafa',
-            }}>
-              <CodeSandboxOutlined style={{ fontSize: 48, color: '#d9d9d9' }} />
-              <div style={{ marginTop: 16, fontSize: 16 }}>从左侧拖拽组件到此处</div>
-              <div style={{ fontSize: 12, marginTop: 8 }}>开始设计你的页面</div>
-            </div>
-          )}
-          {page?.components?.filter(c => !c.parentId).map((component, index) => (
-            <CanvasComponent
-              key={component.componentId}
-              component={component}
-              index={index}
-              isSelected={selectedComponentId === component.componentId}
-              onSelect={() => handleSelectComponent(component.componentId)}
-              onDelete={() => handleDeleteComponent(component.componentId)}
-              onDrop={(item) => handleDropComponent(item, component.componentId)}
+        {isMobile ? (
+          <div
+            style={{
+              width: 420,
+              margin: '0 auto',
+              padding: '16px 18px',
+              background: 'linear-gradient(145deg, #2a2a2a, #1a1a1a)',
+              borderRadius: 42,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
+              position: 'relative',
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                top: 14,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                width: 120,
+                height: 30,
+                background: '#000',
+                borderRadius: 20,
+                zIndex: 10,
+              }}
             />
-          ))}
-        </div>
+            <div
+              style={{
+                width: 375,
+                height: 720,
+                background: '#fff',
+                borderRadius: 30,
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+                boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.05)',
+              }}
+            >
+              <div
+                style={{
+                  height: 44,
+                  background: '#000',
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '0 24px',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  flexShrink: 0,
+                }}
+              >
+                <span>9:41</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span>📶</span>
+                  <span>🔋</span>
+                </span>
+              </div>
+              <div
+                style={{
+                  flex: 1,
+                  overflow: 'auto',
+                  background: '#f7f8fa',
+                  padding: 12,
+                }}
+              >
+                {(!page?.components || page.components.length === 0) && (
+                  <div style={{
+                    textAlign: 'center',
+                    padding: '40px 16px',
+                    color: '#999',
+                    border: '2px dashed #d9d9d9',
+                    borderRadius: 12,
+                    background: '#fafafa',
+                    marginTop: 20,
+                  }}>
+                    <CodeSandboxOutlined style={{ fontSize: 36, color: '#d9d9d9' }} />
+                    <div style={{ marginTop: 12, fontSize: 14 }}>拖拽组件到此处</div>
+                  </div>
+                )}
+                {page?.components?.filter(c => !c.parentId).map((component, index) => (
+                  <CanvasComponent
+                    key={component.componentId}
+                    component={component}
+                    index={index}
+                    isSelected={selectedComponentId === component.componentId}
+                    onSelect={() => handleSelectComponent(component.componentId)}
+                    onDelete={() => handleDeleteComponent(component.componentId)}
+                    onDrop={(item) => handleDropComponent(item, component.componentId)}
+                  />
+                ))}
+              </div>
+              <div
+                style={{
+                  height: 34,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: '#fff',
+                  flexShrink: 0,
+                }}
+              >
+                <div
+                  style={{
+                    width: 134,
+                    height: 5,
+                    background: '#000',
+                    borderRadius: 3,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div
+            style={{
+              width,
+              maxWidth,
+              margin,
+              minHeight: '100%',
+              background: '#fff',
+              borderRadius: 8,
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+              padding: 24,
+              position: 'relative',
+            }}
+          >
+            {(!page?.components || page.components.length === 0) && (
+              <div style={{
+                textAlign: 'center',
+                padding: '60px 20px',
+                color: '#999',
+                border: '2px dashed #d9d9d9',
+                borderRadius: 8,
+                background: '#fafafa',
+              }}>
+                <CodeSandboxOutlined style={{ fontSize: 48, color: '#d9d9d9' }} />
+                <div style={{ marginTop: 16, fontSize: 16 }}>从左侧拖拽组件到此处</div>
+                <div style={{ fontSize: 12, marginTop: 8 }}>开始设计你的页面</div>
+              </div>
+            )}
+            {page?.components?.filter(c => !c.parentId).map((component, index) => (
+              <CanvasComponent
+                key={component.componentId}
+                component={component}
+                index={index}
+                isSelected={selectedComponentId === component.componentId}
+                onSelect={() => handleSelectComponent(component.componentId)}
+                onDelete={() => handleDeleteComponent(component.componentId)}
+                onDrop={(item) => handleDropComponent(item, component.componentId)}
+              />
+            ))}
+          </div>
+        )}
       </div>
     )
   }
@@ -2384,8 +3079,342 @@ const PageDesigner: React.FC = () => {
                               </tbody>
                             </table>
                           )
+                        case 'MOBILEGRID': {
+                          const columns = resolvedProps.columns || 4
+                          const gap = resolvedProps.gap || 8
+                          const items = resolvedProps.items || []
+                          return (
+                            <div
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: `repeat(${columns}, 1fr)`,
+                                gap: `${gap}px`,
+                                padding: 12,
+                                background: '#fff',
+                                borderRadius: 8,
+                              }}
+                            >
+                              {items.map((item: any, i: number) => (
+                                <div
+                                  key={i}
+                                  style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    padding: resolvedProps.square ? 0 : '12px 4px',
+                                    aspectRatio: resolvedProps.square ? '1' : undefined,
+                                    border: resolvedProps.border ? '1px solid #f0f0f0' : 'none',
+                                    borderRadius: 8,
+                                    background: resolvedProps.border ? '#fafafa' : 'transparent',
+                                  }}
+                                >
+                                  <span style={{ fontSize: 24, marginBottom: 4 }}>{item.icon || '📦'}</span>
+                                  <span style={{ fontSize: 12, color: '#666' }}>{item.text || `条目${i + 1}`}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )
+                        }
+                        case 'MOBILECOLLAPSE': {
+                          const items = resolvedProps.items || []
+                          return (
+                            <div style={{ background: '#fff', borderRadius: 8, overflow: 'hidden', border: '1px solid #f0f0f0' }}>
+                              {items.map((item: any, i: number) => {
+                                const isActive = resolvedProps.accordion ? i === 0 : true
+                                return (
+                                  <div key={i} style={{ borderBottom: i < items.length - 1 ? '1px solid #f0f0f0' : 'none' }}>
+                                    <div
+                                      style={{
+                                        padding: '12px 16px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        background: '#fafafa',
+                                        cursor: 'pointer',
+                                        userSelect: 'none',
+                                      }}
+                                    >
+                                      <span style={{ fontWeight: 500 }}>{item.title || `面板${i + 1}`}</span>
+                                      <span style={{
+                                        transition: 'transform 0.2s',
+                                        transform: isActive ? 'rotate(180deg)' : 'none',
+                                        fontSize: 12,
+                                        color: '#999'
+                                      }}>▼</span>
+                                    </div>
+                                    {isActive && (
+                                      <div style={{ padding: 12, fontSize: 13, color: '#666', whiteSpace: 'pre-line' }}>
+                                        {item.content || '内容区域'}
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )
+                        }
+                        case 'MOBILETABBAR': {
+                          const items = resolvedProps.items || []
+                          const activeColor = resolvedProps.activeColor || '#1677ff'
+                          let activeIdx = -1
+                          items.forEach((it: any, i: number) => { if (it.active) activeIdx = i })
+                          if (activeIdx < 0 && items.length > 0) activeIdx = 0
+                          return (
+                            <div
+                              style={{
+                                display: 'flex',
+                                background: '#fff',
+                                borderTop: '1px solid #f0f0f0',
+                                borderRadius: 8,
+                                overflow: 'hidden',
+                                paddingBottom: resolvedProps.safeAreaInsetBottom ? 16 : 0,
+                              }}
+                            >
+                              {items.map((item: any, i: number) => {
+                                const active = i === activeIdx
+                                return (
+                                  <div
+                                    key={i}
+                                    style={{
+                                      flex: 1,
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      alignItems: 'center',
+                                      padding: '8px 4px',
+                                      position: 'relative',
+                                      color: active ? activeColor : '#7d7e80',
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    <div style={{ position: 'relative' }}>
+                                      <span style={{ fontSize: 22 }}>{item.icon || '📦'}</span>
+                                      {item.badge !== undefined && item.badge > 0 && (
+                                        <span
+                                          style={{
+                                            position: 'absolute',
+                                            top: -4,
+                                            right: -8,
+                                            background: '#ee0a24',
+                                            color: '#fff',
+                                            fontSize: 10,
+                                            padding: '0 4px',
+                                            borderRadius: 10,
+                                            minWidth: 16,
+                                            textAlign: 'center',
+                                          }}
+                                        >
+                                          {item.badge}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span style={{ fontSize: 11, marginTop: 2 }}>{item.text || `Tab${i + 1}`}</span>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )
+                        }
+                        case 'MOBILESWIPER': {
+                          const items = resolvedProps.items || []
+                          const indicatorDots = resolvedProps.indicatorDots !== false
+                          const currentIdx = 0
+                          return (
+                            <div style={{ borderRadius: 8, overflow: 'hidden', position: 'relative' }}>
+                              <div
+                                style={{
+                                  height: 160,
+                                  background: items[currentIdx]?.color || '#1677ff',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  color: '#fff',
+                                  transition: 'all 0.3s',
+                                }}
+                              >
+                                <div style={{ fontSize: 22, fontWeight: 'bold', marginBottom: 8 }}>
+                                  {items[currentIdx]?.title || '轮播图'}
+                                </div>
+                                <div style={{ fontSize: 14, opacity: 0.9 }}>
+                                  {items[currentIdx]?.subtitle || ''}
+                                </div>
+                              </div>
+                              {indicatorDots && items.length > 1 && (
+                                <div
+                                  style={{
+                                    position: 'absolute',
+                                    bottom: 8,
+                                    left: 0,
+                                    right: 0,
+                                    display: 'flex',
+                                    justifyContent: 'center',
+                                    gap: 6,
+                                  }}
+                                >
+                                  {items.map((_: any, i: number) => (
+                                    <div
+                                      key={i}
+                                      style={{
+                                        width: i === currentIdx ? 16 : 6,
+                                        height: 6,
+                                        borderRadius: 3,
+                                        background: i === currentIdx ? '#fff' : 'rgba(255,255,255,0.5)',
+                                        transition: 'all 0.2s',
+                                      }}
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        }
+                        case 'MOBILESEARCHBAR': {
+                          const shape = resolvedProps.shape || 'round'
+                          return (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 8 }}>
+                              <div
+                                style={{
+                                  flex: 1,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  background: resolvedProps.background || '#f5f5f5',
+                                  borderRadius: shape === 'round' ? 20 : 6,
+                                  padding: '8px 14px',
+                                  gap: 8,
+                                }}
+                              >
+                                <span>🔍</span>
+                                <span style={{ color: '#999', fontSize: 14, flex: 1 }}>
+                                  {resolvedProps.placeholder || '搜索'}
+                                </span>
+                              </div>
+                              {resolvedProps.showAction && (
+                                <span style={{ color: '#1677ff', fontSize: 14, whiteSpace: 'nowrap', cursor: 'pointer' }}>
+                                  {resolvedProps.actionText || '搜索'}
+                                </span>
+                              )}
+                            </div>
+                          )
+                        }
+                        case 'MOBILEPULLREFRESH': {
+                          return (
+                            <div style={{ border: '1px solid #e8e8e8', borderRadius: 8, overflow: 'hidden' }}>
+                              <div
+                                style={{
+                                  padding: '12px 0',
+                                  textAlign: 'center',
+                                  color: '#999',
+                                  fontSize: 13,
+                                  background: '#fafafa',
+                                  borderBottom: '1px solid #f0f0f0',
+                                }}
+                              >
+                                ↓ {resolvedProps.pullingText || '下拉即可刷新...'}
+                              </div>
+                              <div style={{ padding: 20, textAlign: 'center', color: '#666' }}>
+                                下拉刷新容器
+                                <div style={{ marginTop: 8, fontSize: 12, color: '#999' }}>
+                                  （刷新区域内容）
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        }
+                        case 'MOBILESWIPECELL': {
+                          const rightActions = resolvedProps.rightActions || []
+                          return (
+                            <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: '1px solid #f0f0f0' }}>
+                              <div
+                                style={{
+                                  flex: 1,
+                                  background: '#fff',
+                                  padding: '12px 16px',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                <div style={{ fontWeight: 500, fontSize: 15 }}>{resolvedProps.title || '条目标题'}</div>
+                                {resolvedProps.desc && (
+                                  <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>{resolvedProps.desc}</div>
+                                )}
+                              </div>
+                              <div style={{ display: 'flex' }}>
+                                {rightActions.map((action: any, i: number) => (
+                                  <div
+                                    key={i}
+                                    style={{
+                                      width: 64,
+                                      background: action.color || '#ee0a24',
+                                      color: '#fff',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontSize: 13,
+                                      fontWeight: 500,
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    {action.text || '操作'}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        }
+                        case 'MOBILEWATERFALL': {
+                          const columns = resolvedProps.columns || 2
+                          const gap = resolvedProps.gap || 8
+                          const items = resolvedProps.items || []
+                          return (
+                            <div
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: `repeat(${columns}, 1fr)`,
+                                gap: `${gap}px`,
+                              }}
+                            >
+                              {items.map((item: any, i: number) => (
+                                <div
+                                  key={i}
+                                  style={{
+                                    borderRadius: 8,
+                                    overflow: 'hidden',
+                                    background: '#fff',
+                                    boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      height: item.height || 160,
+                                      background: item.color || '#f5f5f5',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      color: '#fff',
+                                      fontSize: 24,
+                                    }}
+                                  >
+                                    📦
+                                  </div>
+                                  <div style={{ padding: 8 }}>
+                                    <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>
+                                      {item.title || `商品${i + 1}`}
+                                    </div>
+                                    {item.price && (
+                                      <div style={{ fontSize: 14, color: '#ee0a24', fontWeight: 'bold' }}>
+                                        {item.price}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )
+                        }
                         default: {
-                          const systemTypes = ['INPUT', 'TEXTAREA', 'NUMBER', 'SELECT', 'DATE', 'DATETIME', 'TIME', 'SWITCH', 'CHECKBOX', 'RADIO', 'UPLOAD', 'RICHTEXT', 'TABLE', 'BUTTON', 'LINK', 'IMAGE', 'TEXT', 'TITLE', 'ICON', 'DIVIDER', 'TABS', 'CARD', 'GRID', 'FLEX', 'MODAL', 'FORM', 'STEPS', 'TIMELINE', 'PROGRESS', 'RATE', 'SLIDER', 'LINECHART', 'BARCHART', 'PIECHART', 'AREACHART', 'SCATTERCHART', 'RADARCHART']
+                          const systemTypes = ['INPUT', 'TEXTAREA', 'NUMBER', 'SELECT', 'DATE', 'DATETIME', 'TIME', 'SWITCH', 'CHECKBOX', 'RADIO', 'UPLOAD', 'RICHTEXT', 'TABLE', 'BUTTON', 'LINK', 'IMAGE', 'TEXT', 'TITLE', 'ICON', 'DIVIDER', 'TABS', 'CARD', 'GRID', 'FLEX', 'MODAL', 'FORM', 'STEPS', 'TIMELINE', 'PROGRESS', 'RATE', 'SLIDER', 'LINECHART', 'BARCHART', 'PIECHART', 'AREACHART', 'SCATTERCHART', 'RADARCHART', 'MOBILEGRID', 'MOBILECOLLAPSE', 'MOBILETABBAR', 'MOBILESWIPER', 'MOBILESEARCHBAR', 'MOBILEPULLREFRESH', 'MOBILESWIPECELL', 'MOBILEWATERFALL']
                           if (!systemTypes.includes(component.componentType)) {
                             return (
                               <CustomComponentWrapper

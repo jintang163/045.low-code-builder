@@ -1,10 +1,13 @@
 package com.lowcode.generator.service;
 
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.core.util.ZipUtil;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.lowcode.common.exception.BusinessException;
 import com.lowcode.common.exception.ErrorCode;
+import com.lowcode.generator.entity.GeneratedApp;
+import com.lowcode.generator.entity.GeneratedCode;
 import com.lowcode.generator.entity.GeneratedUniAppCode;
 import com.lowcode.generator.entity.MobileGenerateConfig;
 import com.lowcode.model.entity.DataModel;
@@ -19,10 +22,17 @@ import org.apache.velocity.app.VelocityEngine;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.io.File;
+import java.io.FileWriter;
 import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -579,6 +589,8 @@ public class UniAppCodeGeneratorService {
         context.put("version", config.getVersion() != null ? config.getVersion() : "1.0.0");
         context.put("author", config.getAuthor() != null ? config.getAuthor() : "lowcode-platform");
         context.put("appid", config.getAppid() != null ? config.getAppid() : "__UNI__LOWCODE");
+        context.put("wechatAppid", config.getWechatAppid() != null ? config.getWechatAppid() : "");
+        context.put("alipayAppid", config.getAlipayAppid() != null ? config.getAlipayAppid() : "");
         context.put("uniAppVersion", config.getUniAppVersion() != null ? config.getUniAppVersion() : "3.0.0-4020920240930001");
         context.put("generateTime", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         return context;
@@ -985,5 +997,80 @@ public class UniAppCodeGeneratorService {
             }
         }
         return models;
+    }
+
+    public GeneratedApp generateUniApp(MobileGenerateConfig config) throws Exception {
+        log.info("开始生成 uni-app 完整项目包: appName={}, appCode={}", config.getAppName(), config.getAppCode());
+
+        GeneratedApp app = new GeneratedApp();
+        app.setAppName(config.getAppName());
+        app.setAppCode(config.getAppCode());
+        app.setVersion(config.getVersion() != null ? config.getVersion() : "1.0.0");
+
+        String tempDir = System.getProperty("java.io.tmpdir") + "/lowcode/uniapp/" + config.getAppCode() + "_" + System.currentTimeMillis();
+        Files.createDirectories(Paths.get(tempDir));
+
+        List<GeneratedUniAppCode> uniAppCodes = generateUniAppProject(config);
+
+        String srcDir = tempDir + "/src";
+        for (GeneratedUniAppCode code : uniAppCodes) {
+            writeCodeToFile(srcDir, code);
+        }
+
+        String zipPath = tempDir + "/" + config.getAppCode() + "-" + app.getVersion() + ".zip";
+        ZipUtil.zip(srcDir, zipPath);
+
+        File zipFile = new File(zipPath);
+        app.setFileSize(zipFile.length());
+        app.setDownloadUrl("/api/uniapp/download/" + config.getAppCode());
+
+        List<GeneratedCode> frontendCodes = uniAppCodes.stream()
+                .map(code -> (GeneratedCode) code)
+                .collect(Collectors.toList());
+        app.setFrontendCodes(frontendCodes);
+        app.setBackendCodes(new ArrayList<>());
+        app.setConfigFiles(new ArrayList<>());
+
+        log.info("uni-app 项目包生成完成: appCode={}, fileSize={}", config.getAppCode(), app.getFileSize());
+        return app;
+    }
+
+    public List<String> getSupportedPlatforms() {
+        return Arrays.asList("wechat", "alipay", "h5", "app-plus");
+    }
+
+    public byte[] downloadUniApp(String appCode) throws Exception {
+        String tempDir = System.getProperty("java.io.tmpdir") + "/lowcode/uniapp/";
+        Path dirPath = Paths.get(tempDir);
+        if (!Files.exists(dirPath)) {
+            throw new Exception("uni-app 项目不存在或已过期");
+        }
+
+        File[] dirs = dirPath.toFile().listFiles((dir, name) -> name.startsWith(appCode + "_"));
+        if (dirs == null || dirs.length == 0) {
+            throw new Exception("uni-app 项目不存在或已过期");
+        }
+
+        File latestDir = dirs[0];
+        for (File dir : dirs) {
+            if (dir.lastModified() > latestDir.lastModified()) {
+                latestDir = dir;
+            }
+        }
+
+        File[] zipFiles = latestDir.listFiles((dir, name) -> name.startsWith(appCode + "-") && name.endsWith(".zip"));
+        if (zipFiles == null || zipFiles.length == 0) {
+            throw new Exception("uni-app 项目包不存在");
+        }
+
+        return Files.readAllBytes(zipFiles[0].toPath());
+    }
+
+    private void writeCodeToFile(String baseDir, GeneratedCode code) throws Exception {
+        Path filePath = Paths.get(baseDir, code.getFilePath());
+        Files.createDirectories(filePath.getParent());
+        try (FileWriter writer = new FileWriter(filePath.toFile(), StandardCharsets.UTF_8)) {
+            writer.write(code.getCodeContent());
+        }
     }
 }

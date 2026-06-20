@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { Space, Button, Input, Slider, Tooltip, Dropdown, MenuProps } from 'antd'
+import React, { useState, useEffect } from 'react'
+import { Space, Button, Input, Slider, Tooltip, Dropdown, MenuProps, Alert } from 'antd'
 import {
   ReloadOutlined,
   ArrowLeftOutlined,
@@ -12,6 +12,7 @@ import {
   StarOutlined,
   MobileOutlined,
   CaretDownOutlined,
+  WarningOutlined,
 } from '@ant-design/icons'
 import { DeviceConfig, Platform } from '@/hooks/useMobileSimulator'
 import DeviceSelector from './DeviceSelector'
@@ -70,6 +71,16 @@ const MobileSimulator: React.FC<MobileSimulatorProps> = ({
 }) => {
   const [inputUrl, setInputUrl] = useState(url)
   const [showDeviceSelector, setShowDeviceSelector] = useState(false)
+  const [iframeError, setIframeError] = useState(false)
+  const [iframeLoading, setIframeLoading] = useState(false)
+
+  useEffect(() => {
+    setInputUrl(url)
+    setIframeError(false)
+    if (url) {
+      setIframeLoading(true)
+    }
+  }, [url])
 
   const viewportWidth = rotation === 'portrait' ? device.width : device.height
   const viewportHeight = rotation === 'portrait' ? device.height : device.width
@@ -338,31 +349,99 @@ const MobileSimulator: React.FC<MobileSimulatorProps> = ({
             />
           )}
 
-          <TouchEventHandler
-            enabled={touchEventsEnabled}
-            gesturesEnabled={gesturesEnabled}
-            onTouchStart={onTouchStart}
-            onTouchMove={onTouchMove}
-            onTouchEnd={onTouchEnd}
-            onGesture={onGesture}
-            style={{
-              width: '100%',
-              height: '100%',
-              position: 'relative',
-            }}
-          >
-            <iframe
-              id="mobile-simulator-iframe"
-              src={url}
+          {!url ? (
+            <div
               style={{
                 width: '100%',
                 height: '100%',
-                border: 'none',
-                pointerEvents: touchEventsEnabled ? 'none' : 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: '#fafafa',
+                color: '#8c8c8c',
+                padding: 20,
+                textAlign: 'center',
               }}
-              title="Mobile Preview"
-            />
-          </TouchEventHandler>
+            >
+              <MobileOutlined style={{ fontSize: 48, marginBottom: 16, color: '#d9d9d9' }} />
+              <div style={{ fontSize: 14, marginBottom: 8 }}>等待预览</div>
+              <div style={{ fontSize: 12, color: '#bfbfbf' }}>正在创建预览会话，请稍候...</div>
+            </div>
+          ) : iframeError ? (
+            <div
+              style={{
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: '#fff2f0',
+                padding: 20,
+                textAlign: 'center',
+              }}
+            >
+              <WarningOutlined style={{ fontSize: 48, marginBottom: 16, color: '#ff4d4f' }} />
+              <Alert
+                type="error"
+                message="加载失败"
+                description="预览页面无法加载，请检查 URL 是否正确"
+                showIcon
+                style={{ width: '100%', marginBottom: 12 }}
+              />
+              <Button type="primary" icon={<ReloadOutlined />} onClick={onRefresh}>
+                重新加载
+              </Button>
+            </div>
+          ) : (
+            <TouchEventHandler
+              enabled={touchEventsEnabled}
+              gesturesEnabled={gesturesEnabled}
+              onTouchStart={onTouchStart}
+              onTouchMove={onTouchMove}
+              onTouchEnd={onTouchEnd}
+              onGesture={onGesture}
+              style={{
+                width: '100%',
+                height: '100%',
+                position: 'relative',
+              }}
+            >
+              {iframeLoading && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: 3,
+                    background: '#1677ff',
+                    zIndex: 200,
+                    animation: 'loading 1.5s ease-in-out infinite',
+                  }}
+                />
+              )}
+              <iframe
+                id="mobile-simulator-iframe"
+                src={url}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  border: 'none',
+                  pointerEvents: touchEventsEnabled ? 'none' : 'auto',
+                }}
+                title="Mobile Preview"
+                onError={() => {
+                  setIframeError(true)
+                  setIframeLoading(false)
+                }}
+                onLoad={() => {
+                  setIframeLoading(false)
+                }}
+              />
+            </TouchEventHandler>
+          )}
 
           {device.hasSafeArea && device.safeAreaBottom > 0 && (
             <div

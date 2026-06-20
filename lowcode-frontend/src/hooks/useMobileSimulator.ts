@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from 'react'
+import { uniappApi, PreviewInfo, PreviewCreateParams } from '@/api/uniapp'
 
 export type Platform = 'ios' | 'android' | 'harmony'
 
@@ -23,6 +24,8 @@ export interface SimulatorState {
   url: string
   touchEventsEnabled: boolean
   gesturesEnabled: boolean
+  previewToken: string | null
+  previewInfo: PreviewInfo | null
 }
 
 export const DEVICE_LIST: DeviceConfig[] = [
@@ -165,9 +168,11 @@ export function useMobileSimulator() {
     device: DEFAULT_DEVICE,
     rotation: 'portrait',
     scale: 1,
-    url: 'https://www.example.com',
+    url: '',
     touchEventsEnabled: true,
     gesturesEnabled: true,
+    previewToken: null,
+    previewInfo: null,
   })
 
   const setDevice = useCallback((device: DeviceConfig) => {
@@ -201,6 +206,40 @@ export function useMobileSimulator() {
   const setGesturesEnabled = useCallback((enabled: boolean) => {
     setState(prev => ({ ...prev, gesturesEnabled: enabled }))
   }, [])
+
+  const setPreviewToken = useCallback((token: string | null) => {
+    setState(prev => ({ ...prev, previewToken: token }))
+  }, [])
+
+  const setPreviewInfo = useCallback((info: PreviewInfo | null) => {
+    setState(prev => ({
+      ...prev,
+      previewInfo: info,
+      previewToken: info?.previewToken ?? prev.previewToken,
+      url: info?.previewUrl ?? prev.url,
+    }))
+  }, [])
+
+  const createPreview = useCallback(async (params: PreviewCreateParams): Promise<string | null> => {
+    try {
+      const finalParams: PreviewCreateParams = {
+        appId: 1,
+        pageId: 1,
+        platform: 'h5',
+        ...params,
+      }
+      const res = await uniappApi.createPreview(finalParams)
+      if (res.code === 0 || res.code === 200) {
+        const info: PreviewInfo = res.data
+        setPreviewInfo(info)
+        return info.previewUrl
+      }
+      return null
+    } catch (e) {
+      console.error('创建预览会话失败:', e)
+      return null
+    }
+  }, [setPreviewInfo])
 
   const viewportSize = useMemo(() => {
     const { device, rotation } = state
@@ -239,6 +278,9 @@ export function useMobileSimulator() {
     setUrl,
     setTouchEventsEnabled,
     setGesturesEnabled,
+    setPreviewToken,
+    setPreviewInfo,
+    createPreview,
     refresh,
     goBack,
   }

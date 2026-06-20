@@ -1,24 +1,28 @@
 {
-    "name" : "${appName}",
-    "appid" : "${appid}",
-    "description" : "${appDesc}",
-    "versionName" : "${version}",
-    "versionCode" : "100",
-    "transformPx" : false,
-    "app-plus" : {
-        "usingComponents" : true,
-        "nvueStyleCompiler" : "uni-app",
-        "compilerVersion" : 3,
-        "splashscreen" : {
-            "alwaysShowBeforeRender" : true,
-            "waiting" : true,
-            "autoclose" : true,
-            "delay" : 0
+    "name": "${appName}",
+    "appid": "${appid}",
+    "description": "${appDesc}",
+    "versionName": "${version}",
+    "versionCode": "100",
+    "transformPx": false,
+    "vueVersion": "3",
+    "uniStatistics": {
+        "enable": false
+    },
+    "app-plus": {
+        "usingComponents": true,
+        "nvueStyleCompiler": "uni-app",
+        "compilerVersion": 3,
+        "splashscreen": {
+            "alwaysShowBeforeRender": true,
+            "waiting": true,
+            "autoclose": true,
+            "delay": 0
         },
-        "modules" : {},
-        "distribute" : {
-            "android" : {
-                "permissions" : [
+        "modules": {},
+        "distribute": {
+            "android": {
+                "permissions": [
                     "<uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\"/>",
                     "<uses-permission android:name=\"android.permission.INTERNET\"/>",
                     "<uses-permission android:name=\"android.permission.ACCESS_WIFI_STATE\"/>",
@@ -31,95 +35,177 @@
                     "<uses-permission android:name=\"android.permission.CAMERA\"/>",
                     "<uses-permission android:name=\"android.permission.RECORD_AUDIO\"/>",
                     "<uses-permission android:name=\"android.permission.ACCESS_COARSE_LOCATION\"/>",
-                    "<uses-permission android:name=\"android.permission.ACCESS_FINE_LOCATION\"/>"
+                    "<uses-permission android:name=\"android.permission.ACCESS_FINE_LOCATION\"/>",
+                    "<uses-permission android:name=\"android.permission.READ_PHONE_STATE\"/>",
+                    "<uses-permission android:name=\"android.permission.FLASHLIGHT\"/>",
+                    "<uses-permission android:name=\"android.permission.GET_ACCOUNTS\"/>"
                 ]
             },
-            "ios" : {},
-            "sdkConfigs" : {}
-        }
-    },
-    "quickapp" : {},
-    "mp-weixin" : {
-        "appid" : "${appid}",
-        "setting" : {
-            "urlCheck" : false,
-            "es6" : true,
-            "enhance" : true,
-            "postcss" : true,
-            "preloadBackgroundData" : false,
-            "minified" : true,
-            "newFeature" : false,
-            "coverView" : true,
-            "nodeModules" : false,
-            "autoAudits" : false,
-            "showShadowRootInWxmlPanel" : true,
-            "scopeDataCheck" : false,
-            "uglifyFileName" : false,
-            "checkInvalidKey" : true,
-            "checkSiteMap" : true,
-            "uploadWithSourceMap" : true,
-            "compileHotReLoad" : false,
-            "lazyloadPlaceholderEnable" : false,
-            "useMultiFrameRuntime" : true,
-            "useApiHook" : true,
-            "useApiHostProcess" : true,
-            "babelSetting" : {
-                "ignore" : [],
-                "disablePlugins" : [],
-                "outputPath" : ""
+            "ios": {
+                "privacyDescription": {
+                    "NSPhotoLibraryUsageDescription": "需要访问您的相册以选择照片",
+                    "NSCameraUsageDescription": "需要使用您的摄像头进行拍照",
+                    "NSMicrophoneUsageDescription": "需要使用您的麦克风进行录音",
+                    "NSLocationWhenInUseUsageDescription": "需要获取您的位置信息以提供定位服务",
+                    "NSLocationAlwaysAndWhenInUseUsageDescription": "需要获取您的位置信息以提供定位服务",
+                    "NSPhotoLibraryAddUsageDescription": "需要访问您的相册以保存照片"
+                },
+                "frameworks": [
+                    "CoreLocation.framework",
+                    "MapKit.framework",
+                    "AVFoundation.framework",
+                    "Photos.framework",
+                    "AssetsLibrary.framework",
+                    "CoreTelephony.framework",
+                    "SystemConfiguration.framework"
+                ],
+                "plist": {
+                    "LSApplicationQueriesSchemes": [
+                        "weixin",
+                        "wechat",
+                        "alipay",
+                        "sinaweibo"
+                    ]
+                }
             },
-            "enableEngineNative" : false,
-            "useIsolateContext" : true,
-            "userConfirmedBundleSwitch" : false,
-            "packNpmManually" : false,
-            "packNpmRelationList" : [],
-            "minifyWXSS" : true,
-            "disableUseStrict" : false,
-            "minifyWXML" : true,
-            "showES6CompileOption" : false,
-            "useCompilerPlugins" : false
-        },
-        "usingComponents" : true,
-        "permission" : {
-            "scope.userLocation" : {
-                "desc" : "获取您的位置信息以提供定位服务"
+            "sdkConfigs": {},
+            "icons": {
+                "android": {},
+                "ios": {}
+            },
+            "splashscreen": {
+                "android": {},
+                "ios": {}
             }
         },
-        "requiredPrivateInfos" : [
-            "getLocation",
-            "chooseLocation"
-        ],
-        "lazyCodeLoading" : "requiredComponents"
+        "offline": true,
+        "runmode": "normal"
     },
-    "mp-alipay" : {
-        "usingComponents" : true,
-        "styleIsolation" : "apply-shared"
-    },
-    "h5" : {
-        "title" : "${appName}",
-        "router" : {
-            "mode" : "hash",
-            "base" : "./"
+    "quickapp": {},
+    "mp-weixin": {
+        "appid": "#if($wechatAppid && $wechatAppid.length() > 0)${wechatAppid}#else${appid}#end",
+        "setting": {
+            "urlCheck": false,
+            "es6": true,
+            "enhance": true,
+            "postcss": true,
+            "preloadBackgroundData": false,
+            "minified": true,
+            "newFeature": false,
+            "coverView": true,
+            "nodeModules": false,
+            "autoAudits": false,
+            "showShadowRootInWxmlPanel": true,
+            "scopeDataCheck": false,
+            "uglifyFileName": false,
+            "checkInvalidKey": true,
+            "checkSiteMap": true,
+            "uploadWithSourceMap": true,
+            "compileHotReLoad": false,
+            "useMultiFrameRuntime": true,
+            "useApiHook": true,
+            "useApiHostProcess": true,
+            "babelSetting": {
+                "ignore": [],
+                "disablePlugins": [],
+                "outputPath": ""
+            },
+            "enableEngineNative": false,
+            "useIsolateContext": true,
+            "userConfirmedBundleSwitch": false,
+            "packNpmManually": false,
+            "packNpmRelationList": [],
+            "minifyWXSS": true,
+            "disableUseStrict": false,
+            "minifyWXML": true,
+            "showES6CompileOption": false,
+            "useCompilerPlugins": false
         },
-        "devServer" : {
-            "port" : 5173,
-            "disableHostCheck" : true,
-            "proxy" : {
-                "/api" : {
-                    "target" : "http://localhost:8080",
-                    "changeOrigin" : true,
-                    "secure" : false,
-                    "pathRewrite" : {
-                        "^/api" : "/"
+        "usingComponents": true,
+        "permission": {
+            "scope.userLocation": {
+                "desc": "你的位置信息将用于小程序位置接口的效果展示"
+            },
+            "scope.userInfo": {
+                "desc": "用于完善会员资料"
+            },
+            "scope.writePhotosAlbum": {
+                "desc": "保存到相册"
+            },
+            "scope.camera": {
+                "desc": "扫一扫、拍照"
+            },
+            "scope.address": {
+                "desc": "用于获取您的收货地址"
+            },
+            "scope.record": {
+                "desc": "用于录音功能"
+            }
+        },
+        "requiredPrivateInfos": [
+            "getLocation",
+            "chooseLocation",
+            "chooseAddress"
+        ],
+        "lazyCodeLoading": "requiredComponents",
+        "plugins": {},
+        "loadPackage": {},
+        "workers": "",
+        "optimization": {
+            "subPackages": true
+        },
+        "resolveAlias": {}
+    },
+    "mp-alipay": {
+        "usingComponents": true,
+        "appid": "#if($alipayAppid && $alipayAppid.length() > 0)${alipayAppid}#else${appid}#end",
+        "enableAppxNg": true,
+        "enableParallelLoader": true,
+        "enableComponent2": true,
+        "enableUniV3": true,
+        "styleIsolation": "page-shared",
+        "title": "${appName}",
+        "enableSkylineRender": false,
+        "component2": true,
+        "enableRequestOptimization": true,
+        "setting": {
+            "urlCheck": false,
+            "es6": true,
+            "postcss": true,
+            "minified": true
+        },
+        "enablePromise": true
+    },
+    "h5": {
+        "title": "${appName}",
+        "router": {
+            "mode": "hash",
+            "base": "./"
+        },
+        "devServer": {
+            "port": 5173,
+            "disableHostCheck": true,
+            "proxy": {
+                "/api": {
+                    "target": "http://localhost:8080",
+                    "changeOrigin": true,
+                    "secure": false,
+                    "pathRewrite": {
+                        "^/api": "/"
                     }
                 }
             }
         },
-        "optimization" : {
-            "treeShaking" : {
-                "enable" : true
+        "optimization": {
+            "treeShaking": {
+                "enable": true
             }
+        },
+        "sdkConfigs": {},
+        "publicPath": "./",
+        "titleNView": false,
+        "async": {
+            "loading": "AsyncLoading"
         }
-    },
-    "vueVersion" : "3"
+    }
 }

@@ -3,11 +3,11 @@ package com.lowcode.generator.controller;
 import com.lowcode.common.result.Result;
 import com.lowcode.generator.entity.GeneratedApp;
 import com.lowcode.generator.entity.MobileGenerateConfig;
-import com.lowcode.generator.entity.MobilePreview;
 import com.lowcode.generator.entity.MobilePreviewRequest;
 import com.lowcode.generator.service.AppGeneratorService;
 import com.lowcode.generator.service.MobilePreviewService;
 import com.lowcode.generator.service.MobilePreviewService.DeviceConfig;
+import com.lowcode.generator.service.MobilePreviewService.MobilePreview;
 import com.lowcode.generator.service.MobilePreviewService.SimulatorConfig;
 import com.lowcode.generator.service.UniAppCodeGeneratorService;
 import io.swagger.annotations.Api;
@@ -58,9 +58,11 @@ public class UniAppGeneratorController {
     @PostMapping("/preview")
     public Result<MobilePreview> createPreview(@Valid @RequestBody MobilePreviewRequest request) {
         try {
+            Long appId = Long.valueOf(request.getAppId());
+            Long pageId = request.getPageId() != null ? Long.valueOf(request.getPageId()) : null;
             MobilePreview preview = mobilePreviewService.createPreview(
-                    request.getAppId(),
-                    request.getPageId(),
+                    appId,
+                    pageId,
                     request.getPlatform()
             );
             return Result.success(preview);

@@ -19,6 +19,16 @@ public class MobileGeneratorConfig {
 
     private String defaultUniAppVersion = "3.0.0";
 
+    private String wechatAppid;
+
+    private String alipayAppid;
+
+    private String previewBaseUrl;
+
+    private Integer previewExpireHours;
+
+    private Integer previewQrCodeSize;
+
     private DefaultComponentConfig defaultComponents;
 
     @Data

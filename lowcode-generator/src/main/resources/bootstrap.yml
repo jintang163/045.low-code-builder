@@ -42,3 +42,16 @@ preview:
   base-url: http://localhost:8080
   token-expire-hours: 24
   qr-code-size: 256
+
+mobile:
+  generator:
+    platforms:
+      - h5
+      - wechat
+      - alipay
+      - harmony
+    wechat-appid:
+    alipay-appid:
+    preview-base-url: http://localhost:8080
+    preview-expire-hours: 24
+    preview-qr-code-size: 256
