@@ -1,0 +1,34 @@
+server:
+  port: 8088
+
+spring:
+  application:
+    name: lowcode-deploy
+  profiles:
+    active: dev
+  cloud:
+    nacos:
+      server-addr: 127.0.0.1:8848
+      discovery:
+        namespace: public
+      config:
+        server-addr: 127.0.0.1:8848
+        namespace: public
+        file-extension: yaml
+
+deploy:
+  docker:
+    host: tcp://127.0.0.1:2375
+    api-version: 1.41
+  build:
+    work-dir: /tmp/lowcode-deploy
+    maven-home: /usr/local/maven
+  k8s:
+    connect-timeout: 30000
+    request-timeout: 60000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"

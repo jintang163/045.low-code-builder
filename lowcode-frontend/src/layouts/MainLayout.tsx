@@ -19,6 +19,8 @@ import {
   MobileOutlined,
   CodeOutlined,
   EyeOutlined,
+  RocketOutlined,
+  MonitorOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAppStore } from '@/store/appStore'
@@ -112,13 +114,18 @@ const MainLayout: React.FC = ({ children }: { children?: React.ReactNode }) => {
       ],
     },
     {
+      key: '/deploy',
+      icon: <RocketOutlined />,
+      label: '部署中心',
+    },
+    {
       key: '/settings',
       icon: <SettingOutlined />,
       label: '系统设置',
     },
     {
       key: '/monitor',
-      icon: <MonitorDashboardOutlined />,
+      icon: <MonitorOutlined />,
       label: '监控大屏',
     },
   ]
@@ -170,6 +177,8 @@ const MainLayout: React.FC = ({ children }: { children?: React.ReactNode }) => {
       '/mobile': '移动端',
       '/mobile/generator': '代码生成器',
       '/mobile/preview': '模拟器预览',
+      '/deploy': '部署中心',
+      '/monitor': '监控大屏',
     }
     const parts = location.pathname.split('/').filter(Boolean)
     const items = []

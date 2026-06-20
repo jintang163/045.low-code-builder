@@ -48,6 +48,12 @@ spring:
             - Path=/api/monitor/**
           filters:
             - StripPrefix=1
+        - id: lowcode-deploy
+          uri: lb://lowcode-deploy
+          predicates:
+            - Path=/api/deploy/**,/ws/deploy/**
+          filters:
+            - StripPrefix=0
       globalcors:
         corsConfigurations:
           '[/**]':

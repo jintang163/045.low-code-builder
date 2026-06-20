@@ -43,13 +43,15 @@ public class AuthFilter implements GlobalFilter, Ordered {
             "/api/auth/login",
             "/api/auth/validate",
             "/api/monitor",
+            "/api/deploy/presets",
             "/v2/api-docs",
             "/v3/api-docs",
             "/swagger-resources",
             "/swagger-ui",
             "/doc.html",
             "/webjars",
-            "/favicon.ico"
+            "/favicon.ico",
+            "/ws/deploy"
     );
 
     @Autowired(required = false)

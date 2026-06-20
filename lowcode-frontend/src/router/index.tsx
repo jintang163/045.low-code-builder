@@ -19,6 +19,8 @@ import Login from '@/pages/Login'
 import PermissionList from '@/pages/permission/List'
 import MobilePreview from '@/pages/mobile/Preview'
 import MobileGenerator from '@/pages/mobile/Generator'
+import MonitorDashboard from '@/pages/monitor/Dashboard'
+import DeployCenter from '@/pages/deploy/DeployCenter'
 
 const routes = [
   {
@@ -181,6 +183,15 @@ const routes = [
           {
             path: '',
             element: <MonitorDashboard />,
+          },
+        ],
+      },
+      {
+        path: 'deploy',
+        children: [
+          {
+            path: '',
+            element: <DeployCenter />,
           },
         ],
       },
