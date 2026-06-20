@@ -20,6 +20,11 @@ export default defineConfig({
         orientation: 'portrait-primary',
         icons: [
           {
+            src: '/icons/icon.svg',
+            sizes: 'any',
+            type: 'image/svg+xml',
+          },
+          {
             src: '/icons/icon-192x192.png',
             sizes: '192x192',
             type: 'image/png',
@@ -96,6 +101,9 @@ export default defineConfig({
             },
           },
         ],
+      },
+      devOptions: {
+        enabled: true,
       },
     }),
   ],

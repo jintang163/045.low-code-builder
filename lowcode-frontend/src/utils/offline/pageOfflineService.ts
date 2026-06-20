@@ -4,12 +4,13 @@ import {
   getAll,
   remove,
   addPendingChange,
+  bulkPut,
   ResourceType,
   ChangeAction,
 } from './indexedDB'
 import { isOnline } from './networkDetector'
-import { PageInfo, pageApi } from '@/api/page'
-import { DataModel, dataModelApi } from '@/api/dataModel'
+import { PageInfo, pageApi, componentApi, customComponentApi } from '@/api/page'
+import { DataModel, dataModelApi, dataSourceApi } from '@/api/dataModel'
 import { BusinessLogic, logicApi } from '@/api/flow'
 
 export interface PageOfflineInfo extends PageInfo {
@@ -343,5 +344,129 @@ export async function cacheBusinessLogicList(appId: number): Promise<void> {
     }
   } catch (e) {
     console.error('缓存业务逻辑列表失败:', e)
+  }
+}
+
+export async function cacheComponentLibrary(data: Record<string, any[]>): Promise<void> {
+  try {
+    const { setAppData } = await import('./indexedDB')
+    await setAppData('componentLibrary', data)
+  } catch (e) {
+    console.error('缓存组件库失败:', e)
+  }
+}
+
+export async function getComponentLibraryOffline(): Promise<Record<string, any[]>> {
+  try {
+    const { getAppData } = await import('./indexedDB')
+    const data = await getAppData<Record<string, any[]>>('componentLibrary')
+    return data || {}
+  } catch (e) {
+    console.error('从本地加载组件库失败:', e)
+    return {}
+  }
+}
+
+export async function cacheComponentTree(): Promise<void> {
+  try {
+    const [systemRes, customRes] = await Promise.all([
+      componentApi.tree(),
+      customComponentApi.tree(),
+    ])
+    if (systemRes.data) {
+      await cacheComponentLibrary(systemRes.data)
+    }
+    if (customRes.data) {
+      const { setAppData } = await import('./indexedDB')
+      await setAppData('customComponentLibrary', customRes.data)
+    }
+  } catch (e) {
+    console.error('缓存组件树失败:', e)
+  }
+}
+
+export async function getDataSourceListOffline(appId: number): Promise<any[]> {
+  const allDS = await getAll<any>('dataSources')
+  return allDS.filter((ds) => ds.appId === appId)
+}
+
+export async function saveDataSourceOffline(dataSource: any): Promise<void> {
+  if (!dataSource.id) {
+    throw new Error('数据源ID不能为空')
+  }
+  await set('dataSources', dataSource.id, dataSource)
+  if (isOnline()) {
+    try {
+      await dataSourceApi.update(dataSource)
+    } catch (e) {
+      console.error('在线保存数据源失败，已保存到本地:', e)
+      await addPendingChange({
+        resourceType: 'dataSource',
+        resourceId: dataSource.id,
+        action: 'update',
+        data: dataSource,
+      })
+    }
+  } else {
+    await addPendingChange({
+      resourceType: 'dataSource',
+      resourceId: dataSource.id,
+      action: 'update',
+      data: dataSource,
+    })
+  }
+}
+
+export async function getDataSourceOffline(dsId: number): Promise<any | undefined> {
+  return get<any>('dataSources', dsId)
+}
+
+export async function getDataSourceListOffline(appId: number): Promise<any[]> {
+  const all = await getAll<any>('dataSources')
+  return all.filter((ds) => ds.appId === appId)
+}
+
+export async function cacheComponentLibrary(tree: Record<string, any[]>): Promise<void> {
+  const { bulkPut } = await import('./indexedDB')
+  const flatList: any[] = []
+  Object.values(tree).forEach((categoryItems) => {
+    flatList.push(...categoryItems)
+  })
+  await bulkPut('components', flatList)
+}
+
+export async function getComponentLibraryOffline(): Promise<Record<string, any[]>> {
+  const all = await getAll<any>('components')
+  const tree: Record<string, any[]> = {}
+  all.forEach((comp) => {
+    const category = comp.componentCategory || '基础组件'
+    if (!tree[category]) {
+      tree[category] = []
+    }
+    tree[category].push(comp)
+  })
+  return tree
+}
+
+export async function cacheDataSourceList(appId: number): Promise<void> {
+  try {
+    const res = await dataSourceApi.list(appId)
+    if (res.data) {
+      const { bulkPut } = await import('./indexedDB')
+      await bulkPut('dataSources', res.data)
+    }
+  } catch (e) {
+    console.error('缓存数据源列表失败:', e)
+  }
+}
+
+export async function cacheComponentTree(): Promise<void> {
+  try {
+    const res = await componentApi.tree()
+    if (res.data) {
+      await cacheComponentLibrary(res.data)
+    }
+  } catch (e) {
+    console.error('缓存组件库失败:', e)
   }
 }

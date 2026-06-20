@@ -3,18 +3,19 @@ export type StoreName =
   | 'dataModels'
   | 'businessLogics'
   | 'components'
+  | 'dataSources'
   | 'pendingChanges'
   | 'syncHistory'
   | 'appData'
 
-export type ResourceType = 'page' | 'dataModel' | 'businessLogic'
+export type ResourceType = 'page' | 'dataModel' | 'businessLogic' | 'dataSource'
 export type ChangeAction = 'create' | 'update' | 'delete'
 export type ChangeStatus = 'pending' | 'syncing' | 'failed' | 'synced'
 
 export interface PendingChange {
   id?: number
   resourceType: ResourceType
-  resourceId: number
+  resourceId: number | string
   action: ChangeAction
   data: any
   status: ChangeStatus
@@ -42,7 +43,7 @@ export interface BaseEntity {
 }
 
 const DB_NAME = 'lowcode-designer-db'
-const DB_VERSION = 1
+const DB_VERSION = 2
 
 const STORE_CONFIGS: {
   name: StoreName
@@ -64,6 +65,10 @@ const STORE_CONFIGS: {
   },
   {
     name: 'components',
+    keyPath: 'id',
+  },
+  {
+    name: 'dataSources',
     keyPath: 'id',
   },
   {

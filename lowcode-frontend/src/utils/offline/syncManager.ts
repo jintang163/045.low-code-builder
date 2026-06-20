@@ -24,16 +24,6 @@ export interface SyncState {
   errorMessage?: string
 }
 
-export interface ConflictInfo {
-  resourceType: ResourceType
-  resourceId: number
-  localData: any
-  serverData: any
-  resolved: boolean
-}
-
-export type ConflictResolver = (conflict: ConflictInfo) => Promise<'local' | 'server'>
-
 const MAX_RETRY_COUNT = 3
 
 class SyncManager {
@@ -44,7 +34,6 @@ class SyncManager {
   }
 
   private listeners: Set<(state: SyncState) => void> = new Set()
-  private conflictResolver: ConflictResolver | null = null
   private syncing = false
   private autoSyncEnabled = true
   private networkUnsubscribe: (() => void) | null = null
@@ -104,10 +93,6 @@ class SyncManager {
     return () => {
       this.listeners.delete(listener)
     }
-  }
-
-  public setConflictResolver(resolver: ConflictResolver) {
-    this.conflictResolver = resolver
   }
 
   public setAutoSyncEnabled(enabled: boolean) {
@@ -217,15 +202,23 @@ class SyncManager {
       case 'businessLogic':
         await this.syncBusinessLogic(action, resourceId, data)
         break
+      case 'dataSource':
+        await this.syncDataSource(action, resourceId, data)
+        break
       default:
         throw new Error(`未知的资源类型: ${resourceType}`)
     }
   }
 
-  private async syncPage(action: ChangeAction, resourceId: number, data: any): Promise<void> {
+  private async syncPage(action: ChangeAction, resourceId: number | string, data: any): Promise<void> {
     switch (action) {
       case 'create':
-        await request.post('/page', data)
+        const createRes = await request.post('/page', data)
+        if (typeof resourceId === 'number' && resourceId < 0 && createRes.data?.id) {
+          const { set, remove } = await import('./indexedDB')
+          await set('pages', createRes.data.id, createRes.data)
+          await remove('pages', resourceId)
+        }
         break
       case 'update':
         await request.put('/page', data)
@@ -236,7 +229,7 @@ class SyncManager {
     }
   }
 
-  private async syncDataModel(action: ChangeAction, resourceId: number, data: any): Promise<void> {
+  private async syncDataModel(action: ChangeAction, resourceId: number | string, data: any): Promise<void> {
     switch (action) {
       case 'create':
         await request.post('/model', data)
@@ -250,7 +243,7 @@ class SyncManager {
     }
   }
 
-  private async syncBusinessLogic(action: ChangeAction, resourceId: number, data: any): Promise<void> {
+  private async syncBusinessLogic(action: ChangeAction, resourceId: number | string, data: any): Promise<void> {
     switch (action) {
       case 'create':
         await request.post('/logic', data)
@@ -260,6 +253,20 @@ class SyncManager {
         break
       case 'delete':
         await request.delete(`/logic/${resourceId}`)
+        break
+    }
+  }
+
+  private async syncDataSource(action: ChangeAction, resourceId: number | string, data: any): Promise<void> {
+    switch (action) {
+      case 'create':
+        await request.post('/datasource', data)
+        break
+      case 'update':
+        await request.put('/datasource', data)
+        break
+      case 'delete':
+        await request.delete(`/datasource/${resourceId}`)
         break
     }
   }
@@ -300,10 +307,13 @@ class SyncManager {
     this.setState({ status: 'syncing' })
 
     try {
-      const [pagesRes, dataModelsRes, logicsRes] = await Promise.all([
+      const [pagesRes, dataModelsRes, logicsRes, dataSourcesRes, componentsRes, customComponentsRes] = await Promise.all([
         request.get(`/page/list/${appId}`),
         request.get(`/model/list/${appId}`),
         request.get(`/logic/list/${appId}`),
+        request.get(`/datasource/list/${appId}`).catch(() => ({ data: null })),
+        request.get('/component/tree').catch(() => ({ data: null })),
+        request.get('/custom-component/tree').catch(() => ({ data: null })),
       ])
 
       const { bulkPut } = await import('./indexedDB')
@@ -319,6 +329,22 @@ class SyncManager {
       if (logicsRes.data) {
         await bulkPut('businessLogics', logicsRes.data)
       }
+
+      if (dataSourcesRes.data) {
+        await bulkPut('dataSources', dataSourcesRes.data)
+      }
+
+      if (componentsRes.data) {
+        const flatComponents: any[] = []
+        Object.values(componentsRes.data as Record<string, any[]>).forEach((items) => {
+          flatComponents.push(...items)
+        })
+        if (flatComponents.length > 0) {
+          await bulkPut('components', flatComponents)
+        }
+      }
+
+      await import('./indexedDB').then(db => db.setAppData('lastPullTime', new Date().toISOString()))
 
       this.setState({ status: 'success', lastSyncTime: new Date().toISOString() })
     } catch (e: any) {

@@ -77,7 +77,7 @@ import OfflineStatus from '@/components/offline/OfflineStatus'
 import { useNetworkStatus } from '@/hooks/useNetworkStatus'
 import { savePageOffline, savePageOfflineOnly, loadPageForEdit } from '@/utils/offline/pageOfflineService'
 import { startSync } from '@/utils/offline/syncManager'
-import { getPendingCount } from '@/utils/offline/indexedDB'
+import { getPendingCount, addPendingChange } from '@/utils/offline/indexedDB'
 
 const { Header, Sider, Content } = Layout
 const { Option } = Select
@@ -971,84 +971,171 @@ const PageDesigner: React.FC = () => {
     ]
 
     try {
-      const [systemRes, customRes] = await Promise.all([
-        componentApi.tree(),
-        customComponentApi.tree(),
-      ])
+      if (isOnline) {
+        const [systemRes, customRes] = await Promise.all([
+          componentApi.tree(),
+          customComponentApi.tree(),
+        ])
 
-      const systemData = systemRes.data || {}
-      if (!systemData.mobile || systemData.mobile.length === 0) {
-        systemData.mobile = defaultMobileComponents
-      } else {
-        const existingTypes = new Set(systemData.mobile.map((c: any) => c.componentType))
-        defaultMobileComponents.forEach(dmc => {
-          if (!existingTypes.has(dmc.componentType)) {
-            systemData.mobile.push(dmc)
-          }
-        })
-      }
-
-      setComponentLibrary(systemData)
-      setCustomComponents(customRes.data || {})
-
-      const merged: Record<string, (ComponentLibrary | CustomComponent)[]> = {}
-      componentCategories.forEach((cat) => {
-        const systemComponents = systemData[cat.key] || []
-        const customComponentsList = customRes.data?.[cat.key] || []
-        if (systemComponents.length > 0 || customComponentsList.length > 0) {
-          merged[cat.key] = [...systemComponents, ...customComponentsList]
+        const systemData = systemRes.data || {}
+        if (!systemData.mobile || systemData.mobile.length === 0) {
+          systemData.mobile = defaultMobileComponents
+        } else {
+          const existingTypes = new Set(systemData.mobile.map((c: any) => c.componentType))
+          defaultMobileComponents.forEach(dmc => {
+            if (!existingTypes.has(dmc.componentType)) {
+              systemData.mobile.push(dmc)
+            }
+          })
         }
-      })
-      setMergedComponentLibrary(merged)
 
-      const schemas: Record<string, any> = {}
-      const allCustomComponents = Object.values(customRes.data || {}).flat()
-      await Promise.all(
-        allCustomComponents.map(async (comp: any) => {
-          try {
-            const result = await loadCustomComponent(comp.componentType, comp.currentVersion)
-            schemas[comp.componentType] = result.schema
-          } catch (e) {
-            console.error(`Failed to load schema for ${comp.componentType}:`, e)
+        setComponentLibrary(systemData)
+        setCustomComponents(customRes.data || {})
+
+        const merged: Record<string, (ComponentLibrary | CustomComponent)[]> = {}
+        componentCategories.forEach((cat) => {
+          const systemComponents = systemData[cat.key] || []
+          const customComponentsList = customRes.data?.[cat.key] || []
+          if (systemComponents.length > 0 || customComponentsList.length > 0) {
+            merged[cat.key] = [...systemComponents, ...customComponentsList]
           }
         })
-      )
-      setCustomComponentSchemas(schemas)
+        setMergedComponentLibrary(merged)
+
+        const schemas: Record<string, any> = {}
+        const allCustomComponents = Object.values(customRes.data || {}).flat()
+        await Promise.all(
+          allCustomComponents.map(async (comp: any) => {
+            try {
+              const result = await loadCustomComponent(comp.componentType, comp.currentVersion)
+              schemas[comp.componentType] = result.schema
+            } catch (e) {
+              console.error(`Failed to load schema for ${comp.componentType}:`, e)
+            }
+          })
+        )
+        setCustomComponentSchemas(schemas)
+
+        if (systemRes.data) {
+          try {
+            const { cacheComponentLibrary } = await import('@/utils/offline/pageOfflineService')
+            await cacheComponentLibrary(systemRes.data)
+          } catch (e) {
+            console.warn('缓存系统组件库失败:', e)
+          }
+        }
+      } else {
+        try {
+          const { getComponentLibraryOffline } = await import('@/utils/offline/pageOfflineService')
+          const offlineTree = await getComponentLibraryOffline()
+          if (Object.keys(offlineTree).length > 0) {
+            setComponentLibrary(offlineTree)
+            const merged: Record<string, (ComponentLibrary | CustomComponent)[]> = {}
+            componentCategories.forEach((cat) => {
+              const catComponents = offlineTree[cat.key] || []
+              if (catComponents.length > 0) {
+                merged[cat.key] = catComponents
+              }
+            })
+            setMergedComponentLibrary(merged)
+          }
+        } catch (e) {
+          console.warn('从本地加载组件库失败:', e)
+        }
+      }
     } catch (e) {
       console.error(e)
-      const systemData: Record<string, ComponentLibrary[]> = { mobile: defaultMobileComponents }
-      setComponentLibrary(systemData)
-      const merged: Record<string, (ComponentLibrary | CustomComponent)[]> = { mobile: defaultMobileComponents }
-      componentCategories.forEach((cat) => {
-        if (cat.key !== 'mobile') {
-          merged[cat.key] = []
+      try {
+        const { getComponentLibraryOffline } = await import('@/utils/offline/pageOfflineService')
+        const offlineTree = await getComponentLibraryOffline()
+        if (Object.keys(offlineTree).length > 0) {
+          setComponentLibrary(offlineTree)
+          const merged: Record<string, (ComponentLibrary | CustomComponent)[]> = {}
+          componentCategories.forEach((cat) => {
+            const catComponents = offlineTree[cat.key] || []
+            if (catComponents.length > 0) {
+              merged[cat.key] = catComponents
+            }
+          })
+          setMergedComponentLibrary(merged)
         }
-      })
-      setMergedComponentLibrary(merged)
+      } catch (e2) {
+        console.warn('从本地加载组件库失败:', e2)
+        const systemData: Record<string, ComponentLibrary[]> = { mobile: defaultMobileComponents }
+        setComponentLibrary(systemData)
+        const merged: Record<string, (ComponentLibrary | CustomComponent)[]> = { mobile: defaultMobileComponents }
+        componentCategories.forEach((cat) => {
+          if (cat.key !== 'mobile') {
+            merged[cat.key] = []
+          }
+        })
+        setMergedComponentLibrary(merged)
+      }
     }
-  }, [])
+  }, [isOnline])
 
   const loadDataModels = useCallback(async () => {
     if (!currentApp) return
     try {
-      const res = await dataModelApi.list(currentApp.id)
-      setDataModels(res.data || [])
+      if (isOnline) {
+        const res = await dataModelApi.list(currentApp.id)
+        setDataModels(res.data || [])
+        try {
+          const { bulkPut } = await import('@/utils/offline/indexedDB')
+          if (res.data) {
+            await bulkPut('dataModels', res.data)
+          }
+        } catch (e) {
+          console.warn('缓存数据模型失败:', e)
+        }
+      } else {
+        const { getDataModelListOffline } = await import('@/utils/offline/pageOfflineService')
+        const offlineModels = await getDataModelListOffline(currentApp.id)
+        setDataModels(offlineModels)
+      }
     } catch (e) {
       console.error(e)
+      try {
+        const { getDataModelListOffline } = await import('@/utils/offline/pageOfflineService')
+        const offlineModels = await getDataModelListOffline(currentApp.id)
+        setDataModels(offlineModels)
+      } catch (e2) {
+        console.warn('从本地加载数据模型失败:', e2)
+      }
     }
-  }, [currentApp])
+  }, [currentApp, isOnline])
 
   const loadExtDataSources = useCallback(async () => {
     if (!currentApp) return
     try {
-      const res: any = await dataSourceApi.list(currentApp.id)
-      if (res.code === 0 || res.code === 200) {
-        setExtDataSources((res.data || []).filter((ds: DataSource) => ds.status === 1))
+      if (isOnline) {
+        const res: any = await dataSourceApi.list(currentApp.id)
+        if (res.code === 0 || res.code === 200) {
+          const dsList = (res.data || []).filter((ds: DataSource) => ds.status === 1)
+          setExtDataSources(dsList)
+          try {
+            const { bulkPut } = await import('@/utils/offline/indexedDB')
+            await bulkPut('dataSources', dsList)
+          } catch (e) {
+            console.warn('缓存数据源失败:', e)
+          }
+        }
+      } else {
+        const { getDataSourceListOffline } = await import('@/utils/offline/pageOfflineService')
+        const offlineDS = await getDataSourceListOffline(currentApp.id)
+        setExtDataSources(offlineDS.filter((ds: any) => ds.status === 1))
       }
     } catch (e) {
-      console.error('加载外部数据源失败:', e)
+      console.error(e)
+      try {
+        const { getDataSourceListOffline } = await import('@/utils/offline/pageOfflineService')
+        const offlineDS = await getDataSourceListOffline(currentApp.id)
+        setExtDataSources(offlineDS.filter((ds: any) => ds.status === 1))
+      } catch (e2) {
+        console.warn('从本地加载数据源失败:', e2)
+      }
     }
-  }, [currentApp])
+  }, [currentApp, isOnline])
 
   const loadExprFunctions = useCallback(async () => {
     try {
@@ -1433,38 +1520,93 @@ const PageDesigner: React.FC = () => {
       }
 
       if (!id || id === 'undefined') {
-        if (page.id) {
-          await savePageOffline(data)
-          message.success('已离线保存')
+        if (!isOnline) {
+          const tempId = -Date.now()
+          const newPage = { ...data, id: tempId }
+          try {
+            const { savePageOfflineOnly } = await import('@/utils/offline/pageOfflineService')
+            await savePageOfflineOnly(newPage as any)
+            await addPendingChange({
+              resourceType: 'page',
+              resourceId: tempId,
+              action: 'create',
+              data: newPage,
+            })
+            setPage(newPage as any)
+            message.success('已离线保存，网络恢复后自动同步')
+            setIsOfflineMode(true)
+          } catch (e) {
+            console.error('离线保存失败:', e)
+            message.error('保存失败')
+          }
         } else {
-          const res = await pageApi.save(data)
-          setPage(res.data)
-          message.success('创建成功')
-          navigate(`/page/designer/${res.data.id}`, { replace: true })
+          try {
+            const res = await pageApi.save(data)
+            setPage(res.data)
+            message.success('创建成功')
+            try {
+              const { savePageOfflineOnly } = await import('@/utils/offline/pageOfflineService')
+              await savePageOfflineOnly(res.data)
+            } catch (e) {
+              console.warn('缓存到本地失败:', e)
+            }
+            navigate(`/page/designer/${res.data.id}`, { replace: true })
+          } catch (e) {
+            console.error('在线创建页面失败，已保存到本地:', e)
+            const tempId = -Date.now()
+            const newPage = { ...data, id: tempId }
+            try {
+              const { savePageOfflineOnly } = await import('@/utils/offline/pageOfflineService')
+              await savePageOfflineOnly(newPage as any)
+              await addPendingChange({
+                resourceType: 'page',
+                resourceId: tempId,
+                action: 'create',
+                data: newPage,
+              })
+              setPage(newPage as any)
+              message.success('服务器保存失败，已保存到本地，网络恢复后自动同步')
+              setIsOfflineMode(true)
+            } catch (e2) {
+              message.error('保存失败')
+            }
+          }
         }
         return
       }
 
       if (isOnline) {
         if (page.id) {
-          await pageApi.update(data)
-          message.success('保存成功')
           try {
-            await versionApi.createSnapshot({
-              appId: currentApp?.id || 1,
-              resourceType: 'PAGE',
-              resourceId: page.id,
-              description: `保存页面: ${values.pageName}`,
-              autoCreate: true,
-            })
-            message.info('已自动创建版本快照')
-          } catch (snapshotError) {
-            console.warn('创建自动快照失败:', snapshotError)
-          }
-          try {
-            await savePageOfflineOnly(data)
-          } catch (offlineError) {
-            console.warn('缓存到本地失败:', offlineError)
+            await pageApi.update(data)
+            message.success('保存成功')
+            try {
+              await versionApi.createSnapshot({
+                appId: currentApp?.id || 1,
+                resourceType: 'PAGE',
+                resourceId: page.id,
+                description: `保存页面: ${values.pageName}`,
+                autoCreate: true,
+              })
+              message.info('已自动创建版本快照')
+            } catch (snapshotError) {
+              console.warn('创建自动快照失败:', snapshotError)
+            }
+            try {
+              await savePageOfflineOnly(data)
+            } catch (offlineError) {
+              console.warn('缓存到本地失败:', offlineError)
+            }
+          } catch (e) {
+            console.error('在线保存页面失败，已保存到本地:', e)
+            try {
+              await savePageOffline(data)
+              const pendingCount = await getPendingCount()
+              message.success(`保存失败，已保存到本地，${pendingCount} 项待同步`)
+              setIsOfflineMode(true)
+            } catch (e2) {
+              message.error('保存失败')
+            }
           }
         }
       } else {

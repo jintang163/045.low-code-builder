@@ -31,6 +31,16 @@ const initOfflineSupport = async () => {
   } catch (e) {
     console.error('[离线支持] 同步管理器初始化失败:', e)
   }
+
+  if (navigator.onLine) {
+    try {
+      const { cacheComponentTree } = await import('./utils/offline/pageOfflineService')
+      await cacheComponentTree()
+      console.log('[离线支持] 组件库预缓存成功')
+    } catch (e) {
+      console.warn('[离线支持] 组件库预缓存失败:', e)
+    }
+  }
 }
 
 const registerServiceWorker = () => {
