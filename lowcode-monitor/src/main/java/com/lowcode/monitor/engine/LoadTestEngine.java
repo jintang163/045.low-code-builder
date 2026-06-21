@@ -6,6 +6,7 @@ import com.lowcode.monitor.entity.LoadTestResult;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
@@ -24,9 +25,10 @@ public class LoadTestEngine {
     private final List<LoadTestResult> allResults = new CopyOnWriteArrayList<>();
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final AtomicBoolean stopped = new AtomicBoolean(false);
+    private final AtomicBoolean finished = new AtomicBoolean(false);
     private ScheduledExecutorService scheduler;
     private ExecutorService userPool;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
     private final List<Future<?>> userFutures = new ArrayList<>();
     private final AtomicInteger activeUsers = new AtomicInteger(0);
 
@@ -35,6 +37,14 @@ public class LoadTestEngine {
         this.metrics = new LoadTestMetrics();
         this.metrics.setTestId(config.getTestId());
         this.metrics.setStatus("READY");
+        this.restTemplate = createRestTemplate(config.getTimeoutMs() != null ? config.getTimeoutMs() : 30000);
+    }
+
+    private RestTemplate createRestTemplate(int timeoutMs) {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(timeoutMs);
+        factory.setReadTimeout(timeoutMs);
+        return new RestTemplate(factory);
     }
 
     public synchronized void start() {
@@ -43,6 +53,7 @@ public class LoadTestEngine {
         }
         running.set(true);
         stopped.set(false);
+        finished.set(false);
         metrics.setStatus("RUNNING");
         metrics.setStartTime(System.currentTimeMillis());
 
@@ -51,37 +62,56 @@ public class LoadTestEngine {
 
         scheduler.scheduleAtFixedRate(this::updateMetrics, 1, 1, TimeUnit.SECONDS);
 
-        long startDelay = (long) config.getRampUpSeconds() * 1000 / config.getVirtualUsers();
+        long startDelay = (long) config.getRampUpSeconds() * 1000 / Math.max(1, config.getVirtualUsers());
         for (int i = 0; i < config.getVirtualUsers(); i++) {
             final int userId = i;
             scheduler.schedule(() -> {
                 if (!stopped.get()) {
                     Future<?> future = userPool.submit(() -> runVirtualUser(userId));
-                    userFutures.add(future);
+                    synchronized (userFutures) {
+                        userFutures.add(future);
+                    }
                 }
             }, startDelay * i, TimeUnit.MILLISECONDS);
         }
 
-        scheduler.schedule(() -> stop(), config.getDurationSeconds(), TimeUnit.SECONDS);
+        scheduler.schedule(() -> internalStop(true), config.getDurationSeconds(), TimeUnit.SECONDS);
     }
 
     public synchronized void stop() {
+        internalStop(false);
+    }
+
+    private synchronized void internalStop(boolean autoStopped) {
         if (stopped.get()) {
             return;
         }
         stopped.set(true);
         running.set(false);
-        metrics.setStatus("STOPPED");
+        finished.set(true);
+
+        metrics.setStatus(autoStopped ? "COMPLETED" : "STOPPED");
         metrics.setEndTime(System.currentTimeMillis());
         metrics.setElapsedSeconds((metrics.getEndTime() - metrics.getStartTime()) / 1000);
         metrics.calculateDerivedMetrics();
 
-        userFutures.forEach(f -> f.cancel(true));
-        userPool.shutdownNow();
-        scheduler.shutdownNow();
+        synchronized (userFutures) {
+            for (Future<?> future : userFutures) {
+                future.cancel(true);
+            }
+            userFutures.clear();
+        }
 
-        log.info("压力测试结束: testId={}, totalRequests={}, successRate={}%, avgResponseTime={}ms, RPS={}",
+        if (userPool != null) {
+            userPool.shutdownNow();
+        }
+        if (scheduler != null) {
+            scheduler.shutdownNow();
+        }
+
+        log.info("压力测试结束: testId={}, status={}, totalRequests={}, successRate={}%, avgResponseTime={}ms, RPS={}",
                 metrics.getTestId(),
+                metrics.getStatus(),
                 metrics.getTotalRequests(),
                 String.format("%.2f", metrics.getSuccessRate()),
                 String.format("%.0f", metrics.getAvgResponseTime()),
@@ -97,7 +127,7 @@ public class LoadTestEngine {
                 allResults.add(result);
                 metrics.recordResult(result);
 
-                if (config.getThinkTimeMs() > 0 && !stopped.get()) {
+                if (config.getThinkTimeMs() != null && config.getThinkTimeMs() > 0 && !stopped.get()) {
                     Thread.sleep(config.getThinkTimeMs());
                 }
             }
@@ -117,7 +147,9 @@ public class LoadTestEngine {
         long startTime = System.nanoTime();
         try {
             HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.parseMediaType(config.getContentType()));
+            if (config.getContentType() != null && !config.getContentType().isEmpty()) {
+                headers.setContentType(MediaType.parseMediaType(config.getContentType()));
+            }
             if (config.getHeaders() != null) {
                 config.getHeaders().forEach(headers::set);
             }
@@ -171,5 +203,9 @@ public class LoadTestEngine {
 
     public boolean isStopped() {
         return stopped.get();
+    }
+
+    public boolean isFinished() {
+        return finished.get();
     }
 }

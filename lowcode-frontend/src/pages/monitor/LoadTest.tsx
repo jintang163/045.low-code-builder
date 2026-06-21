@@ -22,6 +22,7 @@ import {
   Divider,
   Typography,
   Tooltip,
+  Cascader,
 } from 'antd'
 import {
   PlayCircleOutlined,
@@ -35,6 +36,10 @@ import {
   InfoCircleOutlined,
   BarChartOutlined,
   DashboardOutlined,
+  FileTextOutlined,
+  AppstoreOutlined,
+  GlobalOutlined,
+  ClockCircleOutlined,
 } from '@ant-design/icons'
 import ReactECharts from 'echarts-for-react'
 import {
@@ -44,8 +49,11 @@ import {
   type LoadTestReport,
   type LoadTestInfo,
 } from '@/api/monitor'
+import { appApi, type AppInfo } from '@/api'
+import { pageApi, type PageInfo } from '@/api/page'
 
 const { Title, Text } = Typography
+const { Option } = Select
 
 const LoadTestPage: React.FC = () => {
   const [form] = Form.useForm()
@@ -57,6 +65,11 @@ const LoadTestPage: React.FC = () => {
   const [starting, setStarting] = useState(false)
   const [stopping, setStopping] = useState(false)
   const [configModalVisible, setConfigModalVisible] = useState(false)
+
+  const [appList, setAppList] = useState<AppInfo[]>([])
+  const [pageListMap, setPageListMap] = useState<Record<number, PageInfo[]>>({})
+  const [loadingPages, setLoadingPages] = useState(false)
+  const [targetMode, setTargetMode] = useState<'url' | 'page'>('url')
 
   const metricsPollingRef = useRef<number | null>(null)
   const listPollingRef = useRef<number | null>(null)
@@ -70,6 +83,34 @@ const LoadTestPage: React.FC = () => {
       console.error('加载测试列表失败:', e)
     }
   }, [])
+
+  const loadApps = useCallback(async () => {
+    try {
+      const res = await appApi.list()
+      const list = (res as any)?.data || res || []
+      setAppList(list)
+    } catch (e) {
+      console.error('加载应用列表失败:', e)
+    }
+  }, [])
+
+  const loadPages = useCallback(async (appId: number) => {
+    if (pageListMap[appId]) {
+      return pageListMap[appId]
+    }
+    setLoadingPages(true)
+    try {
+      const res = await pageApi.list(appId)
+      const list = (res as any)?.data || res || []
+      setPageListMap(prev => ({ ...prev, [appId]: list }))
+      return list
+    } catch (e) {
+      console.error('加载页面列表失败:', e)
+      return []
+    } finally {
+      setLoadingPages(false)
+    }
+  }, [pageListMap])
 
   const loadMetrics = useCallback(async (testId: string) => {
     try {
@@ -96,16 +137,18 @@ const LoadTestPage: React.FC = () => {
 
   useEffect(() => {
     loadTestList()
+    loadApps()
     listPollingRef.current = window.setInterval(loadTestList, 3000)
     return () => {
       if (listPollingRef.current) clearInterval(listPollingRef.current)
     }
-  }, [loadTestList])
+  }, [loadTestList, loadApps])
 
   useEffect(() => {
     if (selectedTestId) {
       loadMetrics(selectedTestId)
-      const isRunning = tests.find(t => t.testId === selectedTestId)?.status === 'RUNNING'
+      const selectedTest = tests.find(t => t.testId === selectedTestId)
+      const isRunning = selectedTest?.status === 'RUNNING'
       if (isRunning) {
         metricsPollingRef.current = window.setInterval(() => {
           loadMetrics(selectedTestId)
@@ -120,25 +163,42 @@ const LoadTestPage: React.FC = () => {
     }
   }, [selectedTestId, tests, loadMetrics, loadReport])
 
-  const handleStart = async (values: LoadTestConfig) => {
+  const handleStart = async (values: any) => {
     setStarting(true)
     try {
-      const res = await loadTestApi.start({
+      let targetUrl = values.targetUrl
+      if (targetMode === 'page' && values.selectedPage) {
+        const [appId, pageId] = values.selectedPage
+        const pages = pageListMap[appId] || []
+        const page = pages.find((p: PageInfo) => p.id === Number(pageId))
+        if (page) {
+          const baseUrl = window.location.origin
+          const pagePath = page.pagePath || `/page/${pageId}`
+          targetUrl = baseUrl + (pagePath.startsWith('/') ? pagePath : '/' + pagePath)
+        }
+      }
+
+      const config: LoadTestConfig = {
         testName: values.testName,
-        targetUrl: values.targetUrl,
+        targetUrl,
         httpMethod: values.httpMethod || 'GET',
         virtualUsers: values.virtualUsers || 10,
         durationSeconds: values.durationSeconds || 60,
         rampUpSeconds: values.rampUpSeconds || 10,
-        thinkTimeMs: values.thinkTimeMs || 1000,
+        thinkTimeMs: values.thinkTimeMs ?? 1000,
+        timeoutMs: values.timeoutMs || 30000,
         requestBody: values.requestBody,
+        contentType: values.contentType || 'application/json',
         headers: values.headers ? parseHeaders(values.headers) : undefined,
-      })
+      }
+
+      const res = await loadTestApi.start(config)
       const metrics = (res as any)?.data || res
       setSelectedTestId(metrics.testId)
       message.success('压力测试已启动')
       setConfigModalVisible(false)
       form.resetFields()
+      setTargetMode('url')
     } catch (e: any) {
       const msg = e?.response?.data?.message || e?.message || '启动失败'
       message.error(msg)
@@ -202,6 +262,7 @@ const LoadTestPage: React.FC = () => {
       case 'RUNNING': return 'processing'
       case 'COMPLETED': return 'success'
       case 'STOPPED': return 'default'
+      case 'READY': return 'warning'
       default: return 'default'
     }
   }
@@ -219,17 +280,39 @@ const LoadTestPage: React.FC = () => {
   const selectedTest = tests.find(t => t.testId === selectedTestId)
   const isRunning = selectedTest?.status === 'RUNNING'
 
+  const pageOptions = appList.map(app => ({
+    value: String(app.id),
+    label: app.appName || app.name || `应用${app.id}`,
+    children: (pageListMap[app.id!] || []).map(page => ({
+      value: String(page.id),
+      label: (
+        <span>
+          <FileTextOutlined style={{ marginRight: 6 }} />
+          {page.pageName}
+          {page.pagePath && <Tag color="blue" style={{ marginLeft: 6 }}>{page.pagePath}</Tag>}
+        </span>
+      ),
+    })),
+  }))
+
+  const handlePageLoad = async (selectedOptions: any[]) => {
+    if (selectedOptions.length === 1) {
+      const appId = Number(selectedOptions[0].value)
+      await loadPages(appId)
+    }
+  }
+
   const throughputOption = currentReport ? {
     title: { text: '吞吐量 (RPS)', left: 'center', textStyle: { fontSize: 14 } },
     tooltip: { trigger: 'axis' },
     grid: { left: '10%', right: '5%', bottom: '10%' },
     xAxis: {
       type: 'category',
-      data: currentReport.throughputSeries?.map((_, i) => i + 's') || [],
+      data: currentReport.throughputSeries?.map((_: any, i: number) => i + 's') || [],
     },
     yAxis: { type: 'value', name: 'RPS' },
     series: [{
-      data: currentReport.throughputSeries?.map(s => s.value) || [],
+      data: currentReport.throughputSeries?.map((s: any) => s.value) || [],
       type: 'line',
       smooth: true,
       areaStyle: { color: 'rgba(24, 144, 255, 0.2)' },
@@ -244,11 +327,11 @@ const LoadTestPage: React.FC = () => {
     grid: { left: '10%', right: '5%', bottom: '10%' },
     xAxis: {
       type: 'category',
-      data: currentReport.responseTimeSeries?.map((_, i) => i + 's') || [],
+      data: currentReport.responseTimeSeries?.map((_: any, i: number) => i + 's') || [],
     },
     yAxis: { type: 'value', name: 'ms' },
     series: [{
-      data: currentReport.responseTimeSeries?.map(s => s.value) || [],
+      data: currentReport.responseTimeSeries?.map((s: any) => s.value) || [],
       type: 'line',
       smooth: true,
       areaStyle: { color: 'rgba(82, 196, 26, 0.2)' },
@@ -263,11 +346,11 @@ const LoadTestPage: React.FC = () => {
     grid: { left: '10%', right: '5%', bottom: '10%' },
     xAxis: {
       type: 'category',
-      data: currentReport.errorRateSeries?.map((_, i) => i + 's') || [],
+      data: currentReport.errorRateSeries?.map((_: any, i: number) => i + 's') || [],
     },
     yAxis: { type: 'value', name: '%', max: 100 },
     series: [{
-      data: currentReport.errorRateSeries?.map(s => s.value) || [],
+      data: currentReport.errorRateSeries?.map((s: any) => s.value) || [],
       type: 'line',
       smooth: true,
       areaStyle: { color: 'rgba(255, 77, 79, 0.2)' },
@@ -287,7 +370,7 @@ const LoadTestPage: React.FC = () => {
     },
     yAxis: { type: 'value', name: '请求数' },
     series: [{
-      data: currentReport.responseTimeDistribution.buckets?.map(b => Number(b)) || [],
+      data: currentReport.responseTimeDistribution.buckets?.map((b: any) => Number(b)) || [],
       type: 'bar',
       itemStyle: {
         color: {
@@ -368,7 +451,7 @@ const LoadTestPage: React.FC = () => {
           ) : (
             <List
               dataSource={tests}
-              renderItem={(item) => (
+              renderItem={(item: any) => (
                 <List.Item
                   key={item.testId}
                   onClick={() => setSelectedTestId(item.testId)}
@@ -453,7 +536,7 @@ const LoadTestPage: React.FC = () => {
         >
           {!selectedTest ? (
             <Empty
-              description="请从左侧选择一个测试查看详情，或点击右上角"新建测试"创建新测试"
+              description="请从左侧选择一个测试查看详情，或点击右上角「新建测试」创建新测试"
               image={Empty.PRESENTED_IMAGE_SIMPLE}
               style={{ padding: '80px 0' }}
             />
@@ -693,7 +776,7 @@ const LoadTestPage: React.FC = () => {
                         {currentReport.errorDetails && currentReport.errorDetails.length > 0 ? (
                           <List
                             dataSource={currentReport.errorDetails}
-                            renderItem={(item) => (
+                            renderItem={(item: any) => (
                               <List.Item key={item.errorType}>
                                 <List.Item.Meta
                                   title={
@@ -708,7 +791,7 @@ const LoadTestPage: React.FC = () => {
                                       {item.sampleStatusCodes && item.sampleStatusCodes.length > 0 && (
                                         <div style={{ marginTop: 4 }}>
                                           <Text type="secondary">状态码示例: </Text>
-                                          {item.sampleStatusCodes.map((code, i) => (
+                                          {item.sampleStatusCodes.map((code: number, i: number) => (
                                             <Tag key={i} color="default">{code}</Tag>
                                           ))}
                                         </div>
@@ -738,7 +821,7 @@ const LoadTestPage: React.FC = () => {
                           <Card size="small" title="告警信息" style={{ marginBottom: 16 }}>
                             <List
                               dataSource={currentReport.bottleneckAnalysis.warnings}
-                              renderItem={(item) => (
+                              renderItem={(item: string) => (
                                 <List.Item>
                                   <WarningOutlined style={{ color: '#faad14', marginRight: 8 }} />
                                   {item}
@@ -752,7 +835,7 @@ const LoadTestPage: React.FC = () => {
                           <Card size="small" title="优化建议">
                             <List
                               dataSource={currentReport.bottleneckAnalysis.suggestions}
-                              renderItem={(item) => (
+                              renderItem={(item: string) => (
                                 <List.Item>
                                   <InfoCircleOutlined style={{ color: '#1890ff', marginRight: 8 }} />
                                   {item}
@@ -783,7 +866,7 @@ const LoadTestPage: React.FC = () => {
       <Modal
         title="新建压力测试"
         open={configModalVisible}
-        onCancel={() => setConfigModalVisible(false)}
+        onCancel={() => { setConfigModalVisible(false); form.resetFields(); setTargetMode('url') }}
         footer={null}
         width={720}
       >
@@ -797,6 +880,7 @@ const LoadTestPage: React.FC = () => {
             durationSeconds: 60,
             rampUpSeconds: 10,
             thinkTimeMs: 1000,
+            timeoutMs: 30000,
             contentType: 'application/json',
           }}
         >
@@ -810,7 +894,25 @@ const LoadTestPage: React.FC = () => {
                 <Input placeholder="如：首页接口压测" />
               </Form.Item>
             </Col>
-            <Col xs={24}>
+          </Row>
+
+          <Card
+            size="small"
+            title="目标设置"
+            style={{ marginBottom: 16 }}
+            extra={
+              <Select
+                size="small"
+                value={targetMode}
+                onChange={(val: any) => setTargetMode(val)}
+                style={{ width: 120 }}
+              >
+                <Option value="url">手动输入URL</Option>
+                <Option value="page">选择平台页面</Option>
+              </Select>
+            }
+          >
+            {targetMode === 'url' ? (
               <Form.Item
                 label="目标URL"
                 name="targetUrl"
@@ -818,17 +920,37 @@ const LoadTestPage: React.FC = () => {
                   { required: true, message: '请输入目标URL' },
                   { type: 'url', message: '请输入有效的URL' },
                 ]}
+                style={{ marginBottom: 0 }}
               >
-                <Input placeholder="https://api.example.com/users" />
+                <Input placeholder="https://api.example.com/users" prefix={<GlobalOutlined />} />
               </Form.Item>
-            </Col>
+            ) : (
+              <Form.Item
+                label="选择页面"
+                name="selectedPage"
+                rules={[{ required: true, message: '请选择目标页面' }]}
+                style={{ marginBottom: 0 }}
+              >
+                <Cascader
+                  options={pageOptions}
+                  placeholder="请选择应用和页面"
+                  loadData={handlePageLoad}
+                  loading={loadingPages}
+                  expandTrigger="hover"
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+            )}
+          </Card>
+
+          <Row gutter={16}>
             <Col xs={12} sm={8}>
               <Form.Item label="请求方法" name="httpMethod">
                 <Select>
-                  <Select.Option value="GET">GET</Select.Option>
-                  <Select.Option value="POST">POST</Select.Option>
-                  <Select.Option value="PUT">PUT</Select.Option>
-                  <Select.Option value="DELETE">DELETE</Select.Option>
+                  <Option value="GET">GET</Option>
+                  <Option value="POST">POST</Option>
+                  <Option value="PUT">PUT</Option>
+                  <Option value="DELETE">DELETE</Option>
                 </Select>
               </Form.Item>
             </Col>
@@ -878,13 +1000,22 @@ const LoadTestPage: React.FC = () => {
             </Col>
             <Col xs={12} sm={8}>
               <Form.Item
+                label={<span><ClockCircleOutlined style={{ marginRight: 4 }} />超时时间 (毫秒)</span>}
+                name="timeoutMs"
+                tooltip="单个请求的连接超时和读取超时时间"
+              >
+                <InputNumber min={1000} max={300000} step={1000} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col xs={12} sm={8}>
+              <Form.Item
                 label="Content-Type"
                 name="contentType"
               >
                 <Select>
-                  <Select.Option value="application/json">application/json</Select.Option>
-                  <Select.Option value="application/x-www-form-urlencoded">x-www-form-urlencoded</Select.Option>
-                  <Select.Option value="text/plain">text/plain</Select.Option>
+                  <Option value="application/json">application/json</Option>
+                  <Option value="application/x-www-form-urlencoded">x-www-form-urlencoded</Option>
+                  <Option value="text/plain">text/plain</Option>
                 </Select>
               </Form.Item>
             </Col>
@@ -917,7 +1048,7 @@ const LoadTestPage: React.FC = () => {
 
           <Form.Item style={{ marginBottom: 0, textAlign: 'right', marginTop: 16 }}>
             <Space>
-              <Button onClick={() => setConfigModalVisible(false)}>取消</Button>
+              <Button onClick={() => { setConfigModalVisible(false); form.resetFields(); setTargetMode('url') }}>取消</Button>
               <Button type="primary" htmlType="submit" icon={<PlayCircleOutlined />} loading={starting}>
                 开始测试
               </Button>

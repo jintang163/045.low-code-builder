@@ -52,20 +52,45 @@ public class LoadTestService {
         return engine.getMetrics();
     }
 
-    public LoadTestMetrics stopTest(String testId) {
+    public synchronized LoadTestMetrics stopTest(String testId) {
         LoadTestEngine engine = runningTests.get(testId);
-        if (engine != null) {
+        if (engine != null && !engine.isStopped()) {
             engine.stop();
-            LoadTestReport report = generateReport(testId);
-            completedReports.put(testId, report);
+            moveToCompleted(testId, engine);
             return engine.getMetrics();
         }
-        return null;
+        LoadTestReport report = completedReports.get(testId);
+        return report != null ? report.getSummary() : null;
+    }
+
+    private synchronized void moveToCompleted(String testId, LoadTestEngine engine) {
+        if (completedReports.containsKey(testId)) {
+            return;
+        }
+        LoadTestConfig config = testConfigs.get(testId);
+        if (config != null) {
+            LoadTestMetrics finalMetrics = engine.getMetrics();
+            LoadTestReport report = LoadTestReportGenerator.generateReport(
+                    config,
+                    finalMetrics,
+                    engine.getAllResults(),
+                    throughputHistory.get(testId),
+                    responseTimeHistory.get(testId),
+                    errorRateHistory.get(testId)
+            );
+            completedReports.put(testId, report);
+        }
+        runningTests.remove(testId);
     }
 
     public LoadTestMetrics getTestMetrics(String testId) {
         LoadTestEngine engine = runningTests.get(testId);
         if (engine != null) {
+            if (engine.isFinished()) {
+                moveToCompleted(testId, engine);
+                LoadTestReport report = completedReports.get(testId);
+                return report != null ? report.getSummary() : null;
+            }
             return engine.getMetrics();
         }
         LoadTestReport report = completedReports.get(testId);
@@ -83,6 +108,10 @@ public class LoadTestService {
 
         LoadTestEngine engine = runningTests.get(testId);
         if (engine != null) {
+            if (engine.isFinished()) {
+                moveToCompleted(testId, engine);
+                return completedReports.get(testId);
+            }
             LoadTestConfig config = testConfigs.get(testId);
             LoadTestMetrics interimMetrics = engine.getMetrics();
             interimMetrics.setElapsedSeconds((System.currentTimeMillis() - interimMetrics.getStartTime()) / 1000);
@@ -102,27 +131,38 @@ public class LoadTestService {
     }
 
     public List<Map<String, Object>> listTests() {
+        checkAndMoveCompletedTests();
+
         List<Map<String, Object>> tests = new ArrayList<>();
+        Set<String> addedTestIds = new HashSet<>();
 
         for (Map.Entry<String, LoadTestEngine> entry : runningTests.entrySet()) {
+            String testId = entry.getKey();
+            LoadTestEngine engine = entry.getValue();
+            if (engine.isFinished()) {
+                continue;
+            }
             Map<String, Object> test = new LinkedHashMap<>();
-            test.put("testId", entry.getKey());
-            test.put("status", "RUNNING");
-            LoadTestConfig config = testConfigs.get(entry.getKey());
+            test.put("testId", testId);
+            test.put("status", engine.getMetrics().getStatus());
+            LoadTestConfig config = testConfigs.get(testId);
             if (config != null) {
                 test.put("testName", config.getTestName());
                 test.put("targetUrl", config.getTargetUrl());
                 test.put("virtualUsers", config.getVirtualUsers());
             }
-            LoadTestMetrics metrics = entry.getValue().getMetrics();
-            test.put("metrics", metrics);
+            test.put("metrics", engine.getMetrics());
             tests.add(test);
+            addedTestIds.add(testId);
         }
 
         for (Map.Entry<String, LoadTestReport> entry : completedReports.entrySet()) {
+            if (addedTestIds.contains(entry.getKey())) {
+                continue;
+            }
             Map<String, Object> test = new LinkedHashMap<>();
             test.put("testId", entry.getKey());
-            test.put("status", "COMPLETED");
+            test.put("status", entry.getValue().getStatus());
             LoadTestReport report = entry.getValue();
             test.put("testName", report.getTestName());
             test.put("targetUrl", report.getTargetUrl());
@@ -130,12 +170,38 @@ public class LoadTestService {
             test.put("duration", report.getDurationSeconds());
             test.put("metrics", report.getSummary());
             tests.add(test);
+            addedTestIds.add(entry.getKey());
         }
+
+        tests.sort((a, b) -> {
+            Long aTime = a.containsKey("metrics") ? ((LoadTestMetrics) a.get("metrics")).getStartTime() : 0L;
+            Long bTime = b.containsKey("metrics") ? ((LoadTestMetrics) b.get("metrics")).getStartTime() : 0L;
+            return Long.compare(bTime, aTime);
+        });
 
         return tests;
     }
 
-    public boolean deleteTest(String testId) {
+    private synchronized void checkAndMoveCompletedTests() {
+        List<String> toMove = new ArrayList<>();
+        for (Map.Entry<String, LoadTestEngine> entry : runningTests.entrySet()) {
+            if (entry.getValue().isFinished()) {
+                toMove.add(entry.getKey());
+            }
+        }
+        for (String testId : toMove) {
+            LoadTestEngine engine = runningTests.get(testId);
+            if (engine != null) {
+                moveToCompleted(testId, engine);
+            }
+        }
+    }
+
+    public synchronized boolean deleteTest(String testId) {
+        LoadTestEngine engine = runningTests.get(testId);
+        if (engine != null && engine.isRunning()) {
+            engine.stop();
+        }
         runningTests.remove(testId);
         completedReports.remove(testId);
         testConfigs.remove(testId);
@@ -143,55 +209,6 @@ public class LoadTestService {
         responseTimeHistory.remove(testId);
         errorRateHistory.remove(testId);
         return true;
-    }
-
-    private LoadTestReport generateReport(String testId) {
-        LoadTestEngine engine = runningTests.get(testId);
-        LoadTestConfig config = testConfigs.get(testId);
-        if (engine == null || config == null) {
-            return null;
-        }
-
-        LoadTestMetrics finalMetrics = engine.getMetrics();
-        finalMetrics.calculateDerivedMetrics();
-
-        return LoadTestReportGenerator.generateReport(
-                config,
-                finalMetrics,
-                engine.getAllResults(),
-                throughputHistory.get(testId),
-                responseTimeHistory.get(testId),
-                errorRateHistory.get(testId)
-        );
-    }
-
-    private void collectTimeSeriesMetrics() {
-        long timestamp = System.currentTimeMillis();
-
-        for (Map.Entry<String, LoadTestEngine> entry : runningTests.entrySet()) {
-            String testId = entry.getKey();
-            LoadTestEngine engine = entry.getValue();
-            LoadTestMetrics metrics = engine.getMetrics();
-
-            if (!"RUNNING".equals(metrics.getStatus())) {
-                continue;
-            }
-
-            LoadTestReport.TimeSeriesData tp = new LoadTestReport.TimeSeriesData();
-            tp.setTimestamp(timestamp);
-            tp.setValue(metrics.getRequestsPerSecond());
-            throughputHistory.computeIfAbsent(testId, k -> Collections.synchronizedList(new ArrayList<>())).add(tp);
-
-            LoadTestReport.TimeSeriesData rt = new LoadTestReport.TimeSeriesData();
-            rt.setTimestamp(timestamp);
-            rt.setValue(metrics.getAvgResponseTime());
-            responseTimeHistory.computeIfAbsent(testId, k -> Collections.synchronizedList(new ArrayList<>())).add(rt);
-
-            LoadTestReport.TimeSeriesData er = new LoadTestReport.TimeSeriesData();
-            er.setTimestamp(timestamp);
-            er.setValue(100 - metrics.getSuccessRate());
-            errorRateHistory.computeIfAbsent(testId, k -> Collections.synchronizedList(new ArrayList<>())).add(er);
-        }
     }
 
     private String generateTestId() {
