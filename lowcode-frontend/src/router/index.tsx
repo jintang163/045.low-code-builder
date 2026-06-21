@@ -20,6 +20,7 @@ import PermissionList from '@/pages/permission/List'
 import MobilePreview from '@/pages/mobile/Preview'
 import MobileGenerator from '@/pages/mobile/Generator'
 import MonitorDashboard from '@/pages/monitor/Dashboard'
+import LoadTest from '@/pages/monitor/LoadTest'
 import DeployCenter from '@/pages/deploy/DeployCenter'
 
 const routes = [
@@ -183,6 +184,10 @@ const routes = [
           {
             path: '',
             element: <MonitorDashboard />,
+          },
+          {
+            path: 'loadtest',
+            element: <LoadTest />,
           },
         ],
       },

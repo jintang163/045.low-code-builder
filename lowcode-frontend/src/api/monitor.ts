@@ -118,3 +118,100 @@ export const monitorApi = {
   deleteAlertRule: (id: number) => request.delete(`/monitor/alert/rules/${id}`),
   clearAlert: (alertId: string) => request.delete(`/monitor/alert/clear/${alertId}`),
 }
+
+export interface LoadTestConfig {
+  testId?: string
+  testName: string
+  targetUrl: string
+  httpMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE'
+  headers?: Record<string, string>
+  requestBody?: string
+  virtualUsers?: number
+  durationSeconds?: number
+  rampUpSeconds?: number
+  thinkTimeMs?: number
+  timeoutMs?: number
+  contentType?: string
+  assertionStatusCodes?: string[]
+  assertionBodyContains?: string
+  collectDetailedMetrics?: boolean
+}
+
+export interface LoadTestMetrics {
+  testId: string
+  status: 'READY' | 'RUNNING' | 'STOPPED' | 'COMPLETED'
+  startTime: number
+  endTime?: number
+  elapsedSeconds: number
+  totalRequests: number
+  successRequests: number
+  failedRequests: number
+  totalResponseTime: number
+  minResponseTime: number
+  maxResponseTime: number
+  requestsPerSecond: number
+  successRate: number
+  avgResponseTime: number
+  activeUsers?: number
+}
+
+export interface LoadTestReport {
+  testId: string
+  testName: string
+  targetUrl: string
+  httpMethod: string
+  status: string
+  startTime: number
+  endTime: number
+  durationSeconds: number
+  configuredVirtualUsers: number
+  configuredDurationSeconds: number
+  summary: LoadTestMetrics
+  responseTimeDistribution: {
+    min: number
+    max: number
+    avg: number
+    median: number
+    p50: number
+    p75: number
+    p90: number
+    p95: number
+    p99: number
+    buckets: number[]
+    bucketLabels: string[]
+  }
+  throughputSeries: Array<{ timestamp: number; value: number }>
+  responseTimeSeries: Array<{ timestamp: number; value: number }>
+  errorRateSeries: Array<{ timestamp: number; value: number }>
+  errorDetails: Array<{
+    errorType: string
+    message: string
+    count: number
+    sampleStatusCodes: number[]
+  }>
+  bottleneckAnalysis: {
+    overall: string
+    warnings: string[]
+    suggestions: string[]
+    performanceGrade: string
+  }
+}
+
+export interface LoadTestInfo {
+  testId: string
+  status: string
+  testName: string
+  targetUrl: string
+  virtualUsers: number
+  duration?: number
+  metrics: LoadTestMetrics
+}
+
+export const loadTestApi = {
+  start: (config: LoadTestConfig) => request.post<LoadTestMetrics>('/monitor/loadtest/start', config),
+  stop: (testId: string) => request.post<LoadTestMetrics>(`/monitor/loadtest/stop/${testId}`),
+  getMetrics: (testId: string) => request.get<LoadTestMetrics>(`/monitor/loadtest/metrics/${testId}`),
+  getReport: (testId: string) => request.get<LoadTestReport>(`/monitor/loadtest/report/${testId}`),
+  list: () => request.get<LoadTestInfo[]>('/monitor/loadtest/list'),
+  delete: (testId: string) => request.delete(`/monitor/loadtest/${testId}`),
+}

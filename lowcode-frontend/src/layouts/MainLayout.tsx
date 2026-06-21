@@ -21,6 +21,7 @@ import {
   EyeOutlined,
   RocketOutlined,
   MonitorOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAppStore } from '@/store/appStore'
@@ -126,7 +127,19 @@ const MainLayout: React.FC = ({ children }: { children?: React.ReactNode }) => {
     {
       key: '/monitor',
       icon: <MonitorOutlined />,
-      label: '监控大屏',
+      label: '监控中心',
+      children: [
+        {
+          key: '/monitor',
+          icon: <MonitorOutlined />,
+          label: '监控大屏',
+        },
+        {
+          key: '/monitor/loadtest',
+          icon: <ThunderboltOutlined />,
+          label: '压力测试',
+        },
+      ],
     },
   ]
 
@@ -178,7 +191,8 @@ const MainLayout: React.FC = ({ children }: { children?: React.ReactNode }) => {
       '/mobile/generator': '代码生成器',
       '/mobile/preview': '模拟器预览',
       '/deploy': '部署中心',
-      '/monitor': '监控大屏',
+      '/monitor': '监控中心',
+      '/monitor/loadtest': '压力测试',
     }
     const parts = location.pathname.split('/').filter(Boolean)
     const items = []
