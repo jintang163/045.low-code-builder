@@ -51,7 +51,7 @@ import {
 import { useParams, useNavigate } from 'react-router-dom'
 import { DndProvider, useDrag, useDrop } from 'react-dnd'
 import { HTML5Backend } from 'react-dnd-html5-backend'
-import { BusinessLogic, LogicNode, LogicEdge, logicApi, debugApi } from '@/api/flow'
+import { BusinessLogic, LogicNode, LogicEdge, logicApi, debugApi, rpaApi, RpaScript } from '@/api/flow'
 import { useAppStore } from '@/store/appStore'
 
 const { Header, Sider, Content } = Layout
@@ -64,6 +64,7 @@ const nodeCategories = [
   { key: 'data', name: '数据操作', icon: '🗄️', color: '#52c41a' },
   { key: 'variable', name: '变量操作', icon: '📦', color: '#722ed1' },
   { key: 'notify', name: '通知交互', icon: '🔔', color: '#eb2f96' },
+  { key: 'rpa', name: 'RPA自动化', icon: '🤖', color: '#1890ff' },
   { key: 'advanced', name: '高级操作', icon: '⚙️', color: '#13c2c2' },
 ]
 
@@ -102,6 +103,10 @@ const nodeTypes: Record<string, any[]> = {
     { type: 'WEBHOOK', name: 'WebHook', icon: '🌐', description: '调用外部WebHook' },
     { type: 'DINGTALK', name: '钉钉通知', icon: '💬', description: '发送钉钉消息' },
     { type: 'WECHAT', name: '企业微信', icon: '💚', description: '发送企业微信消息' },
+  ],
+  rpa: [
+    { type: 'RPA_EXECUTE', name: '执行RPA脚本', icon: '🤖', description: '执行录制的RPA浏览器自动化脚本' },
+    { type: 'RPA_EXTRACT', name: 'RPA数据抓取', icon: '📥', description: '通过RPA从网页抓取数据' },
   ],
   advanced: [
     { type: 'API_CALL', name: '调用API', icon: '🌐', description: '调用外部HTTP API' },
@@ -302,6 +307,7 @@ const LogicDesigner: React.FC = () => {
   const [debugStatus, setDebugStatus] = useState<any>(null)
   const [variables, setVariables] = useState<any[]>([])
   const [breakpoints, setBreakpoints] = useState<string[]>([])
+  const [rpaScripts, setRpaScripts] = useState<RpaScript[]>([])
 
   const canvasRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -337,6 +343,20 @@ const LogicDesigner: React.FC = () => {
   useEffect(() => {
     loadLogic()
   }, [loadLogic])
+
+  const loadRpaScripts = useCallback(async () => {
+    if (!currentApp) return
+    try {
+      const res = await rpaApi.listScripts(currentApp.id)
+      setRpaScripts(res.data || [])
+    } catch (e) {
+      console.error(e)
+    }
+  }, [currentApp])
+
+  useEffect(() => {
+    loadRpaScripts()
+  }, [loadRpaScripts])
 
   const saveHistory = useCallback(() => {
     const newHistory = history.slice(0, historyIndex + 1)
@@ -799,6 +819,33 @@ const LogicDesigner: React.FC = () => {
             <Form.Item name="code" label="代码片段" rules={[{ required: true }]}>
               <Input.TextArea rows={12} placeholder="// 支持Java/Groovy代码片段&#10;return userService.findById(userId);" />
             </Form.Item>
+          )
+        case 'RPA_EXECUTE':
+        case 'RPA_EXTRACT':
+          return (
+            <>
+              <Form.Item name="scriptId" label="选择RPA脚本" rules={[{ required: true, message: '请选择RPA脚本' }]}>
+                <Select placeholder="请选择已录制的RPA脚本">
+                  {rpaScripts.map(script => (
+                    <Option key={script.id} value={script.id}>
+                      {script.scriptName} ({script.scriptCode})
+                      <Tag style={{ marginLeft: 8 }} color={script.status === 'PUBLISHED' ? 'green' : 'orange'}>
+                        {script.status === 'PUBLISHED' ? '已发布' : '草稿'}
+                      </Tag>
+                    </Option>
+                  ))}
+                </Select>
+              </Form.Item>
+              <Form.Item name="inputParams" label="输入参数(JSON)">
+                <Input.TextArea rows={4} placeholder='{"username": "test", "password": "123456"}' />
+              </Form.Item>
+              <Form.Item name="resultVariable" label="结果变量名">
+                <Input placeholder="如: rpaResult，执行结果将存入此变量" />
+              </Form.Item>
+              <Form.Item name="timeout" label="超时时间(秒)">
+                <InputNumber style={{ width: '100%' }} min={10} max={3600} defaultValue={300} />
+              </Form.Item>
+            </>
           )
         default:
           return (

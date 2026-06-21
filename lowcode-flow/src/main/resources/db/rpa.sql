@@ -1,0 +1,51 @@
+-- RPA自动化模块数据库表结构
+
+CREATE TABLE IF NOT EXISTS `sys_rpa_script` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `app_id` bigint NOT NULL COMMENT '应用ID',
+  `script_name` varchar(100) NOT NULL COMMENT '脚本名称',
+  `script_code` varchar(100) NOT NULL COMMENT '脚本编码',
+  `description` varchar(500) DEFAULT NULL COMMENT '脚本描述',
+  `script_content` longtext COMMENT '脚本内容(JSON格式)',
+  `script_type` varchar(50) DEFAULT 'BROWSER' COMMENT '脚本类型:BROWSER-浏览器自动化,DATA_EXTRACT-数据抓取,FORM_FILL-表单填写,CUSTOM-自定义',
+  `target_url` varchar(500) DEFAULT NULL COMMENT '目标网站URL',
+  `timeout` int DEFAULT 300 COMMENT '超时时间(秒)',
+  `status` varchar(20) DEFAULT 'DRAFT' COMMENT '状态:DRAFT-草稿,PUBLISHED-已发布',
+  `version` varchar(20) DEFAULT '1.0.0' COMMENT '版本号',
+  `created_by` bigint DEFAULT NULL COMMENT '创建人',
+  `created_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_by` bigint DEFAULT NULL COMMENT '更新人',
+  `updated_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted` int DEFAULT 0 COMMENT '逻辑删除:0-未删除,1-已删除',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_app_code` (`app_id`, `script_code`),
+  KEY `idx_app_id` (`app_id`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='RPA脚本表';
+
+CREATE TABLE IF NOT EXISTS `sys_rpa_execution` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `script_id` bigint NOT NULL COMMENT '脚本ID',
+  `execution_no` varchar(50) NOT NULL COMMENT '执行编号',
+  `trigger_type` varchar(20) DEFAULT 'MANUAL' COMMENT '触发方式:MANUAL-手动,SCHEDULE-定时,API-API调用,LOGIC-逻辑流程',
+  `trigger_logic_id` bigint DEFAULT NULL COMMENT '触发的逻辑流程ID',
+  `trigger_node_id` varchar(100) DEFAULT NULL COMMENT '触发的节点ID',
+  `input_params` longtext COMMENT '输入参数(JSON)',
+  `output_result` longtext COMMENT '输出结果(JSON)',
+  `status` varchar(20) DEFAULT 'PENDING' COMMENT '执行状态:PENDING-等待,RUNNING-执行中,SUCCESS-成功,FAILED-失败',
+  `error_message` text COMMENT '错误信息',
+  `start_time` datetime DEFAULT NULL COMMENT '开始时间',
+  `end_time` datetime DEFAULT NULL COMMENT '结束时间',
+  `duration` bigint DEFAULT NULL COMMENT '执行耗时(毫秒)',
+  `execution_log` longtext COMMENT '执行日志',
+  `created_by` bigint DEFAULT NULL COMMENT '创建人',
+  `created_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_by` bigint DEFAULT NULL COMMENT '更新人',
+  `updated_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted` int DEFAULT 0 COMMENT '逻辑删除:0-未删除,1-已删除',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_execution_no` (`execution_no`),
+  KEY `idx_script_id` (`script_id`),
+  KEY `idx_status` (`status`),
+  KEY `idx_start_time` (`start_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='RPA执行记录表';

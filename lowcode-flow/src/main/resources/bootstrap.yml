@@ -69,6 +69,11 @@ knife4j:
     version: 1.0.0
     concat: lowcode-platform
 
+rpa:
+  executor:
+    url: ${RPA_EXECUTOR_URL:http://localhost:8000}
+    timeout: 300000
+
 ---
 spring:
   config:
@@ -87,3 +92,8 @@ spring:
 
 server:
   port: 8083
+
+rpa:
+  executor:
+    url: ${RPA_EXECUTOR_URL:http://lowcode-rpa-executor:8000}
+    timeout: 300000

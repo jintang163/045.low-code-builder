@@ -210,37 +210,64 @@ public class BusinessLogicService extends ServiceImpl<BusinessLogicMapper, Busin
 
         sb.append(indentStr).append("// 节点: ").append(node.getNodeName()).append(" (").append(node.getNodeType()).append(")\n");
 
-        switch (node.getNodeCategory()) {
-            case "START":
-                sb.append(indentStr).append("log.info(\"流程开始\");\n\n");
-                break;
-            case "TRIGGER":
-                generateTriggerCode(sb, node, indentStr);
-                break;
-            case "CONDITION":
-                generateConditionCode(sb, node, indentStr);
-                break;
-            case "LOOP":
-                generateLoopCode(sb, node, indentStr);
-                break;
-            case "DATA_OPERATION":
-                generateDataOperationCode(sb, node, indentStr);
-                break;
-            case "VARIABLE":
-                generateVariableCode(sb, node, indentStr);
-                break;
-            case "NOTIFICATION":
-                generateNotificationCode(sb, node, indentStr);
-                break;
-            case "API_CALL":
-                generateApiCallCode(sb, node, indentStr);
-                break;
-            case "END":
-                sb.append(indentStr).append("log.info(\"流程结束\");\n");
-                sb.append(indentStr).append("return variables;\n");
-                return;
-            default:
-                sb.append(indentStr).append("// 未知节点类型\n");
+        String nodeType = node.getNodeType();
+        if (nodeType != null) {
+            switch (nodeType) {
+                case "SCHEDULE":
+                case "API":
+                case "TABLE_EVENT":
+                case "MANUAL":
+                    generateTriggerCode(sb, node, indentStr);
+                    break;
+                case "CONDITION":
+                    generateConditionCode(sb, node, indentStr);
+                    break;
+                case "LOOP":
+                case "PARALLEL":
+                case "DELAY":
+                    generateLoopCode(sb, node, indentStr);
+                    break;
+                case "QUERY":
+                case "INSERT":
+                case "UPDATE":
+                case "DELETE":
+                case "BATCH_INSERT":
+                case "BATCH_UPDATE":
+                    generateDataOperationCode(sb, node, indentStr);
+                    break;
+                case "ASSIGN":
+                case "INCREMENT":
+                case "DECREMENT":
+                case "ARRAY_OP":
+                case "OBJECT_OP":
+                    generateVariableCode(sb, node, indentStr);
+                    break;
+                case "EMAIL":
+                case "SMS":
+                case "IN_APP":
+                case "WEBHOOK":
+                case "DINGTALK":
+                case "WECHAT":
+                    generateNotificationCode(sb, node, indentStr);
+                    break;
+                case "API_CALL":
+                    generateApiCallCode(sb, node, indentStr);
+                    break;
+                case "RPA_EXECUTE":
+                case "RPA_EXTRACT":
+                    generateRpaCode(sb, node, indentStr);
+                    break;
+                case "CODE":
+                case "SUB_LOGIC":
+                case "WORKFLOW":
+                case "TRANSACTION":
+                    sb.append(indentStr).append("// 高级操作: ").append(node.getNodeName()).append("\n\n");
+                    break;
+                default:
+                    sb.append(indentStr).append("// 未知节点类型\n");
+            }
+        } else {
+            sb.append(indentStr).append("// 未知节点类型\n");
         }
 
         List<LogicEdge> outEdges = edgeMap.get(node.getNodeId());
@@ -295,6 +322,58 @@ public class BusinessLogicService extends ServiceImpl<BusinessLogicMapper, Busin
     private void generateApiCallCode(StringBuilder sb, LogicNode node, String indent) {
         sb.append(indent).append("// API调用\n");
         sb.append(indent).append("// TODO: 实现API调用逻辑\n\n");
+    }
+
+    private void generateRpaCode(StringBuilder sb, LogicNode node, String indent) {
+        String configStr = node.getNodeConfig();
+        String scriptId = "null";
+        String resultVariable = "rpaResult_" + node.getNodeId().replace("-", "_");
+        String inputParams = "new java.util.HashMap<>()";
+        String timeout = "300";
+
+        if (configStr != null && !configStr.isEmpty()) {
+            try {
+                com.alibaba.fastjson2.JSONObject config = com.alibaba.fastjson2.JSON.parseObject(configStr);
+                if (config.get("scriptId") != null) {
+                    scriptId = String.valueOf(config.get("scriptId"));
+                }
+                if (config.getString("resultVariable") != null && !config.getString("resultVariable").isEmpty()) {
+                    resultVariable = config.getString("resultVariable");
+                }
+                if (config.getString("inputParams") != null && !config.getString("inputParams").isEmpty()) {
+                    inputParams = "com.alibaba.fastjson2.JSON.parseObject(\"" + config.getString("inputParams").replace("\"", "\\\"") + "\")";
+                }
+                if (config.get("timeout") != null) {
+                    timeout = String.valueOf(config.get("timeout"));
+                }
+            } catch (Exception e) {
+                // 配置解析失败，使用默认值
+            }
+        }
+
+        sb.append(indent).append("// RPA自动化节点: ").append(node.getNodeName()).append("\n");
+        sb.append(indent).append("log.info(\"开始执行RPA脚本: scriptId={}\", ").append(scriptId).append(");\n");
+        sb.append(indent).append("try {\n");
+        sb.append(indent).append("    Map<String, Object> rpaParams = ").append(inputParams).append(";\n");
+        sb.append(indent).append("    // 合并流程变量到RPA参数\n");
+        sb.append(indent).append("    rpaParams.putAll(variables);\n");
+        sb.append(indent).append("    com.lowcode.flow.dto.RpaExecuteDTO rpaExecuteDTO = new com.lowcode.flow.dto.RpaExecuteDTO();\n");
+        sb.append(indent).append("    rpaExecuteDTO.setScriptId(").append(scriptId).append("L);\n");
+        sb.append(indent).append("    rpaExecuteDTO.setTriggerType(\"LOGIC\");\n");
+        sb.append(indent).append("    rpaExecuteDTO.setTriggerLogicId(logicId);\n");
+        sb.append(indent).append("    rpaExecuteDTO.setTriggerNodeId(\"").append(node.getNodeId()).append("\");\n");
+        sb.append(indent).append("    rpaExecuteDTO.setInputParams(rpaParams);\n");
+        sb.append(indent).append("    com.lowcode.flow.entity.RpaExecution rpaExecution = rpaExecutionService.executeScript(rpaExecuteDTO);\n");
+        sb.append(indent).append("    Map<String, Object> ").append(resultVariable).append(" = new java.util.HashMap<>();\n");
+        sb.append(indent).append("    if (rpaExecution.getOutputResult() != null) {\n");
+        sb.append(indent).append("        ").append(resultVariable).append(" = com.alibaba.fastjson2.JSON.parseObject(rpaExecution.getOutputResult(), Map.class);\n");
+        sb.append(indent).append("    }\n");
+        sb.append(indent).append("    variables.put(\"").append(resultVariable).append("\", ").append(resultVariable).append(");\n");
+        sb.append(indent).append("    log.info(\"RPA脚本执行成功: {}\", rpaExecution.getExecutionNo());\n");
+        sb.append(indent).append("} catch (Exception e) {\n");
+        sb.append(indent).append("    log.error(\"RPA脚本执行失败\", e);\n");
+        sb.append(indent).append("    throw new RuntimeException(\"RPA脚本执行失败: \" + e.getMessage(), e);\n");
+        sb.append(indent).append("}\n\n");
     }
 
     private String getIndent(int level) {
@@ -402,6 +481,12 @@ public class BusinessLogicService extends ServiceImpl<BusinessLogicMapper, Busin
                 createNodeType("SCRIPT", "脚本执行", "SCRIPT", "执行自定义脚本")
         );
         result.put("utilities", utilities);
+
+        List<Map<String, Object>> rpa = Arrays.asList(
+                createNodeType("RPA_EXECUTE", "执行RPA脚本", "RPA", "执行录制的RPA浏览器自动化脚本"),
+                createNodeType("RPA_EXTRACT", "RPA数据抓取", "RPA", "通过RPA从网页抓取数据")
+        );
+        result.put("rpa", rpa);
 
         return result;
     }

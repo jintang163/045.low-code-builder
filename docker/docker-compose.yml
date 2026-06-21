@@ -211,6 +211,17 @@ services:
     networks:
       - lowcode-network
 
+  lowcode-rpa-executor:
+    build:
+      context: ../
+      dockerfile: docker/lowcode-rpa-executor/Dockerfile
+    container_name: lowcode-rpa-executor
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    networks:
+      - lowcode-network
+
 networks:
   lowcode-network:
     driver: bridge

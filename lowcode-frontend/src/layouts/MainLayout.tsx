@@ -25,6 +25,7 @@ import {
   BarChartOutlined,
   FileTextOutlined,
   ExperimentOutlined,
+  RobotOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAppStore } from '@/store/appStore'
@@ -82,6 +83,11 @@ const MainLayout: React.FC = ({ children }: { children?: React.ReactNode }) => {
       key: '/workflow',
       icon: <BranchesOutlined />,
       label: '工作流',
+    },
+    {
+      key: '/rpa',
+      icon: <RobotOutlined />,
+      label: 'RPA自动化',
     },
     {
       key: '/report',
@@ -209,6 +215,8 @@ const MainLayout: React.FC = ({ children }: { children?: React.ReactNode }) => {
       '/abtest': 'A/B测试',
       '/abtest/designer': 'A/B测试设计器',
       '/abtest/detail': 'A/B测试详情',
+      '/rpa': 'RPA自动化',
+      '/rpa/designer': 'RPA脚本设计器',
       '/component': '组件管理',
       '/component/debugger': '组件调试',
       '/permission': '权限管理',

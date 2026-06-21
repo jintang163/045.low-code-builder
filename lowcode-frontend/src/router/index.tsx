@@ -32,6 +32,8 @@ import ABTestList from '@/pages/abtest/List'
 import ABTestDesigner from '@/pages/abtest/Designer'
 import ABTestDetail from '@/pages/abtest/Detail'
 import ABTestRuntime from '@/pages/abtest/Runtime'
+import RpaScriptList from '@/pages/rpa/List'
+import RpaDesigner from '@/pages/rpa/Designer'
 
 const routes = [
   {
@@ -274,6 +276,23 @@ const routes = [
           {
             path: 'runtime/:id',
             element: <ABTestRuntime />,
+          },
+        ],
+      },
+      {
+        path: 'rpa',
+        children: [
+          {
+            path: '',
+            element: <RpaScriptList />,
+          },
+          {
+            path: 'designer/:id',
+            element: <RpaDesigner />,
+          },
+          {
+            path: 'designer',
+            element: <RpaDesigner />,
           },
         ],
       },

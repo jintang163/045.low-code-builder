@@ -131,3 +131,71 @@ export const debugApi = {
     request.post('/debug/breakpoint/remove', null, { params: { sessionId, nodeId } }),
   history: (logicId: number) => request.get(`/debug/history/${logicId}`),
 }
+
+export interface RpaScript {
+  id?: number
+  appId: number
+  scriptName: string
+  scriptCode: string
+  description?: string
+  scriptContent?: string
+  scriptType?: string
+  targetUrl?: string
+  timeout?: number
+  status?: string
+  version?: string
+  createdTime?: string
+  updatedTime?: string
+}
+
+export interface RpaExecution {
+  id?: number
+  scriptId: number
+  executionNo?: string
+  triggerType?: string
+  triggerLogicId?: number
+  triggerNodeId?: string
+  inputParams?: string
+  outputResult?: string
+  status?: string
+  errorMessage?: string
+  startTime?: string
+  endTime?: string
+  duration?: number
+  executionLog?: string
+}
+
+export interface RpaStep {
+  action: string
+  selector?: string
+  value?: string
+  url?: string
+  waitTime?: number
+  timeout?: number
+  fieldName?: string
+  extractType?: string
+  attribute?: string
+  direction?: string
+  pixels?: number
+  seconds?: number
+  name?: string
+  fullPage?: boolean
+}
+
+export const rpaApi = {
+  listScripts: (appId: number) => request.get<RpaScript[]>(`/rpa/script/list/${appId}`),
+  pageScripts: (appId: number, current = 1, size = 10) =>
+    request.get(`/rpa/script/page`, { params: { appId, current, size } }),
+  getScript: (id: number) => request.get<RpaScript>(`/rpa/script/${id}`),
+  createScript: (data: RpaScript) => request.post<RpaScript>('/rpa/script', data),
+  updateScript: (id: number, data: RpaScript) => request.put<RpaScript>(`/rpa/script/${id}`, data),
+  deleteScript: (id: number) => request.delete(`/rpa/script/${id}`),
+  validateScript: (id: number) => request.post(`/rpa/script/${id}/validate`),
+  publishScript: (id: number) => request.post<RpaScript>(`/rpa/script/${id}/publish`),
+  executeScript: (scriptId: number, inputParams?: Record<string, any>, triggerType = 'MANUAL') =>
+    request.post<RpaExecution>('/rpa/execute', { scriptId, inputParams, triggerType }),
+  getExecution: (id: number) => request.get<RpaExecution>(`/rpa/execution/${id}`),
+  pageExecutions: (current = 1, size = 10, scriptId?: number) =>
+    request.get(`/rpa/execution/page`, { params: { current, size, scriptId } }),
+  checkExecutorHealth: () => request.get('/rpa/executor/health'),
+}
