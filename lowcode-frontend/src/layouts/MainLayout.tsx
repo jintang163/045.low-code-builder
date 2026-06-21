@@ -22,6 +22,8 @@ import {
   RocketOutlined,
   MonitorOutlined,
   ThunderboltOutlined,
+  BarChartOutlined,
+  FileTextOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAppStore } from '@/store/appStore'
@@ -74,6 +76,16 @@ const MainLayout: React.FC = ({ children }: { children?: React.ReactNode }) => {
       key: '/workflow',
       icon: <BranchesOutlined />,
       label: '工作流',
+    },
+    {
+      key: '/report',
+      icon: <FileTextOutlined />,
+      label: '报表设计',
+    },
+    {
+      key: '/screen',
+      icon: <BarChartOutlined />,
+      label: '大屏设计',
     },
     {
       key: '/component',
@@ -184,6 +196,10 @@ const MainLayout: React.FC = ({ children }: { children?: React.ReactNode }) => {
       '/logic/designer': '逻辑设计器',
       '/workflow': '工作流',
       '/workflow/designer': '工作流设计器',
+      '/report': '报表设计',
+      '/report/designer': '报表设计器',
+      '/screen': '大屏设计',
+      '/screen/designer': '大屏设计器',
       '/component': '组件管理',
       '/component/debugger': '组件调试',
       '/permission': '权限管理',

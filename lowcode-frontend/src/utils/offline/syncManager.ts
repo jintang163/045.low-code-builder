@@ -194,7 +194,7 @@ class SyncManager {
 
     switch (resourceType) {
       case 'page':
-        await this.syncPage(action, resourceId, data)
+        await this.syncPageChange(action, resourceId, data)
         break
       case 'dataModel':
         await this.syncDataModel(action, resourceId, data)
@@ -210,7 +210,7 @@ class SyncManager {
     }
   }
 
-  private async syncPage(action: ChangeAction, resourceId: number | string, data: any): Promise<void> {
+  private async syncPageChange(action: ChangeAction, resourceId: number | string, data: any): Promise<void> {
     switch (action) {
       case 'create':
         const createRes = await request.post('/page', data)

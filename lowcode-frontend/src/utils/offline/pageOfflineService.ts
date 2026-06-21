@@ -421,33 +421,6 @@ export async function getDataSourceOffline(dsId: number): Promise<any | undefine
   return get<any>('dataSources', dsId)
 }
 
-export async function getDataSourceListOffline(appId: number): Promise<any[]> {
-  const all = await getAll<any>('dataSources')
-  return all.filter((ds) => ds.appId === appId)
-}
-
-export async function cacheComponentLibrary(tree: Record<string, any[]>): Promise<void> {
-  const { bulkPut } = await import('./indexedDB')
-  const flatList: any[] = []
-  Object.values(tree).forEach((categoryItems) => {
-    flatList.push(...categoryItems)
-  })
-  await bulkPut('components', flatList)
-}
-
-export async function getComponentLibraryOffline(): Promise<Record<string, any[]>> {
-  const all = await getAll<any>('components')
-  const tree: Record<string, any[]> = {}
-  all.forEach((comp) => {
-    const category = comp.componentCategory || '基础组件'
-    if (!tree[category]) {
-      tree[category] = []
-    }
-    tree[category].push(comp)
-  })
-  return tree
-}
-
 export async function cacheDataSourceList(appId: number): Promise<void> {
   try {
     const res = await dataSourceApi.list(appId)
@@ -457,16 +430,5 @@ export async function cacheDataSourceList(appId: number): Promise<void> {
     }
   } catch (e) {
     console.error('缓存数据源列表失败:', e)
-  }
-}
-
-export async function cacheComponentTree(): Promise<void> {
-  try {
-    const res = await componentApi.tree()
-    if (res.data) {
-      await cacheComponentLibrary(res.data)
-    }
-  } catch (e) {
-    console.error('缓存组件库失败:', e)
   }
 }

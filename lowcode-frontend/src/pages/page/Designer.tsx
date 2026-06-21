@@ -2805,7 +2805,7 @@ const PageDesigner: React.FC = () => {
                     name={[name, 'actionConfig']}
                     label="动作配置"
                   >
-                    <Input.TextArea rows={3} placeholder="例如：{\"url\": \"/api/list\", \"method\": \"GET\"}" />
+                    <Input.TextArea rows={3} placeholder={'例如：{"url": "/api/list", "method": "GET"}'} />
                   </Form.Item>
                   <Form.Item
                     {...restField}

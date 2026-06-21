@@ -22,11 +22,21 @@ import MobileGenerator from '@/pages/mobile/Generator'
 import MonitorDashboard from '@/pages/monitor/Dashboard'
 import LoadTest from '@/pages/monitor/LoadTest'
 import DeployCenter from '@/pages/deploy/DeployCenter'
+import ReportList from '@/pages/report/List'
+import ReportDesigner from '@/pages/report/Designer'
+import ReportPreview from '@/pages/report/Preview'
+import DashboardList from '@/pages/dashboard/List'
+import DashboardDesigner from '@/pages/dashboard/Designer'
+import DashboardDisplay from '@/pages/dashboard/Display'
 
 const routes = [
   {
     path: '/login',
     element: <Login />,
+  },
+  {
+    path: '/screen/display/:id',
+    element: <DashboardDisplay />,
   },
   {
     path: '/',
@@ -197,6 +207,44 @@ const routes = [
           {
             path: '',
             element: <DeployCenter />,
+          },
+        ],
+      },
+      {
+        path: 'report',
+        children: [
+          {
+            path: '',
+            element: <ReportList />,
+          },
+          {
+            path: 'designer/:id',
+            element: <ReportDesigner />,
+          },
+          {
+            path: 'designer',
+            element: <ReportDesigner />,
+          },
+          {
+            path: 'preview/:id',
+            element: <ReportPreview />,
+          },
+        ],
+      },
+      {
+        path: 'screen',
+        children: [
+          {
+            path: '',
+            element: <DashboardList />,
+          },
+          {
+            path: 'designer/:id',
+            element: <DashboardDesigner />,
+          },
+          {
+            path: 'designer',
+            element: <DashboardDesigner />,
           },
         ],
       },
