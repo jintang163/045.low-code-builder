@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.lowcode.common.result.Result;
 import com.lowcode.flow.entity.BusinessLogic;
+import com.lowcode.flow.executor.LogicExecutor;
 import com.lowcode.flow.service.BusinessLogicService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -20,6 +21,9 @@ public class BusinessLogicController {
 
     @Autowired
     private BusinessLogicService businessLogicService;
+
+    @Autowired
+    private LogicExecutor logicExecutor;
 
     @ApiOperation("保存业务逻辑")
     @PostMapping
@@ -80,5 +84,12 @@ public class BusinessLogicController {
     @GetMapping("/nodeTypes")
     public Result<Map<String, Object>> getNodeTypes() {
         return Result.success(businessLogicService.getNodeTypes());
+    }
+
+    @ApiOperation("运行业务逻辑（解释执行）")
+    @PostMapping("/{id}/run")
+    public Result<Map<String, Object>> runLogic(@PathVariable Long id, @RequestBody(required = false) Map<String, Object> params) {
+        Map<String, Object> result = logicExecutor.executeLogic(id, params);
+        return Result.success(result);
     }
 }

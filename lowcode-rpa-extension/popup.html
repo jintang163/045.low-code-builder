@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPA录制助手</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 360px;
+            min-height: 400px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+        }
+
+        .header {
+            padding: 16px;
+            color: white;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .header p {
+            font-size: 12px;
+            opacity: 0.9;
+        }
+
+        .status-section {
+            background: white;
+            margin: 0 12px;
+            border-radius: 8px;
+            padding: 16px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            font-size: 13px;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-recording {
+            background: #fff1f0;
+            color: #ff4d4f;
+        }
+
+        .status-recording .dot {
+            width: 8px;
+            height: 8px;
+            background: #ff4d4f;
+            border-radius: 50%;
+            animation: pulse 1s infinite;
+        }
+
+        .status-idle {
+            background: #f6ffed;
+            color: #52c41a;
+        }
+
+        .status-idle .dot {
+            width: 8px;
+            height: 8px;
+            background: #52c41a;
+            border-radius: 50%;
+        }
+
+        .status-paused {
+            background: #fffbe6;
+            color: #faad14;
+        }
+
+        .status-paused .dot {
+            width: 8px;
+            height: 8px;
+            background: #faad14;
+            border-radius: 50%;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .step-count {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1677ff;
+            text-align: center;
+            padding: 12px;
+            background: #e6f4ff;
+            border-radius: 8px;
+            margin: 12px 0;
+        }
+
+        .step-count .label {
+            display: block;
+            font-size: 12px;
+            color: #666;
+            font-weight: normal;
+            margin-top: 4px;
+        }
+
+        .btn-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #ff4d4f 0%, #ff7875 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(255, 77, 79, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e6e6e6;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #52c41a 0%, #73d13d 100%);
+            color: white;
+        }
+
+        .btn-success:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(82, 196, 26, 0.4);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #faad14 0%, #ffc53d 100%);
+            color: white;
+        }
+
+        .btn-warning:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(250, 173, 20, 0.4);
+        }
+
+        .btn-block {
+            grid-column: 1 / -1;
+        }
+
+        .shortcuts {
+            background: white;
+            margin: 12px;
+            border-radius: 8px;
+            padding: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .shortcuts h3 {
+            font-size: 13px;
+            color: #333;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .shortcut-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .shortcut-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .shortcut-key {
+            background: #f0f0f0;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: Consolas, monospace;
+            font-size: 11px;
+            color: #333;
+        }
+
+        .steps-preview {
+            background: white;
+            margin: 0 12px 12px;
+            border-radius: 8px;
+            padding: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .steps-preview h3 {
+            font-size: 13px;
+            color: #333;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .step-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            background: #fafafa;
+            border-radius: 4px;
+            margin-bottom: 4px;
+            font-size: 12px;
+        }
+
+        .step-index {
+            background: #1677ff;
+            color: white;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            flex-shrink: 0;
+        }
+
+        .step-icon {
+            font-size: 16px;
+        }
+
+        .step-action {
+            color: #333;
+            font-weight: 500;
+        }
+
+        .step-target {
+            color: #999;
+            max-width: 150px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 20px;
+            color: #999;
+            font-size: 12px;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 12px;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 11px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🤖 RPA录制助手</h1>
+        <p>低代码平台 - 浏览器自动化</p>
+    </div>
+
+    <div class="status-section">
+        <div class="status-item">
+            <span>录制状态</span>
+            <span id="status-badge" class="status-badge status-idle">
+                <span class="dot"></span>
+                空闲
+            </span>
+        </div>
+        <div class="status-item">
+            <span>当前页面</span>
+            <span id="current-url" style="font-size: 12px; color: #666; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">-</span>
+        </div>
+        <div class="step-count">
+            <span id="step-count">0</span>
+            <span class="label">已记录步骤</span>
+        </div>
+        <div class="btn-group">
+            <button id="btn-start" class="btn btn-primary btn-block">
+                🎬 开始录制
+            </button>
+            <button id="btn-pause" class="btn btn-warning" style="display: none;">
+                ⏸️ 暂停
+            </button>
+            <button id="btn-resume" class="btn btn-success" style="display: none;">
+                ▶️ 继续
+            </button>
+            <button id="btn-stop" class="btn btn-secondary" style="display: none;">
+                ⏹️ 停止
+            </button>
+        </div>
+    </div>
+
+    <div class="steps-preview" id="steps-preview">
+        <h3>
+            <span>📋 已记录步骤</span>
+            <button id="btn-clear" class="btn btn-secondary" style="padding: 2px 8px; font-size: 11px;">清空</button>
+        </h3>
+        <div id="steps-list">
+            <div class="empty-state">暂无步骤，点击开始录制</div>
+        </div>
+    </div>
+
+    <div class="shortcuts">
+        <h3>⌨️ 快捷键</h3>
+        <div class="shortcut-list">
+            <div class="shortcut-item">
+                <span class="shortcut-key">Shift+Ctrl+点击</span>
+                <span>提取元素数据</span>
+            </div>
+            <div class="shortcut-item">
+                <span class="shortcut-key">Ctrl+Shift+E</span>
+                <span>截取当前页面</span>
+            </div>
+            <div class="shortcut-item">
+                <span class="shortcut-key">Ctrl+Shift+W</span>
+                <span>插入等待2秒</span>
+            </div>
+            <div class="shortcut-item">
+                <span class="shortcut-key">Esc</span>
+                <span>暂停/继续</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        低代码RPA扩展 v1.0.0
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

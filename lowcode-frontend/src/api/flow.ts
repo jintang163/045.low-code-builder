@@ -144,6 +144,14 @@ export interface RpaScript {
   timeout?: number
   status?: string
   version?: string
+  scheduleEnabled?: number
+  cronExpression?: string
+  scheduleParams?: string
+  lastExecuteTime?: string
+  nextExecuteTime?: string
+  executeCount?: number
+  successCount?: number
+  failCount?: number
   createdTime?: string
   updatedTime?: string
 }
@@ -198,4 +206,10 @@ export const rpaApi = {
   pageExecutions: (current = 1, size = 10, scriptId?: number) =>
     request.get(`/rpa/execution/page`, { params: { current, size, scriptId } }),
   checkExecutorHealth: () => request.get('/rpa/executor/health'),
+  enableSchedule: (id: number, cronExpression: string, scheduleParams?: string) =>
+    request.post<RpaScript>(`/rpa/script/${id}/schedule/enable`, { cronExpression, scheduleParams }),
+  disableSchedule: (id: number) => request.post<RpaScript>(`/rpa/script/${id}/schedule/disable`),
+  getScheduledScripts: () => request.get<RpaScript[]>('/rpa/schedule/list'),
+  calculateNextExecution: (cronExpression: string) =>
+    request.get('/rpa/schedule/next-execution', { params: { cronExpression } }),
 }

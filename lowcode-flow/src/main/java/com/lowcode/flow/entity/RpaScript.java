@@ -29,4 +29,20 @@ public class RpaScript extends BaseEntity {
     private String status;
 
     private String version;
+
+    private Integer scheduleEnabled;
+
+    private String cronExpression;
+
+    private String scheduleParams;
+
+    private LocalDateTime lastExecuteTime;
+
+    private LocalDateTime nextExecuteTime;
+
+    private Long executeCount;
+
+    private Long successCount;
+
+    private Long failCount;
 }

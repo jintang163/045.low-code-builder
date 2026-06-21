@@ -151,13 +151,21 @@ public class BusinessLogicService extends ServiceImpl<BusinessLogicMapper, Busin
 
         sb.append("package ").append(packageName).append(";\n\n");
         sb.append("import org.springframework.stereotype.Component;\n");
+        sb.append("import org.springframework.beans.factory.annotation.Autowired;\n");
         sb.append("import java.util.*;\n");
-        sb.append("import lombok.extern.slf4j.Slf4j;\n\n");
+        sb.append("import lombok.extern.slf4j.Slf4j;\n");
+        sb.append("import com.alibaba.fastjson2.JSON;\n");
+        sb.append("import com.lowcode.flow.dto.RpaExecuteDTO;\n");
+        sb.append("import com.lowcode.flow.entity.RpaExecution;\n");
+        sb.append("import com.lowcode.flow.service.RpaExecutionService;\n\n");
         sb.append("@Slf4j\n");
         sb.append("@Component\n");
         sb.append("public class ").append(className).append(" {\n\n");
 
-        sb.append("    public Object execute(Map<String, Object> params) {\n");
+        sb.append("    @Autowired\n");
+        sb.append("    private RpaExecutionService rpaExecutionService;\n\n");
+
+        sb.append("    public Object execute(Long logicId, Map<String, Object> params) {\n");
         sb.append("        log.info(\"开始执行业务逻辑: ").append(logic.getLogicName()).append("\");\n");
         sb.append("        Map<String, Object> variables = new HashMap<>(params);\n\n");
 

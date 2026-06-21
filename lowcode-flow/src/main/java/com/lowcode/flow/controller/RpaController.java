@@ -3,10 +3,12 @@ package com.lowcode.flow.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.lowcode.common.result.Result;
 import com.lowcode.flow.dto.RpaExecuteDTO;
+import com.lowcode.flow.dto.RpaScheduleDTO;
 import com.lowcode.flow.dto.RpaScriptCreateDTO;
 import com.lowcode.flow.entity.RpaExecution;
 import com.lowcode.flow.entity.RpaScript;
 import com.lowcode.flow.rpa.RpaExecutorClient;
+import com.lowcode.flow.schedule.RpaScheduleService;
 import com.lowcode.flow.service.RpaExecutionService;
 import com.lowcode.flow.service.RpaScriptService;
 import io.swagger.annotations.Api;
@@ -14,6 +16,8 @@ import io.swagger.annotations.ApiOperation;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -30,6 +34,9 @@ public class RpaController {
 
     @Autowired
     private RpaExecutorClient rpaExecutorClient;
+
+    @Autowired
+    private RpaScheduleService rpaScheduleService;
 
     @ApiOperation("获取RPA脚本列表")
     @GetMapping("/script/list/{appId}")
@@ -116,6 +123,35 @@ public class RpaController {
                 "status", healthy ? "UP" : "DOWN",
                 "message", healthy ? "RPA执行器运行正常" : "RPA执行器不可用"
         );
+        return Result.success(result);
+    }
+
+    @ApiOperation("启用RPA脚本定时调度")
+    @PostMapping("/script/{id}/schedule/enable")
+    public Result<RpaScript> enableSchedule(@PathVariable Long id, @RequestBody RpaScheduleDTO dto) {
+        return Result.success(rpaScheduleService.enableSchedule(id, dto.getCronExpression(), dto.getScheduleParams()));
+    }
+
+    @ApiOperation("禁用RPA脚本定时调度")
+    @PostMapping("/script/{id}/schedule/disable")
+    public Result<RpaScript> disableSchedule(@PathVariable Long id) {
+        return Result.success(rpaScheduleService.disableSchedule(id));
+    }
+
+    @ApiOperation("获取定时执行的RPA脚本列表")
+    @GetMapping("/schedule/list")
+    public Result<List<RpaScript>> getScheduledScripts() {
+        return Result.success(rpaScheduleService.getScheduledScripts());
+    }
+
+    @ApiOperation("计算Cron表达式下次执行时间")
+    @GetMapping("/schedule/next-execution")
+    public Result<Map<String, Object>> calculateNextExecution(@RequestParam String cronExpression) {
+        LocalDateTime nextTime = rpaScheduleService.calculateNextExecuteTime(cronExpression);
+        Map<String, Object> result = new HashMap<>();
+        result.put("cronExpression", cronExpression);
+        result.put("nextExecutionTime", nextTime);
+        result.put("valid", nextTime != null);
         return Result.success(result);
     }
 }
