@@ -99,6 +99,14 @@ const SchemaField = createSchemaField({
     Select: FormilySelect,
     NumberPicker,
     Switch: FormilySwitch,
+    RateField,
+    StepsField,
+    SignatureField,
+    LocationPicker,
+    SubFormField,
+    FormCopyButton,
+    ExcelImportButton,
+    ExcelExportButton,
   },
 })
 
@@ -2171,7 +2179,7 @@ const PageDesigner: React.FC = () => {
   const getPropsSchema = () => {
     const type = selectedComponent?.componentType
 
-    const systemTypes = ['INPUT', 'TEXTAREA', 'NUMBER', 'SELECT', 'DATE', 'DATETIME', 'TIME', 'SWITCH', 'CHECKBOX', 'RADIO', 'UPLOAD', 'RICHTEXT', 'TABLE', 'BUTTON', 'LINK', 'IMAGE', 'TEXT', 'TITLE', 'ICON', 'DIVIDER', 'TABS', 'CARD', 'GRID', 'FLEX', 'MODAL', 'FORM', 'STEPS', 'TIMELINE', 'PROGRESS', 'RATE', 'SLIDER', 'LINECHART', 'BARCHART', 'PIECHART', 'AREACHART', 'SCATTERCHART', 'RADARCHART', 'MOBILEGRID', 'MOBILECOLLAPSE', 'MOBILETABBAR', 'MOBILESWIPER', 'MOBILESEARCHBAR', 'MOBILEPULLREFRESH', 'MOBILESWIPECELL', 'MOBILEWATERFALL']
+    const systemTypes = ['INPUT', 'TEXTAREA', 'NUMBER', 'SELECT', 'DATE', 'DATETIME', 'TIME', 'SWITCH', 'CHECKBOX', 'RADIO', 'UPLOAD', 'RICHTEXT', 'TABLE', 'BUTTON', 'LINK', 'IMAGE', 'TEXT', 'TITLE', 'ICON', 'DIVIDER', 'TABS', 'CARD', 'GRID', 'FLEX', 'MODAL', 'FORM', 'STEPS', 'TIMELINE', 'PROGRESS', 'RATE', 'SLIDER', 'LINECHART', 'BARCHART', 'PIECHART', 'AREACHART', 'SCATTERCHART', 'RADARCHART', 'MOBILEGRID', 'MOBILECOLLAPSE', 'MOBILETABBAR', 'MOBILESWIPER', 'MOBILESEARCHBAR', 'MOBILEPULLREFRESH', 'MOBILESWIPECELL', 'MOBILEWATERFALL', 'SIGNATURE', 'LOCATIONPICKER', 'SUBFORM', 'FORMCOPY', 'EXCELIMPORT', 'EXCELEXPORT']
 
     if (type && !systemTypes.includes(type)) {
       return {
@@ -2358,6 +2366,127 @@ const PageDesigner: React.FC = () => {
         baseProps.properties = {
           columns: { type: 'number', title: '列数', default: 2, 'x-decorator': 'FormItem', 'x-component': 'NumberPicker', 'x-component-props': { min: 2, max: 4 } },
           gap: { type: 'number', title: '间距', default: 8, 'x-decorator': 'FormItem', 'x-component': 'NumberPicker' },
+          ...commonProps,
+        }
+        break
+      case 'RATE':
+        baseProps.properties = {
+          count: { type: 'number', title: '星星数量', default: 5, 'x-decorator': 'FormItem', 'x-component': 'NumberPicker', 'x-component-props': { min: 1, max: 10 } },
+          allowHalf: { type: 'boolean', title: '允许半选', default: false, 'x-decorator': 'FormItem', 'x-component': 'Switch' },
+          allowClear: { type: 'boolean', title: '允许清除', default: true, 'x-decorator': 'FormItem', 'x-component': 'Switch' },
+          ...commonProps,
+        }
+        break
+      case 'STEPS':
+        baseProps.properties = {
+          current: { type: 'number', title: '当前步骤', default: 0, 'x-decorator': 'FormItem', 'x-component': 'NumberPicker' },
+          direction: {
+            type: 'string',
+            title: '方向',
+            default: 'horizontal',
+            'x-decorator': 'FormItem',
+            'x-component': 'Select',
+            enum: [
+              { label: '水平', value: 'horizontal' },
+              { label: '垂直', value: 'vertical' },
+            ],
+          },
+          status: {
+            type: 'string',
+            title: '状态',
+            default: 'process',
+            'x-decorator': 'FormItem',
+            'x-component': 'Select',
+            enum: [
+              { label: '进行中', value: 'process' },
+              { label: '等待', value: 'wait' },
+              { label: '完成', value: 'finish' },
+              { label: '错误', value: 'error' },
+            ],
+          },
+          showNavigation: { type: 'boolean', title: '显示导航按钮', default: false, 'x-decorator': 'FormItem', 'x-component': 'Switch' },
+          ...commonProps,
+        }
+        break
+      case 'SIGNATURE':
+        baseProps.properties = {
+          width: { type: 'number', title: '宽度', default: 400, 'x-decorator': 'FormItem', 'x-component': 'NumberPicker' },
+          height: { type: 'number', title: '高度', default: 200, 'x-decorator': 'FormItem', 'x-component': 'NumberPicker' },
+          penColor: { type: 'string', title: '画笔颜色', default: '#000000', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+          backgroundColor: { type: 'string', title: '背景颜色', default: '#ffffff', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+          penWidth: { type: 'number', title: '画笔粗细', default: 2, 'x-decorator': 'FormItem', 'x-component': 'NumberPicker', 'x-component-props': { min: 1, max: 10 } },
+          showToolbar: { type: 'boolean', title: '显示工具栏', default: true, 'x-decorator': 'FormItem', 'x-component': 'Switch' },
+          ...commonProps,
+        }
+        break
+      case 'LOCATIONPICKER':
+        baseProps.properties = {
+          placeholder: { type: 'string', title: '占位文本', default: '请选择位置', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+          showCoordinate: { type: 'boolean', title: '显示经纬度', default: true, 'x-decorator': 'FormItem', 'x-component': 'Switch' },
+          mapType: {
+            type: 'string',
+            title: '地图类型',
+            default: 'amap',
+            'x-decorator': 'FormItem',
+            'x-component': 'Select',
+            enum: [
+              { label: '高德地图', value: 'amap' },
+              { label: '百度地图', value: 'baidu' },
+            ],
+          },
+          amapKey: { type: 'string', title: '高德地图Key', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+          baiduKey: { type: 'string', title: '百度地图Key', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+          ...commonProps,
+        }
+        break
+      case 'SUBFORM':
+        baseProps.properties = {
+          title: { type: 'string', title: '标题', default: '子表单', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+          showAddButton: { type: 'boolean', title: '显示添加按钮', default: true, 'x-decorator': 'FormItem', 'x-component': 'Switch' },
+          showDeleteButton: { type: 'boolean', title: '显示删除按钮', default: true, 'x-decorator': 'FormItem', 'x-component': 'Switch' },
+          showEditButton: { type: 'boolean', title: '显示编辑按钮', default: true, 'x-decorator': 'FormItem', 'x-component': 'Switch' },
+          minRows: { type: 'number', title: '最少行数', default: 0, 'x-decorator': 'FormItem', 'x-component': 'NumberPicker' },
+          maxRows: { type: 'number', title: '最多行数', default: 10, 'x-decorator': 'FormItem', 'x-component': 'NumberPicker' },
+          relationModelId: { type: 'string', title: '关联模型ID', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+          foreignKeyField: { type: 'string', title: '外键字段名', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+          ...commonProps,
+        }
+        break
+      case 'FORMCOPY':
+        baseProps.properties = {
+          sourcePageId: { type: 'string', title: '源页面ID', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+          copyMode: {
+            type: 'string',
+            title: '复制模式',
+            default: 'full',
+            'x-decorator': 'FormItem',
+            'x-component': 'Select',
+            enum: [
+              { label: '全量复制', value: 'full' },
+              { label: '仅字段结构', value: 'structure' },
+              { label: '字段+数据', value: 'withData' },
+            ],
+          },
+          buttonText: { type: 'string', title: '按钮文本', default: '复制表单', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+          ...commonProps,
+        }
+        break
+      case 'EXCELIMPORT':
+        baseProps.properties = {
+          modelId: { type: 'string', title: '关联模型ID', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+          sheetIndex: { type: 'number', title: '工作表索引', default: 0, 'x-decorator': 'FormItem', 'x-component': 'NumberPicker' },
+          startRow: { type: 'number', title: '起始行号', default: 1, 'x-decorator': 'FormItem', 'x-component': 'NumberPicker' },
+          showTemplateDownload: { type: 'boolean', title: '显示模板下载', default: true, 'x-decorator': 'FormItem', 'x-component': 'Switch' },
+          buttonText: { type: 'string', title: '按钮文本', default: 'Excel导入', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+          ...commonProps,
+        }
+        break
+      case 'EXCELEXPORT':
+        baseProps.properties = {
+          modelId: { type: 'string', title: '关联模型ID', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+          fileName: { type: 'string', title: '文件名', default: '数据导出', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+          sheetName: { type: 'string', title: '工作表名', default: 'Sheet1', 'x-decorator': 'FormItem', 'x-component': 'Input' },
+          buttonText: { type: 'string', title: '按钮文本', default: 'Excel导出', 'x-decorator': 'FormItem', 'x-component': 'Input' },
           ...commonProps,
         }
         break

@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Button, message, Dropdown, Space } from 'antd'
 import { ExportOutlined, DownOutlined } from '@ant-design/icons'
 import type { MenuProps } from 'antd'
+import { excelApi } from '@/api/dataModel'
 
 export interface ExcelExportButtonProps {
   modelId?: number | string
@@ -13,6 +14,9 @@ export interface ExcelExportButtonProps {
   fileName?: string
   sheetName?: string
   exportModes?: Array<{ key: string; label: string }>
+  conditions?: Record<string, any>
+  orderBy?: string
+  orderDir?: string
   style?: React.CSSProperties
   className?: string
 }
@@ -27,6 +31,9 @@ const ExcelExportButton: React.FC<ExcelExportButtonProps> = ({
   fileName = '数据导出',
   sheetName = 'Sheet1',
   exportModes,
+  conditions,
+  orderBy,
+  orderDir,
   style,
   className,
 }) => {
@@ -39,13 +46,35 @@ const ExcelExportButton: React.FC<ExcelExportButtonProps> = ({
   ]
 
   const handleExport = async (mode: string) => {
-    try {
-      setLoading(true)
+    if (!modelId) {
+      message.info('请配置关联模型ID')
+      return
+    }
 
+    setLoading(true)
+    try {
+      const res = await excelApi.exportData(
+        Number(modelId),
+        conditions,
+        orderBy,
+        orderDir
+      )
+      const blob = (res as any)?.data || res
+      const url = window.URL.createObjectURL(
+        blob instanceof Blob ? blob : new Blob([blob as any])
+      )
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${fileName}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
       message.success(`导出成功: ${fileName}.xlsx`)
       onExport?.(mode)
-    } catch (error) {
-      message.error('导出失败，请重试')
+    } catch (error: any) {
+      const errMsg = error?.response?.data?.message || error?.message || '导出失败，请重试'
+      message.error(errMsg)
     } finally {
       setLoading(false)
     }

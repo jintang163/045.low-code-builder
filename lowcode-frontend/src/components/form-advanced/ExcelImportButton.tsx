@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
-import { Button, Upload, message, Modal, Progress, Space } from 'antd'
-import { ImportOutlined, FileExcelOutlined } from '@ant-design/icons'
+import { Button, Upload, message, Modal, Progress, Space, Alert } from 'antd'
+import { ImportOutlined, FileExcelOutlined, DownloadOutlined } from '@ant-design/icons'
 import type { UploadProps } from 'antd/es/upload/interface'
+import { excelApi } from '@/api/dataModel'
 
 export interface ExcelImportButtonProps {
   modelId?: number | string
@@ -12,7 +13,6 @@ export interface ExcelImportButtonProps {
   disabled?: boolean
   buttonText?: string
   showTemplateDownload?: boolean
-  templateUrl?: string
   style?: React.CSSProperties
   className?: string
   sheetIndex?: number
@@ -28,13 +28,12 @@ const ExcelImportButton: React.FC<ExcelImportButtonProps> = ({
   disabled = false,
   buttonText = 'Excel导入',
   showTemplateDownload = true,
-  templateUrl,
   style,
   className,
   sheetIndex = 0,
   startRow = 1,
 }) => {
-  const [progress, setProgress] = useState(0)
+  const [uploading, setUploading] = useState(false)
   const [importResult, setImportResult] = useState<any>(null)
   const [resultModalVisible, setResultModalVisible] = useState(false)
 
@@ -42,54 +41,66 @@ const ExcelImportButton: React.FC<ExcelImportButtonProps> = ({
     name: 'file',
     accept: '.xlsx,.xls',
     showUploadList: false,
-    disabled,
-    customRequest: options => {
-      const { file, onSuccess, onError } = options
+    disabled: disabled || uploading,
+    customRequest: async options => {
+      const { file, onSuccess: onUploadSuccess, onError: onUploadError } = options
 
-      const reader = new FileReader()
-      reader.onload = () => {
-        let progressVal = 0
-        const interval = setInterval(() => {
-          progressVal += 20
-          setProgress(progressVal)
-          if (progressVal >= 100) {
-            clearInterval(interval)
-            setProgress(0)
-
-            const mockResult = {
-              successCount: 95,
-              failCount: 5,
-              totalCount: 100,
-              errors: [
-                '第3行: 字段【姓名】不能为空',
-                '第15行: 字段【年龄】格式错误',
-                '第28行: 字段【日期】格式错误',
-                '第67行: 字段【邮箱】格式错误',
-                '第89行: 字段【手机号】格式错误',
-              ],
-            }
-            setImportResult(mockResult)
-            setResultModalVisible(true)
-            onSuccess?.(mockResult as any)
-            message.success(`导入完成，成功 ${mockResult.successCount} 条，失败 ${mockResult.failCount} 条`)
-          }
-        }, 200)
+      if (!modelId) {
+        message.error('请配置关联模型ID')
+        onUploadError(new Error('缺少 modelId'))
+        return
       }
 
-      reader.onerror = () => {
-        onError?.(new Error('文件读取失败'))
-        message.error('文件读取失败')
+      setUploading(true)
+      try {
+        const res = await excelApi.importData(
+          Number(modelId),
+          file as File,
+          sheetIndex,
+          startRow
+        )
+        const result = (res as any)?.data || res
+        setImportResult(result)
+        setResultModalVisible(true)
+        onUploadSuccess(result, new XMLHttpRequest())
+        if (result.failCount > 0) {
+          message.warning(`导入完成，成功 ${result.successCount} 条，失败 ${result.failCount} 条`)
+        } else {
+          message.success(`导入成功，共 ${result.successCount} 条数据`)
+        }
+        onSuccess?.(result)
+      } catch (error: any) {
+        const errMsg = error?.response?.data?.message || error?.message || '导入失败'
+        onUploadError(new Error(errMsg))
+        onError?.(error)
+        message.error(errMsg)
+      } finally {
+        setUploading(false)
       }
-
-      reader.readAsArrayBuffer(file as Blob)
     },
   }
 
-  const handleDownloadTemplate = () => {
-    if (templateUrl) {
-      window.open(templateUrl, '_blank')
-    } else {
-      message.info('请配置模板下载地址')
+  const handleDownloadTemplate = async () => {
+    if (!modelId) {
+      message.info('请配置关联模型ID')
+      return
+    }
+    try {
+      const res = await excelApi.downloadTemplate(Number(modelId))
+      const blob = (res as any)?.data || res
+      const url = window.URL.createObjectURL(
+        blob instanceof Blob ? blob : new Blob([blob as any])
+      )
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `导入模板.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      message.success('模板下载成功')
+    } catch (e) {
+      message.error('模板下载失败')
     }
   }
 
@@ -97,15 +108,21 @@ const ExcelImportButton: React.FC<ExcelImportButtonProps> = ({
     <>
       <Space style={style} className={className}>
         <Upload {...uploadProps}>
-          <Button type={type} size={size} icon={<ImportOutlined />} disabled={disabled}>
-            {buttonText}
+          <Button
+            type={type}
+            size={size}
+            icon={<ImportOutlined />}
+            disabled={disabled}
+            loading={uploading}
+          >
+            {uploading ? '导入中...' : buttonText}
           </Button>
         </Upload>
 
         {showTemplateDownload && (
           <Button
             size={size}
-            icon={<FileExcelOutlined />}
+            icon={<DownloadOutlined />}
             onClick={handleDownloadTemplate}
             disabled={disabled}
           >
@@ -113,12 +130,6 @@ const ExcelImportButton: React.FC<ExcelImportButtonProps> = ({
           </Button>
         )}
       </Space>
-
-      {progress > 0 && (
-        <div style={{ marginTop: 8 }}>
-          <Progress percent={progress} size="small" />
-        </div>
-      )}
 
       <Modal
         title="导入结果"
@@ -136,9 +147,20 @@ const ExcelImportButton: React.FC<ExcelImportButtonProps> = ({
               <Space>
                 <span>共 {importResult.totalCount} 条数据</span>
                 <span style={{ color: '#52c41a' }}>成功 {importResult.successCount} 条</span>
-                <span style={{ color: '#ff4d4f' }}>失败 {importResult.failCount} 条</span>
+                {importResult.failCount > 0 && (
+                  <span style={{ color: '#ff4d4f' }}>失败 {importResult.failCount} 条</span>
+                )}
               </Space>
             </div>
+
+            {importResult.failCount > 0 && (
+              <Alert
+                type="warning"
+                showIcon
+                message={`有 ${importResult.failCount} 条数据导入失败`}
+                style={{ marginBottom: 12 }}
+              />
+            )}
 
             {importResult.errors && importResult.errors.length > 0 && (
               <div>
@@ -152,9 +174,11 @@ const ExcelImportButton: React.FC<ExcelImportButtonProps> = ({
                     borderRadius: 4,
                   }}
                 >
-                  {importResult.errors.map((error: string, index: number) => (
+                  {importResult.errors.map((error: any, index: number) => (
                     <div key={index} style={{ color: '#ff4d4f', fontSize: 12, lineHeight: 1.8 }}>
-                      {error}
+                      {typeof error === 'string'
+                        ? error
+                        : `第${error.row}行: ${error.message}`}
                     </div>
                   ))}
                 </div>

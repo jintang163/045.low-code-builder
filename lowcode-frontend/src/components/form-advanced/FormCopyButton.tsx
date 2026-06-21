@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Button, Modal, Form, Input, Select, message } from 'antd'
 import { CopyOutlined } from '@ant-design/icons'
+import { pageApi } from '@/api/page'
 
 export interface FormCopyButtonProps {
   sourcePageId?: number | string
@@ -32,19 +33,34 @@ const FormCopyButton: React.FC<FormCopyButtonProps> = ({
   const handleClick = () => {
     setModalVisible(true)
     form.resetFields()
+    if (sourcePageId) {
+      form.setFieldsValue({ sourcePageId })
+    }
   }
 
   const handleOk = async () => {
     try {
       const values = await form.validateFields()
+      if (!sourcePageId) {
+        message.error('缺少源页面ID')
+        return
+      }
       setLoading(true)
 
-      message.success('表单复制成功（演示）')
-      onSuccess?.(values)
+      const res = await pageApi.copy(Number(sourcePageId), {
+        newPageName: values.newPageName,
+        newPageCode: values.newPageCode,
+        copyMode: values.copyMode || 'full',
+      })
+
+      const newPage = (res as any)?.data || res
+      message.success('表单复制成功')
+      onSuccess?.(newPage)
       setModalVisible(false)
-    } catch (error) {
+    } catch (error: any) {
+      const errMsg = error?.response?.data?.message || error?.message || '复制失败，请重试'
       onError?.(error)
-      message.error('复制失败，请重试')
+      message.error(errMsg)
     } finally {
       setLoading(false)
     }
@@ -99,7 +115,7 @@ const FormCopyButton: React.FC<FormCopyButtonProps> = ({
           </Form.Item>
 
           {sourcePageId && (
-            <Form.Item label="源表单ID" initialValue={sourcePageId}>
+            <Form.Item label="源表单ID" initialValue={String(sourcePageId)}>
               <Input disabled />
             </Form.Item>
           )}

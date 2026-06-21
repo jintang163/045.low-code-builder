@@ -204,6 +204,8 @@ public class UniAppCodeGeneratorService {
             String componentType = component.getComponentType();
             String componentName = StrUtil.toCamelCase(component.getComponentId());
 
+            componentType = normalizeComponentType(componentType);
+
             Map<String, Object> props = component.getPropsConfig() != null ?
                     JSON.parseObject(component.getPropsConfig()) : new HashMap<>();
             Map<String, Object> style = component.getStyleConfig() != null ?
@@ -235,6 +237,21 @@ public class UniAppCodeGeneratorService {
                     break;
                 case "MobileWaterfall":
                     template.append(generateMobileWaterfall(componentName, props, style, events));
+                    break;
+                case "RATE":
+                    template.append(generateRateField(componentName, props, style, events));
+                    break;
+                case "STEPS":
+                    template.append(generateStepsField(componentName, props, style, events));
+                    break;
+                case "SIGNATURE":
+                    template.append(generateSignatureField(componentName, props, style, events));
+                    break;
+                case "LOCATIONPICKER":
+                    template.append(generateLocationPicker(componentName, props, style, events));
+                    break;
+                case "SUBFORM":
+                    template.append(generateSubFormField(componentName, props, style, events));
                     break;
                 default:
                     template.append(generateDefaultComponent(componentName, componentType, props, style, events));
@@ -679,7 +696,9 @@ public class UniAppCodeGeneratorService {
         String[] components = {
                 "MobileGrid.vue", "MobileGridItem.vue", "MobileCollapse.vue",
                 "MobileTabBar.vue", "MobileSwiper.vue", "MobileSearchBar.vue",
-                "MobilePullRefresh.vue", "MobileSwipeCell.vue", "MobileWaterfall.vue"
+                "MobilePullRefresh.vue", "MobileSwipeCell.vue", "MobileWaterfall.vue",
+                "RateField.vue", "StepsField.vue", "SignatureField.vue",
+                "LocationPicker.vue", "SubFormField.vue"
         };
 
         for (String component : components) {
@@ -849,6 +868,65 @@ public class UniAppCodeGeneratorService {
         return sb.toString();
     }
 
+    private String generateRateField(String name, Map<String, Object> props, Map<String, Object> style, Map<String, Object> events) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("    <rate-field\n");
+        sb.append("      :count=\"").append(props.getOrDefault("count", 5)).append("\"\n");
+        sb.append("      :allow-half=\"").append(props.getOrDefault("allowHalf", false)).append("\"\n");
+        sb.append("      :allow-clear=\"").append(props.getOrDefault("allowClear", true)).append("\"\n");
+        sb.append("      v-model=\"").append(name).append("Value\"\n");
+        sb.append("    />\n");
+        return sb.toString();
+    }
+
+    private String generateStepsField(String name, Map<String, Object> props, Map<String, Object> style, Map<String, Object> events) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("    <steps-field\n");
+        sb.append("      :current=\"").append(props.getOrDefault("current", 0)).append("\"\n");
+        sb.append("      direction=\"").append(props.getOrDefault("direction", "horizontal")).append("\"\n");
+        sb.append("      status=\"").append(props.getOrDefault("status", "process")).append("\"\n");
+        sb.append("      :items=\"").append(name).append("Items\"\n");
+        sb.append("    />\n");
+        return sb.toString();
+    }
+
+    private String generateSignatureField(String name, Map<String, Object> props, Map<String, Object> style, Map<String, Object> events) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("    <signature-field\n");
+        sb.append("      :width=\"").append(props.getOrDefault("width", 400)).append("\"\n");
+        sb.append("      :height=\"").append(props.getOrDefault("height", 200)).append("\"\n");
+        sb.append("      pen-color=\"").append(props.getOrDefault("penColor", "#000000")).append("\"\n");
+        sb.append("      background-color=\"").append(props.getOrDefault("backgroundColor", "#ffffff")).append("\"\n");
+        sb.append("      :pen-width=\"").append(props.getOrDefault("penWidth", 2)).append("\"\n");
+        sb.append("      v-model=\"").append(name).append("Value\"\n");
+        sb.append("    />\n");
+        return sb.toString();
+    }
+
+    private String generateLocationPicker(String name, Map<String, Object> props, Map<String, Object> style, Map<String, Object> events) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("    <location-picker\n");
+        sb.append("      placeholder=\"").append(props.getOrDefault("placeholder", "请选择位置")).append("\"\n");
+        sb.append("      :show-coordinate=\"").append(props.getOrDefault("showCoordinate", true)).append("\"\n");
+        sb.append("      v-model=\"").append(name).append("Value\"\n");
+        sb.append("    />\n");
+        return sb.toString();
+    }
+
+    private String generateSubFormField(String name, Map<String, Object> props, Map<String, Object> style, Map<String, Object> events) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("    <sub-form-field\n");
+        sb.append("      title=\"").append(props.getOrDefault("title", "子表单")).append("\"\n");
+        sb.append("      :show-add-button=\"").append(props.getOrDefault("showAddButton", true)).append("\"\n");
+        sb.append("      :show-delete-button=\"").append(props.getOrDefault("showDeleteButton", true)).append("\"\n");
+        sb.append("      :min-rows=\"").append(props.getOrDefault("minRows", 0)).append("\"\n");
+        sb.append("      :max-rows=\"").append(props.getOrDefault("maxRows", 10)).append("\"\n");
+        sb.append("      :columns=\"").append(name).append("Columns\"\n");
+        sb.append("      v-model=\"").append(name).append("Data\"\n");
+        sb.append("    />\n");
+        return sb.toString();
+    }
+
     private String generateDefaultComponent(String name, String type, Map<String, Object> props,
                                             Map<String, Object> style, Map<String, Object> events) {
         String tagName = mapComponentTypeToTag(type);
@@ -883,6 +961,43 @@ public class UniAppCodeGeneratorService {
         sb.append("      ").append(props.getOrDefault("placeholder", type)).append("\n");
         sb.append("    </").append(tagName).append(">\n");
         return sb.toString();
+    }
+
+    private String normalizeComponentType(String componentType) {
+        if (componentType == null) {
+            return null;
+        }
+        Map<String, String> legacyMapping = new HashMap<>();
+        legacyMapping.put("Input", "INPUT");
+        legacyMapping.put("TextArea", "TEXTAREA");
+        legacyMapping.put("InputNumber", "INPUTNUMBER");
+        legacyMapping.put("Select", "SELECT");
+        legacyMapping.put("DatePicker", "DATE");
+        legacyMapping.put("TimePicker", "TIME");
+        legacyMapping.put("Checkbox", "CHECKBOX");
+        legacyMapping.put("Radio", "RADIO");
+        legacyMapping.put("Switch", "SWITCH");
+        legacyMapping.put("Upload", "UPLOAD");
+        legacyMapping.put("Button", "BUTTON");
+        legacyMapping.put("Table", "TABLE");
+        legacyMapping.put("Card", "CARD");
+        legacyMapping.put("Tabs", "TABS");
+        legacyMapping.put("Form", "FORM");
+        legacyMapping.put("Divider", "DIVIDER");
+        legacyMapping.put("LineChart", "LINECHART");
+        legacyMapping.put("BarChart", "BARCHART");
+        legacyMapping.put("PieChart", "PIECHART");
+        legacyMapping.put("Row", "ROW");
+        legacyMapping.put("Col", "COL");
+        legacyMapping.put("Rate", "RATE");
+        legacyMapping.put("Steps", "STEPS");
+        legacyMapping.put("Signature", "SIGNATURE");
+        legacyMapping.put("LocationPicker", "LOCATIONPICKER");
+        legacyMapping.put("SubForm", "SUBFORM");
+        legacyMapping.put("FormCopy", "FORMCOPY");
+        legacyMapping.put("ExcelImport", "EXCELIMPORT");
+        legacyMapping.put("ExcelExport", "EXCELEXPORT");
+        return legacyMapping.getOrDefault(componentType, componentType);
     }
 
     private String mapComponentTypeToTag(String componentType) {
@@ -923,6 +1038,35 @@ public class UniAppCodeGeneratorService {
         typeMapping.put("MobilePullRefresh", "mobile-pull-refresh");
         typeMapping.put("MobileSwipeCell", "mobile-swipe-cell");
         typeMapping.put("MobileWaterfall", "mobile-waterfall");
+        typeMapping.put("RATE", "rate-field");
+        typeMapping.put("STEPS", "steps-field");
+        typeMapping.put("SIGNATURE", "signature-field");
+        typeMapping.put("LOCATIONPICKER", "location-picker");
+        typeMapping.put("SUBFORM", "sub-form-field");
+        typeMapping.put("FORMCOPY", "form-copy-button");
+        typeMapping.put("EXCELIMPORT", "excel-import-button");
+        typeMapping.put("EXCELEXPORT", "excel-export-button");
+        typeMapping.put("INPUT", "input");
+        typeMapping.put("TEXTAREA", "textarea");
+        typeMapping.put("INPUTNUMBER", "input-number");
+        typeMapping.put("SELECT", "picker");
+        typeMapping.put("DATE", "picker");
+        typeMapping.put("TIME", "picker");
+        typeMapping.put("CHECKBOX", "checkbox");
+        typeMapping.put("RADIO", "radio");
+        typeMapping.put("SWITCH", "switch");
+        typeMapping.put("UPLOAD", "uploader");
+        typeMapping.put("BUTTON", "button");
+        typeMapping.put("TABLE", "table");
+        typeMapping.put("CARD", "card");
+        typeMapping.put("TABS", "tabs");
+        typeMapping.put("FORM", "form");
+        typeMapping.put("DIVIDER", "divider");
+        typeMapping.put("LINECHART", "chart");
+        typeMapping.put("BARCHART", "chart");
+        typeMapping.put("PIECHART", "chart");
+        typeMapping.put("ROW", "row");
+        typeMapping.put("COL", "col");
 
         return typeMapping.getOrDefault(componentType, StrUtil.toSymbolCase(componentType, '-'));
     }
