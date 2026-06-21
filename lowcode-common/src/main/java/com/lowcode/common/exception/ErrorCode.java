@@ -22,6 +22,7 @@ public enum ErrorCode {
     REST_API_CALL_ERROR(10008, "REST API调用失败"),
     DATASOURCE_POOL_ERROR(10009, "数据源连接池异常"),
     DATASOURCE_HEALTH_CHECK_FAILED(10010, "数据源健康检查失败"),
+    SQL_NOT_ALLOWED(10011, "不允许的SQL操作，仅支持SELECT查询"),
 
     PAGE_EXISTS(20001, "页面已存在"),
     COMPONENT_EXISTS(20002, "组件已存在"),

@@ -90,6 +90,27 @@ export interface DashboardDataResult {
   total?: number
 }
 
+export interface DashboardShareInfo {
+  shareUrl: string
+  shareCode: string
+  expireTime?: string
+  password?: string
+}
+
+export interface ScreenCastDevice {
+  deviceId: string
+  deviceName: string
+  deviceType: string
+  status: 'online' | 'offline'
+}
+
+export interface ScreenCastStatus {
+  isCasting: boolean
+  dashboardId?: number
+  deviceId?: string
+  startTime?: string
+}
+
 export interface IndicatorConfig {
   title: string
   value: string | number
@@ -121,24 +142,32 @@ export const dashboardApi = {
   copy: (id: number, newName: string, newCode: string) =>
     request.post<DashboardInfo>(`/dashboard/copy/${id}`, { newName, newCode }),
   publish: (id: number) => request.post(`/dashboard/${id}/publish`),
-  queryData: (id: number, componentId: string, params?: Record<string, any>) =>
-    request.post<DashboardDataResult>(`/dashboard/${id}/component/${componentId}/query`, params),
-  queryAllData: (id: number, params?: Record<string, any>) =>
-    request.post<Record<string, DashboardDataResult>>(`/dashboard/${id}/queryAll`, params),
+
+  getDashboardData: (dashboardId: number, params?: Record<string, any>) =>
+    request.get<Record<string, DashboardDataResult>>(`/dashboard/data/${dashboardId}`, { params }),
+
+  getComponentData: (dashboardId: number, componentId: string, params?: Record<string, any>) =>
+    request.get<DashboardDataResult>(`/dashboard/data/${dashboardId}/component/${componentId}`, { params }),
+
+  getShareLink: (id: number, expireTime?: string, password?: string) =>
+    request.post<DashboardShareInfo>(`/dashboard/${id}/share`, { expireTime, password }),
+
+  revokeShare: (id: number) =>
+    request.delete(`/dashboard/${id}/share`),
+
   getThemes: () => request.get<ChartTheme[]>(`/dashboard/themes`),
   getTemplates: () => request.get<any[]>(`/dashboard/templates`),
 }
 
-export const screenApi = {
+export const screenCastApi = {
   cast: (dashboardId: number, deviceId?: string) =>
-    request.post(`/screen/cast`, { dashboardId, deviceId }),
-  stopCast: (deviceId: string) =>
-    request.post(`/screen/stopCast`, { deviceId }),
-  getDevices: () => request.get<any[]>(`/screen/devices`),
+    request.post(`/dashboard/${dashboardId}/cast`, { deviceId }),
+
+  stopCast: (dashboardId: number) =>
+    request.post(`/dashboard/${dashboardId}/stopCast`),
+
+  getDevices: () => request.get<ScreenCastDevice[]>(`/dashboard/cast/devices`),
+
   getCastStatus: (dashboardId: number) =>
-    request.get(`/screen/castStatus/${dashboardId}`),
-  getShareLink: (dashboardId: number, expireTime?: string, password?: string) =>
-    request.post<{ shareUrl: string; shareCode: string }>(`/screen/share`, { dashboardId, expireTime, password }),
-  revokeShare: (shareCode: string) =>
-    request.delete(`/screen/share/${shareCode}`),
+    request.get<ScreenCastStatus>(`/dashboard/${dashboardId}/castStatus`),
 }

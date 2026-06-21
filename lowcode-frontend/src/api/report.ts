@@ -72,6 +72,21 @@ export interface EmailConfig {
   attachReport: boolean
 }
 
+export interface ReportSchedule {
+  id?: number
+  reportId: number
+  scheduleName: string
+  cronExpression: string
+  status?: number
+  exportFormat: 'pdf' | 'excel' | 'image'
+  emailConfig: EmailConfig
+  params?: Record<string, any>
+  lastExecuteTime?: string
+  nextExecuteTime?: string
+  createdTime?: string
+  updatedTime?: string
+}
+
 export interface ReportDataQuery {
   reportId: number
   params?: Record<string, any>
@@ -118,10 +133,20 @@ export const reportApi = {
   copy: (id: number, newName: string, newCode: string) =>
     request.post<ReportInfo>(`/report/copy/${id}`, { newName, newCode }),
   publish: (id: number) => request.post(`/report/${id}/publish`),
-  queryData: (id: number, params?: Record<string, any>) =>
-    request.post<ReportDataResult>(`/report/${id}/query`, params),
+
+  getData: (reportId: number, params?: Record<string, any>) =>
+    request.get<ReportDataResult>(`/report/data/${reportId}`, { params }),
+  queryData: (reportId: number, params?: Record<string, any>) =>
+    request.post<ReportDataResult>(`/report/${reportId}/query`, params),
+  getReportData: (reportId: number, params?: Record<string, any>) =>
+    request.get<ReportDataResult>(`/report/data/${reportId}`, { params }),
+
+  getComponentData: (reportId: number, componentId: string, params?: Record<string, any>) =>
+    request.get<ReportDataResult>(`/report/data/${reportId}/component/${componentId}`, { params }),
+
   testSql: (dataSourceId: number, sql: string) =>
     request.post<ReportDataResult>(`/report/testSql`, { dataSourceId, sql }),
+
   getSchedules: (reportId: number) =>
     request.get<ScheduleConfig[]>(`/report/${reportId}/schedules`),
   saveSchedule: (reportId: number, config: ScheduleConfig) =>
@@ -130,10 +155,25 @@ export const reportApi = {
     request.delete(`/report/${reportId}/schedule/${scheduleId}`),
   runSchedule: (reportId: number, scheduleId: number) =>
     request.post(`/report/${reportId}/schedule/${scheduleId}/run`),
-  exportReport: (id: number, format: 'pdf' | 'excel' | 'image', params?: Record<string, any>) =>
-    request.post(`/report/${id}/export`, { format, params }, { responseType: 'blob' }),
+
   sendEmail: (id: number, emailConfig: EmailConfig, params?: Record<string, any>) =>
     request.post(`/report/${id}/sendEmail`, { emailConfig, params }),
+
+  exportReport: (id: number, format: 'pdf' | 'excel' | 'image', params?: Record<string, any>) =>
+    request.post(`/report/${id}/export`, { format, params }, { responseType: 'blob' }),
+}
+
+export const reportScheduleApi = {
+  list: (reportId: number) => request.get<ReportSchedule[]>(`/report/schedule`, { params: { reportId } }),
+  page: (reportId: number, current = 1, size = 10) =>
+    request.get(`/report/schedule/page`, { params: { reportId, current, size } }),
+  get: (id: number) => request.get<ReportSchedule>(`/report/schedule/${id}`),
+  save: (data: ReportSchedule) => request.post<ReportSchedule>('/report/schedule', data),
+  update: (data: ReportSchedule) => request.put<ReportSchedule>('/report/schedule', data),
+  delete: (id: number) => request.delete(`/report/schedule/${id}`),
+  enable: (id: number) => request.post(`/report/schedule/${id}/enable`),
+  disable: (id: number) => request.post(`/report/schedule/${id}/disable`),
+  execute: (id: number) => request.post(`/report/schedule/${id}/execute`),
 }
 
 export const reportTemplateApi = {

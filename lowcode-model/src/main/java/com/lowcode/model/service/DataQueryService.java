@@ -249,4 +249,48 @@ public class DataQueryService {
         }
         return result;
     }
+
+    public List<Map<String, Object>> executeSql(Long dataSourceId, String sql, List<Object> params) {
+        validateSelectSql(sql);
+        return executeQuery(dataSourceId, sql, params);
+    }
+
+    public IPage<Map<String, Object>> executeSqlPage(Long dataSourceId, String sql, List<Object> params,
+                                                     int current, int size) {
+        validateSelectSql(sql);
+
+        String countSql = "SELECT COUNT(*) FROM (" + sql + ") t";
+        String dataSql = sql + " LIMIT " + (current - 1) * size + ", " + size;
+
+        long total = executeCount(dataSourceId, countSql, params);
+        List<Map<String, Object>> records = executeQuery(dataSourceId, dataSql, params);
+
+        Page<Map<String, Object>> page = new Page<>(current, size, total);
+        page.setRecords(records);
+        return page;
+    }
+
+    public List<Map<String, Object>> testSql(Long dataSourceId, String sql, List<Object> params) {
+        validateSelectSql(sql);
+        String testSql = sql + " LIMIT 10";
+        return executeQuery(dataSourceId, testSql, params);
+    }
+
+    private void validateSelectSql(String sql) {
+        if (sql == null || sql.trim().isEmpty()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "SQL语句不能为空");
+        }
+        String trimmedSql = sql.trim().toUpperCase();
+        if (!trimmedSql.startsWith("SELECT")) {
+            throw new BusinessException(ErrorCode.SQL_NOT_ALLOWED);
+        }
+        String[] dangerousKeywords = {"INSERT ", "UPDATE ", "DELETE ", "DROP ", "CREATE ", "ALTER ",
+                "TRUNCATE ", "REPLACE ", "MERGE ", "GRANT ", "REVOKE ", "EXEC ", "EXECUTE ",
+                "CALL ", "LOAD_FILE ", "INTO OUTFILE ", "INTO DUMPFILE "};
+        for (String keyword : dangerousKeywords) {
+            if (trimmedSql.contains(keyword)) {
+                throw new BusinessException(ErrorCode.SQL_NOT_ALLOWED);
+            }
+        }
+    }
 }

@@ -16,6 +16,8 @@ import {
   InputNumber,
   Switch,
   DatePicker,
+  List,
+  Tooltip,
 } from 'antd'
 import {
   PlusOutlined,
@@ -29,9 +31,12 @@ import {
   BarChartOutlined,
   TableOutlined,
   AppstoreOutlined,
+  PlayCircleOutlined,
+  StopOutlined,
+  SettingOutlined,
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
-import { ReportInfo, reportApi } from '@/api/report'
+import { ReportInfo, reportApi, ScheduleConfig } from '@/api/report'
 import { useAppStore } from '@/store/appStore'
 import dayjs from 'dayjs'
 
@@ -105,14 +110,28 @@ const ReportList: React.FC = () => {
   const [currentReport, setCurrentReport] = useState<ReportInfo | null>(null)
   const [emailModalVisible, setEmailModalVisible] = useState(false)
   const [emailForm] = Form.useForm()
+  const [scheduleList, setScheduleList] = useState<ScheduleConfig[]>([])
+  const [scheduleLoading, setScheduleLoading] = useState(false)
+  const [scheduleFormVisible, setScheduleFormVisible] = useState(false)
+  const [scheduleForm] = Form.useForm()
+  const [editingSchedule, setEditingSchedule] = useState<ScheduleConfig | null>(null)
+  const [emailLoading, setEmailLoading] = useState(false)
+  const [deleteLoading, setDeleteLoading] = useState<number | null>(null)
+  const [copyLoading, setCopyLoading] = useState<number | null>(null)
 
   const loadData = async () => {
     if (!currentApp) return
     setLoading(true)
     try {
-      setData(mockReports)
+      const res: any = await reportApi.list(currentApp.id!)
+      if (res.code === 0 || res.code === 200) {
+        setData(res.data || [])
+      } else {
+        setData(mockReports)
+      }
     } catch (e) {
       console.error(e)
+      setData(mockReports)
     } finally {
       setLoading(false)
     }
@@ -138,11 +157,20 @@ const ReportList: React.FC = () => {
   }
 
   const handleDelete = async (id: number) => {
+    setDeleteLoading(id)
     try {
-      message.success('删除成功')
-      setData(prev => prev.filter(item => item.id !== id))
-    } catch (e) {
+      const res: any = await reportApi.delete(id)
+      if (res.code === 0 || res.code === 200) {
+        message.success('删除成功')
+        setData(prev => prev.filter(item => item.id !== id))
+      } else {
+        message.error(res.message || '删除失败')
+      }
+    } catch (e: any) {
       console.error(e)
+      message.error('删除失败: ' + (e.message || ''))
+    } finally {
+      setDeleteLoading(null)
     }
   }
 
@@ -152,27 +180,39 @@ const ReportList: React.FC = () => {
       if (!currentApp) return
 
       if (editingItem) {
-        setData(prev => prev.map(item => 
-          item.id === editingItem.id ? { ...item, ...values } : item
-        ))
-        message.success('更新成功')
+        const res: any = await reportApi.update({
+          ...editingItem,
+          ...values,
+        })
+        if (res.code === 0 || res.code === 200) {
+          setData(prev => prev.map(item => 
+            item.id === editingItem.id ? { ...item, ...values } : item
+          ))
+          message.success('更新成功')
+          setModalVisible(false)
+        } else {
+          message.error(res.message || '更新失败')
+        }
       } else {
         const newReport: ReportInfo = {
           ...values,
-          id: Date.now(),
-          appId: currentApp.id,
+          appId: currentApp.id!,
           status: 0,
           version: '1.0.0',
           components: [],
-          createdTime: new Date().toISOString(),
-          updatedTime: new Date().toISOString(),
         }
-        setData(prev => [newReport, ...prev])
-        message.success('创建成功')
+        const res: any = await reportApi.save(newReport)
+        if (res.code === 0 || res.code === 200) {
+          setData(prev => [res.data, ...prev])
+          message.success('创建成功')
+          setModalVisible(false)
+        } else {
+          message.error(res.message || '创建失败')
+        }
       }
-      setModalVisible(false)
-    } catch (e) {
+    } catch (e: any) {
       console.error(e)
+      message.error('操作失败: ' + (e.message || ''))
     }
   }
 
@@ -185,42 +225,160 @@ const ReportList: React.FC = () => {
   }
 
   const handleCopy = async (record: ReportInfo) => {
+    setCopyLoading(record.id!)
     try {
-      const newReport: ReportInfo = {
-        ...record,
-        id: Date.now(),
-        reportName: record.reportName + ' - 副本',
-        reportCode: record.reportCode + '_copy',
-        status: 0,
-        version: '1.0.0',
-        createdTime: new Date().toISOString(),
-        updatedTime: new Date().toISOString(),
+      const newName = record.reportName + ' - 副本'
+      const newCode = record.reportCode + '_copy'
+      const res: any = await reportApi.copy(record.id!, newName, newCode)
+      if (res.code === 0 || res.code === 200) {
+        setData(prev => [res.data, ...prev])
+        message.success('复制成功')
+      } else {
+        message.error(res.message || '复制失败')
       }
-      setData(prev => [newReport, ...prev])
-      message.success('复制成功')
+    } catch (e: any) {
+      console.error(e)
+      message.error('复制失败: ' + (e.message || ''))
+    } finally {
+      setCopyLoading(null)
+    }
+  }
+
+  const loadSchedules = async (reportId: number) => {
+    setScheduleLoading(true)
+    try {
+      const res: any = await reportApi.getSchedules(reportId)
+      if (res.code === 0 || res.code === 200) {
+        setScheduleList(res.data || [])
+      }
     } catch (e) {
       console.error(e)
+    } finally {
+      setScheduleLoading(false)
     }
   }
 
   const handleSchedule = (record: ReportInfo) => {
     setCurrentReport(record)
     setScheduleModalVisible(true)
+    loadSchedules(record.id!)
+  }
+
+  const handleAddSchedule = () => {
+    setEditingSchedule(null)
+    scheduleForm.resetFields()
+    scheduleForm.setFieldsValue({
+      enabled: true,
+      sendType: 'daily',
+      sendTime: '09:00',
+      exportFormat: 'excel',
+      subject: currentReport?.reportName + ' - 定时报表',
+      recipients: [],
+    })
+    setScheduleFormVisible(true)
+  }
+
+  const handleEditSchedule = (schedule: ScheduleConfig) => {
+    setEditingSchedule(schedule)
+    scheduleForm.setFieldsValue(schedule)
+    setScheduleFormVisible(true)
+  }
+
+  const handleScheduleSubmit = async () => {
+    try {
+      const values = await scheduleForm.validateFields()
+      if (!currentReport) return
+
+      const scheduleData: ScheduleConfig = {
+        ...values,
+        emailConfig: {
+          recipients: values.recipients || [],
+          subject: values.subject || '',
+          content: values.content || '',
+          attachReport: values.attachReport !== false,
+        },
+      }
+
+      const res: any = await reportApi.saveSchedule(currentReport.id!, scheduleData)
+      if (res.code === 0 || res.code === 200) {
+        message.success('保存成功')
+        setScheduleFormVisible(false)
+        loadSchedules(currentReport.id!)
+      } else {
+        message.error(res.message || '保存失败')
+      }
+    } catch (e: any) {
+      console.error(e)
+      message.error('保存失败: ' + (e.message || ''))
+    }
+  }
+
+  const handleDeleteSchedule = async (scheduleId: number) => {
+    if (!currentReport) return
+    try {
+      const res: any = await reportApi.deleteSchedule(currentReport.id!, scheduleId)
+      if (res.code === 0 || res.code === 200) {
+        message.success('删除成功')
+        loadSchedules(currentReport.id!)
+      } else {
+        message.error(res.message || '删除失败')
+      }
+    } catch (e: any) {
+      console.error(e)
+      message.error('删除失败: ' + (e.message || ''))
+    }
+  }
+
+  const handleRunSchedule = async (scheduleId: number) => {
+    if (!currentReport) return
+    try {
+      const res: any = await reportApi.runSchedule(currentReport.id!, scheduleId)
+      if (res.code === 0 || res.code === 200) {
+        message.success('执行成功')
+      } else {
+        message.error(res.message || '执行失败')
+      }
+    } catch (e: any) {
+      console.error(e)
+      message.error('执行失败: ' + (e.message || ''))
+    }
   }
 
   const handleSendEmail = (record: ReportInfo) => {
     setCurrentReport(record)
     emailForm.resetFields()
+    emailForm.setFieldsValue({
+      subject: record.reportName,
+      exportFormat: 'excel',
+      attachReport: true,
+      recipients: [],
+    })
     setEmailModalVisible(true)
   }
 
   const handleSendEmailSubmit = async () => {
+    if (!currentReport) return
+    setEmailLoading(true)
     try {
       const values = await emailForm.validateFields()
-      message.success('邮件发送成功')
-      setEmailModalVisible(false)
-    } catch (e) {
+      const emailConfig = {
+        recipients: values.recipients || [],
+        subject: values.subject || '',
+        content: values.content || '',
+        attachReport: values.attachReport !== false,
+      }
+      const res: any = await reportApi.sendEmail(currentReport.id!, emailConfig)
+      if (res.code === 0 || res.code === 200) {
+        message.success('邮件发送成功')
+        setEmailModalVisible(false)
+      } else {
+        message.error(res.message || '发送失败')
+      }
+    } catch (e: any) {
       console.error(e)
+      message.error('邮件发送失败: ' + (e.message || ''))
+    } finally {
+      setEmailLoading(false)
     }
   }
 
@@ -263,6 +421,16 @@ const ReportList: React.FC = () => {
     }
   }
 
+  const getSendTypeText = (type: string) => {
+    switch (type) {
+      case 'daily': return '每天'
+      case 'weekly': return '每周'
+      case 'monthly': return '每月'
+      case 'custom': return '自定义'
+      default: return type
+    }
+  }
+
   const columns = [
     { title: '报表名称', dataIndex: 'reportName', key: 'reportName', width: 200 },
     { title: '报表编码', dataIndex: 'reportCode', key: 'reportCode', width: 180 },
@@ -295,7 +463,7 @@ const ReportList: React.FC = () => {
       dataIndex: 'updatedTime',
       key: 'updatedTime',
       width: 180,
-      render: (time: string) => dayjs(time).format('YYYY-MM-DD HH:mm'),
+      render: (time: string) => time ? dayjs(time).format('YYYY-MM-DD HH:mm') : '-',
     },
     {
       title: '操作',
@@ -316,11 +484,23 @@ const ReportList: React.FC = () => {
           <Button type="link" size="small" icon={<MailOutlined />} onClick={() => handleSendEmail(record)}>
             邮件
           </Button>
-          <Button type="link" size="small" icon={<CopyOutlined />} onClick={() => handleCopy(record)}>
+          <Button 
+            type="link" 
+            size="small" 
+            icon={<CopyOutlined />} 
+            loading={copyLoading === record.id}
+            onClick={() => handleCopy(record)}
+          >
             复制
           </Button>
           <Popconfirm title="确定删除?" onConfirm={() => handleDelete(record.id!)}>
-            <Button type="link" size="small" danger icon={<DeleteOutlined />}>
+            <Button 
+              type="link" 
+              size="small" 
+              danger 
+              icon={<DeleteOutlined />}
+              loading={deleteLoading === record.id}
+            >
               删除
             </Button>
           </Popconfirm>
@@ -396,40 +576,94 @@ const ReportList: React.FC = () => {
       <Modal
         title="定时发送设置"
         open={scheduleModalVisible}
-        onOk={() => {
-          message.success('定时任务设置成功')
-          setScheduleModalVisible(false)
-        }}
         onCancel={() => setScheduleModalVisible(false)}
+        footer={null}
+        width={700}
+      >
+        <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontWeight: 500 }}>定时任务列表</span>
+          <Button type="primary" size="small" icon={<PlusOutlined />} onClick={handleAddSchedule}>
+            新增任务
+          </Button>
+        </div>
+        <List
+          loading={scheduleLoading}
+          dataSource={scheduleList}
+          locale={{ emptyText: '暂无定时任务' }}
+          renderItem={(item: any, idx) => (
+            <List.Item
+              key={idx}
+              style={{ padding: '12px 0', borderBottom: '1px solid #f0f0f0' }}
+              actions={[
+                <Tooltip title="立即执行">
+                  <Button type="link" size="small" icon={<PlayCircleOutlined />} onClick={() => handleRunSchedule(item.id)} />
+                </Tooltip>,
+                <Tooltip title="编辑">
+                  <Button type="link" size="small" icon={<SettingOutlined />} onClick={() => handleEditSchedule(item)} />
+                </Tooltip>,
+                <Popconfirm title="确定删除?" onConfirm={() => handleDeleteSchedule(item.id)}>
+                  <Button type="link" size="small" danger icon={<DeleteOutlined />} />
+                </Popconfirm>,
+              ]}
+            >
+              <Space>
+                <Tag color={item.enabled ? 'green' : 'default'}>
+                  {item.enabled ? '已启用' : '已禁用'}
+                </Tag>
+                <span style={{ fontWeight: 500 }}>{item.subject || '定时报表'}</span>
+                <Tag color="blue">{getSendTypeText(item.sendType)}</Tag>
+                <span style={{ color: '#999', fontSize: 12 }}>
+                  {item.sendTime || '-'}
+                </span>
+                <span style={{ color: '#999', fontSize: 12 }}>
+                  格式: {item.exportFormat || 'excel'}
+                </span>
+              </Space>
+            </List.Item>
+          )}
+        />
+      </Modal>
+
+      <Modal
+        title={editingSchedule ? '编辑定时任务' : '新增定时任务'}
+        open={scheduleFormVisible}
+        onOk={handleScheduleSubmit}
+        onCancel={() => setScheduleFormVisible(false)}
         width={600}
       >
-        <Form layout="vertical">
+        <Form form={scheduleForm} layout="vertical">
           <Form.Item name="enabled" label="启用定时发送" valuePropName="checked">
-            <Switch defaultChecked />
+            <Switch />
           </Form.Item>
-          <Form.Item name="sendType" label="发送频率">
-            <Select defaultValue="daily">
+          <Form.Item name="sendType" label="发送频率" rules={[{ required: true, message: '请选择发送频率' }]}>
+            <Select>
               <Option value="daily">每天</Option>
               <Option value="weekly">每周</Option>
               <Option value="monthly">每月</Option>
               <Option value="custom">自定义</Option>
             </Select>
           </Form.Item>
-          <Form.Item name="sendTime" label="发送时间">
-            <Input type="time" defaultValue="09:00" />
+          <Form.Item name="sendTime" label="发送时间" rules={[{ required: true, message: '请输入发送时间' }]}>
+            <Input type="time" />
           </Form.Item>
-          <Form.Item name="recipients" label="收件人邮箱">
+          <Form.Item name="subject" label="邮件主题" rules={[{ required: true, message: '请输入邮件主题' }]}>
+            <Input placeholder="请输入邮件主题" />
+          </Form.Item>
+          <Form.Item name="recipients" label="收件人邮箱" rules={[{ required: true, message: '请输入收件人邮箱' }]}>
             <Select mode="tags" placeholder="输入邮箱地址后按回车" />
           </Form.Item>
-          <Form.Item name="subject" label="邮件主题">
-            <Input placeholder="请输入邮件主题" defaultValue={currentReport?.reportName + ' - 定时报表'} />
+          <Form.Item name="content" label="邮件内容">
+            <Input.TextArea rows={3} placeholder="请输入邮件内容" />
           </Form.Item>
           <Form.Item name="exportFormat" label="导出格式">
-            <Select defaultValue="excel">
+            <Select>
               <Option value="excel">Excel</Option>
               <Option value="pdf">PDF</Option>
               <Option value="image">图片</Option>
             </Select>
+          </Form.Item>
+          <Form.Item name="attachReport" label="包含报表附件" valuePropName="checked">
+            <Switch defaultChecked />
           </Form.Item>
         </Form>
       </Modal>
@@ -440,6 +674,7 @@ const ReportList: React.FC = () => {
         onOk={handleSendEmailSubmit}
         onCancel={() => setEmailModalVisible(false)}
         width={600}
+        confirmLoading={emailLoading}
       >
         <Form form={emailForm} layout="vertical">
           <Form.Item
@@ -460,7 +695,7 @@ const ReportList: React.FC = () => {
             <Input.TextArea rows={4} placeholder="请输入邮件内容" />
           </Form.Item>
           <Form.Item name="exportFormat" label="附件格式">
-            <Select defaultValue="excel">
+            <Select>
               <Option value="excel">Excel</Option>
               <Option value="pdf">PDF</Option>
               <Option value="image">图片</Option>

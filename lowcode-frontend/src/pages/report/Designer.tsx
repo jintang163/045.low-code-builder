@@ -44,6 +44,7 @@ import {
   RedoOutlined,
   FontColorsOutlined,
   BgColorsOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons'
 import { useParams, useNavigate } from 'react-router-dom'
 import { DndProvider, useDrag, useDrop } from 'react-dnd'
@@ -357,12 +358,16 @@ const ReportDesigner: React.FC = () => {
   const [activeTab, setActiveTab] = useState('props')
   const [previewVisible, setPreviewVisible] = useState(false)
   const [dataFields, setDataFields] = useState<DataField[]>([])
+  const [dataSourceConfig, setDataSourceConfig] = useState<DataSourceConfig | null>(null)
   const [previewData, setPreviewData] = useState<any[]>([])
   const [linkageConfigs, setLinkageConfigs] = useState<ChartLinkageConfig[]>([])
   const [linkageDrawerVisible, setLinkageDrawerVisible] = useState(false)
   const [expandedCategory, setExpandedCategory] = useState<string[]>(['table', 'chart'])
 
   const canvasRef = useRef<HTMLDivElement>(null)
+  const [saveLoading, setSaveLoading] = useState(false)
+  const [loadLoading, setLoadLoading] = useState(false)
+  const [previewDataLoading, setPreviewDataLoading] = useState(false)
 
   const mockData = [
     { category: '电子产品', region: '华东', month: '1月', sales: 12000, orders: 150, profit: 3600 },
@@ -391,6 +396,41 @@ const ReportDesigner: React.FC = () => {
     ])
   }, [])
 
+  const loadPreviewData = useCallback(async () => {
+    if (!report?.id) return
+    setPreviewDataLoading(true)
+    try {
+      const res: any = await reportApi.queryData(report.id!)
+      if (res.code === 0 || res.code === 200) {
+        const result = res.data
+        if (result.rows) {
+          setPreviewData(result.rows)
+        }
+        if (result.columns && result.columns.length > 0) {
+          const fields = result.columns.map((col: any) => ({
+            fieldName: col.fieldName || col.name,
+            fieldLabel: col.fieldLabel || col.label || col.name,
+            fieldType: col.fieldType || 'VARCHAR',
+            isDimension: col.isDimension !== false && !isNumberType(col.fieldType),
+            isMeasure: col.isMeasure === true || isNumberType(col.fieldType),
+            aggregation: isNumberType(col.fieldType) ? 'sum' : 'none',
+          }))
+          setDataFields(fields)
+        }
+      }
+    } catch (e) {
+      console.error('加载预览数据失败:', e)
+    } finally {
+      setPreviewDataLoading(false)
+    }
+  }, [report?.id])
+
+  const isNumberType = (typeName: string): boolean => {
+    if (!typeName) return false
+    const numTypes = ['INT', 'BIGINT', 'DECIMAL', 'DOUBLE', 'FLOAT', 'NUMBER', 'NUMERIC', 'TINYINT', 'SMALLINT']
+    return numTypes.some(t => typeName.toUpperCase().includes(t))
+  }
+
   useEffect(() => {
     if (id) {
       loadReport()
@@ -413,136 +453,44 @@ const ReportDesigner: React.FC = () => {
   }, [id, currentApp])
 
   const loadReport = useCallback(async () => {
+    if (!id) return
+    setLoadLoading(true)
     try {
-      const mockReport: ReportInfo = {
-        id: Number(id),
-        appId: currentApp?.id || 1,
-        reportName: '销售数据报表',
-        reportCode: 'sales_report',
-        reportType: 'comprehensive',
-        description: '销售数据综合报表',
-        status: 0,
-        version: '1.0.0',
-        components: [
-          {
-            id: uuidv4(),
-            componentType: 'text',
-            componentName: '标题文本',
-            positionX: 0,
-            positionY: 0,
-            width: 800,
-            height: 60,
-            propsConfig: JSON.stringify({
-              content: '销售数据报表',
-              fontSize: 24,
-              fontWeight: 'bold',
-              textAlign: 'center',
-              color: '#1677ff',
-            }),
-            dataSourceConfig: JSON.stringify({}),
-            styleConfig: JSON.stringify({}),
-            sortOrder: 0,
-          },
-          {
-            id: uuidv4(),
-            componentType: 'bar',
-            componentName: '销售额柱状图',
-            positionX: 0,
-            positionY: 80,
-            width: 400,
-            height: 300,
-            propsConfig: JSON.stringify({
-              title: '各品类销售额',
-              xField: 'category',
-              yFields: ['sales'],
-              height: 280,
-              showLegend: true,
-              animation: true,
-            }),
-            dataSourceConfig: JSON.stringify({}),
-            styleConfig: JSON.stringify({}),
-            sortOrder: 1,
-          },
-          {
-            id: uuidv4(),
-            componentType: 'pie',
-            componentName: '区域销售占比',
-            positionX: 420,
-            positionY: 80,
-            width: 380,
-            height: 300,
-            propsConfig: JSON.stringify({
-              title: '区域销售占比',
-              categoryField: 'region',
-              valueField: 'sales',
-              height: 280,
-              showLegend: true,
-              animation: true,
-            }),
-            dataSourceConfig: JSON.stringify({}),
-            styleConfig: JSON.stringify({}),
-            sortOrder: 2,
-          },
-          {
-            id: uuidv4(),
-            componentType: 'crosstab',
-            componentName: '销售交叉表',
-            positionX: 0,
-            positionY: 400,
-            width: 800,
-            height: 400,
-            propsConfig: JSON.stringify({
-              rowFields: ['category', 'region'],
-              columnFields: ['month'],
-              valueFields: [
-                { field: 'sales', aggregation: 'sum', label: '销售额' },
-                { field: 'orders', aggregation: 'sum', label: '订单数' },
-              ],
-              showRowTotal: true,
-              showColumnTotal: true,
-              showRowSubtotal: true,
-              showColumnSubtotal: false,
-            }),
-            dataSourceConfig: JSON.stringify({}),
-            styleConfig: JSON.stringify({}),
-            sortOrder: 3,
-          },
-          {
-            id: uuidv4(),
-            componentType: 'groupSummary',
-            componentName: '分组汇总',
-            positionX: 0,
-            positionY: 820,
-            width: 800,
-            height: 300,
-            propsConfig: JSON.stringify({
-              groupFields: ['category', 'region'],
-              summaryFields: [
-                { field: 'sales', aggregation: 'sum', label: '销售额合计' },
-                { field: 'orders', aggregation: 'sum', label: '订单数合计' },
-                { field: 'profit', aggregation: 'avg', label: '平均利润' },
-              ],
-              showGrandTotal: true,
-              showGroupTotal: true,
-            }),
-            dataSourceConfig: JSON.stringify({}),
-            styleConfig: JSON.stringify({}),
-            sortOrder: 4,
-          },
-        ],
+      const res: any = await reportApi.get(Number(id))
+      if (res.code === 0 || res.code === 200) {
+        const reportData = res.data
+        setReport(reportData)
+        setComponents(reportData.components || [])
+        form.setFieldsValue({
+          reportName: reportData.reportName,
+          reportCode: reportData.reportCode,
+          reportType: reportData.reportType,
+          description: reportData.description,
+        })
+        if (reportData.dataSourceConfig) {
+          try {
+            const dsConfig = typeof reportData.dataSourceConfig === 'string'
+              ? JSON.parse(reportData.dataSourceConfig)
+              : reportData.dataSourceConfig
+            setDataSourceConfig(dsConfig)
+            if (dsConfig.fields) {
+              setDataFields(dsConfig.fields)
+            }
+          } catch (e) {
+            console.error('解析数据源配置失败:', e)
+          }
+        }
+        loadPreviewData()
+      } else {
+        message.error(res.message || '加载报表失败')
       }
-      setReport(mockReport)
-      setComponents(mockReport.components || [])
-      form.setFieldsValue({
-        reportName: mockReport.reportName,
-        reportCode: mockReport.reportCode,
-        reportType: mockReport.reportType,
-        description: mockReport.description,
-      })
-    } catch (e) {
+    } catch (e: any) {
       console.error(e)
+      message.error('加载报表失败: ' + (e.message || ''))
+    } finally {
+      setLoadLoading(false)
     }
-  }, [id, currentApp])
+  }, [id, currentApp, form, loadPreviewData])
 
   const handleDrop = useCallback((item: any, dropIndex?: number) => {
     if (item.componentType && !item.isExisting) {
@@ -743,18 +691,41 @@ const ReportDesigner: React.FC = () => {
   }
 
   const handleSave = async () => {
+    if (!report) return
+    setSaveLoading(true)
     try {
-      if (!report) return
       const values = await form.validateFields()
       const savedReport = {
         ...report,
         ...values,
         components,
+        dataSourceConfig: JSON.stringify(dataSourceConfig || {
+          sourceType: 'model',
+          fields: dataFields,
+        }),
       }
-      setReport(savedReport)
-      message.success('保存成功')
-    } catch (e) {
+
+      let res: any
+      if (report.id) {
+        res = await reportApi.update(savedReport)
+      } else {
+        res = await reportApi.save(savedReport)
+      }
+
+      if (res.code === 0 || res.code === 200) {
+        setReport(res.data)
+        message.success('保存成功')
+        if (!report.id && res.data?.id) {
+          navigate(`/report/designer/${res.data.id}`)
+        }
+      } else {
+        message.error(res.message || '保存失败')
+      }
+    } catch (e: any) {
       console.error(e)
+      message.error('保存失败: ' + (e.message || ''))
+    } finally {
+      setSaveLoading(false)
     }
   }
 
@@ -764,6 +735,13 @@ const ReportDesigner: React.FC = () => {
 
   const handleFieldsChange = (fields: DataField[]) => {
     setDataFields(fields)
+  }
+
+  const handleDataSourceConfigChange = (config: any) => {
+    setDataSourceConfig(config)
+    if (config.fields) {
+      setDataFields(config.fields)
+    }
   }
 
   const renderPropsPanel = () => {
@@ -1282,7 +1260,7 @@ const ReportDesigner: React.FC = () => {
             <Button icon={<RedoOutlined />} disabled>重做</Button>
             <Divider type="vertical" style={{ margin: '0 4px' }} />
             <Button icon={<EyeOutlined />} onClick={handlePreview}>预览</Button>
-            <Button type="primary" icon={<SaveOutlined />} onClick={handleSave}>保存</Button>
+            <Button type="primary" icon={<SaveOutlined />} onClick={handleSave} loading={saveLoading}>保存</Button>
           </Space>
         </Header>
 
@@ -1397,12 +1375,23 @@ const ReportDesigner: React.FC = () => {
                   >
                     配置数据源
                   </Button>
+                  <Button
+                    type="primary"
+                    ghost
+                    icon={<ReloadOutlined />}
+                    style={{ width: '100%', marginBottom: 12 }}
+                    onClick={loadPreviewData}
+                    loading={previewDataLoading}
+                  >
+                    刷新数据
+                  </Button>
                   <div style={{ fontSize: 12, color: '#999', marginBottom: 12 }}>
                     已配置 {dataFields.length} 个字段
                   </div>
                   <List
                     size="small"
                     dataSource={dataFields}
+                    locale={{ emptyText: '暂无字段，请先配置数据源' }}
                     renderItem={(field) => (
                       <List.Item>
                         <Space>
@@ -1414,6 +1403,35 @@ const ReportDesigner: React.FC = () => {
                       </List.Item>
                     )}
                   />
+                  {previewData.length > 0 && (
+                    <div style={{ marginTop: 12 }}>
+                      <div style={{ fontSize: 12, color: '#999', marginBottom: 8 }}>
+                        数据预览 (共 {previewData.length} 条)
+                      </div>
+                      <div 
+                        style={{ 
+                          maxHeight: 200, 
+                          overflow: 'auto',
+                          fontSize: 11,
+                          background: '#fafafa',
+                          padding: 8,
+                          borderRadius: 4,
+                          fontFamily: 'monospace',
+                        }}
+                      >
+                        {previewData.slice(0, 10).map((row, idx) => (
+                          <div key={idx} style={{ padding: '2px 0', borderBottom: idx < 9 ? '1px solid #f0f0f0' : 'none' }}>
+                            {JSON.stringify(row)}
+                          </div>
+                        ))}
+                        {previewData.length > 10 && (
+                          <div style={{ textAlign: 'center', padding: 4, color: '#999' }}>
+                            仅显示前 10 条
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </TabPane>
               <TabPane tab={<span><LinkOutlined />联动</span>} key="linkage">
@@ -1434,6 +1452,8 @@ const ReportDesigner: React.FC = () => {
         >
           <DataSourcePanel
             appId={currentApp?.id}
+            value={dataSourceConfig}
+            onChange={handleDataSourceConfigChange}
             dataFields={dataFields}
             onFieldsChange={handleFieldsChange}
           />

@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react'
-import { Card, Button, Space, Tag, message } from 'antd'
+import React, { useState, useEffect, useCallback } from 'react'
+import { Card, Button, Space, Tag, message, Spin, Empty } from 'antd'
 import { ArrowLeftOutlined, ReloadOutlined, DownloadOutlined, PrinterOutlined } from '@ant-design/icons'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ReportInfo, ReportComponent, reportApi } from '@/api/report'
+import { ReportInfo, ReportComponent, reportApi, ChartLinkageConfig } from '@/api/report'
 import BaseChart, { ChartType, ChartDataConfig, ChartStyleConfig } from '@/components/chart/BaseChart'
 import CrossTable from '@/components/chart/CrossTable'
 import GroupSummary from '@/components/chart/GroupSummary'
@@ -121,6 +121,10 @@ const ReportPreview: React.FC = () => {
   const [report, setReport] = useState<ReportInfo | null>(null)
   const [components, setComponents] = useState<ReportComponent[]>([])
   const [loading, setLoading] = useState(false)
+  const [dataLoading, setDataLoading] = useState(false)
+  const [reportData, setReportData] = useState<any[]>([])
+  const [linkageConfigs, setLinkageConfigs] = useState<ChartLinkageConfig[]>([])
+  const [activeFilters, setActiveFilters] = useState<Record<string, any>>({})
 
   useEffect(() => {
     loadReport()
@@ -129,6 +133,42 @@ const ReportPreview: React.FC = () => {
   const loadReport = async () => {
     setLoading(true)
     try {
+      const res: any = await reportApi.get(Number(id))
+      if (res.code === 0 || res.code === 200) {
+        const reportData = res.data
+        setReport(reportData)
+        setComponents(reportData.components || mockComponents)
+        if (reportData.linkageConfigs) {
+          try {
+            const configs = typeof reportData.linkageConfigs === 'string'
+              ? JSON.parse(reportData.linkageConfigs)
+              : reportData.linkageConfigs
+            setLinkageConfigs(configs)
+          } catch (e) {
+            console.error('解析联动配置失败:', e)
+          }
+        }
+        loadReportData()
+      } else {
+        const mockReport: ReportInfo = {
+          id: Number(id),
+          appId: 1,
+          reportName: '销售数据报表',
+          reportCode: 'sales_report',
+          reportType: 'comprehensive',
+          description: '销售数据综合报表',
+          status: 1,
+          version: '1.0.0',
+          createdTime: '2024-01-15 10:30:00',
+          updatedTime: '2024-01-20 14:20:00',
+          components: mockComponents,
+        }
+        setReport(mockReport)
+        setComponents(mockComponents)
+        setReportData(mockData)
+      }
+    } catch (e: any) {
+      console.error(e)
       const mockReport: ReportInfo = {
         id: Number(id),
         appId: 1,
@@ -144,14 +184,30 @@ const ReportPreview: React.FC = () => {
       }
       setReport(mockReport)
       setComponents(mockComponents)
-    } catch (e) {
-      console.error(e)
+      setReportData(mockData)
     } finally {
       setLoading(false)
     }
   }
 
+  const loadReportData = async () => {
+    if (!id) return
+    setDataLoading(true)
+    try {
+      const res: any = await reportApi.queryData(Number(id), activeFilters)
+      if (res.code === 0 || res.code === 200) {
+        const result = res.data
+        setReportData(result.rows || [])
+      }
+    } catch (e) {
+      console.error('加载报表数据失败:', e)
+    } finally {
+      setDataLoading(false)
+    }
+  }
+
   const handleRefresh = () => {
+    loadReportData()
     message.success('数据已刷新')
   }
 
@@ -163,9 +219,40 @@ const ReportPreview: React.FC = () => {
     window.print()
   }
 
+  const handleChartClick = useCallback((componentId: string, params: any) => {
+    const linkages = linkageConfigs.filter(c => c.sourceComponentId === componentId)
+    if (linkages.length === 0) return
+
+    const newFilters = { ...activeFilters }
+    linkages.forEach(linkage => {
+      linkage.mappingFields?.forEach(mapping => {
+        const value = params?.data?.[mapping.sourceField]
+        if (value !== undefined) {
+          newFilters[mapping.targetField] = value
+        }
+      })
+    })
+    setActiveFilters(newFilters)
+  }, [linkageConfigs, activeFilters])
+
+  const getFilteredData = (componentId: string): any[] => {
+    const isTarget = linkageConfigs.some(c => c.targetComponentId === componentId)
+    if (!isTarget || Object.keys(activeFilters).length === 0) {
+      return reportData
+    }
+
+    return reportData.filter(row => {
+      return Object.entries(activeFilters).every(([key, value]) => {
+        if (value === undefined || value === null) return true
+        return row[key] === value
+      })
+    })
+  }
+
   const renderComponent = (comp: ReportComponent) => {
     const props = comp.propsConfig ? JSON.parse(comp.propsConfig) : {}
     const styleConfig = comp.styleConfig ? JSON.parse(comp.styleConfig) : {}
+    const componentData = getFilteredData(comp.id)
 
     const chartTypes = ['line', 'bar', 'pie', 'doughnut', 'area', 'barStack', 'lineBar', 'radar', 'gauge', 'funnel', 'heatmap', 'scatter', 'chart']
     if (chartTypes.includes(comp.componentType)) {
@@ -186,20 +273,22 @@ const ReportPreview: React.FC = () => {
       return (
         <BaseChart
           type={chartType}
-          data={mockData}
+          data={componentData}
           dataConfig={dataConfig}
           styleConfig={styleCfg}
           height={styleConfig.height || 300}
+          onClick={(params: any) => handleChartClick(comp.id, params)}
         />
       )
     }
 
     if (comp.componentType === 'indicator') {
+      const totalSales = componentData.reduce((sum: number, row: any) => sum + (row.sales || 0), 0)
       return (
         <Card style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 14, color: '#666', marginBottom: 8 }}>{props.title || '指标'}</div>
           <div style={{ fontSize: 32, fontWeight: 'bold', color: '#1677ff' }}>
-            {props.value?.toLocaleString() || 0}
+            {props.value?.toLocaleString() || totalSales.toLocaleString()}
             <span style={{ fontSize: 14, fontWeight: 'normal', marginLeft: 4 }}>{props.unit || ''}</span>
           </div>
           {props.trend && (
@@ -241,7 +330,7 @@ const ReportPreview: React.FC = () => {
         showRowSubtotal: props.showRowSubtotal,
         showColSubtotal: props.showColSubtotal,
       }
-      return <CrossTable data={mockData} config={config} title={props.title} />
+      return <CrossTable data={componentData} config={config} title={props.title} />
     }
 
     if (comp.componentType === 'groupSummary') {
@@ -251,7 +340,7 @@ const ReportPreview: React.FC = () => {
         showGroupTotal: props.showGroupTotal,
         showGrandTotal: props.showGrandTotal,
       }
-      return <GroupSummary data={mockData} config={config} title={props.title} />
+      return <GroupSummary data={componentData} config={config} title={props.title} />
     }
 
     return (
@@ -263,6 +352,8 @@ const ReportPreview: React.FC = () => {
     )
   }
 
+  const hasActiveFilters = Object.keys(activeFilters).length > 0
+
   return (
     <div style={{ background: '#f5f5f5', minHeight: '100vh', padding: 16 }}>
       <Card style={{ marginBottom: 16 }}>
@@ -273,9 +364,14 @@ const ReportPreview: React.FC = () => {
             </Button>
             <span style={{ fontSize: 18, fontWeight: 500 }}>{report?.reportName}</span>
             <Tag color="blue">v{report?.version}</Tag>
+            {hasActiveFilters && (
+              <Tag color="orange" closable onClose={() => setActiveFilters({})}>
+                已筛选
+              </Tag>
+            )}
           </Space>
           <Space>
-            <Button icon={<ReloadOutlined />} onClick={handleRefresh}>
+            <Button icon={<ReloadOutlined />} onClick={handleRefresh} loading={dataLoading}>
               刷新
             </Button>
             <Button icon={<DownloadOutlined />} onClick={handleExport}>
@@ -289,13 +385,27 @@ const ReportPreview: React.FC = () => {
       </Card>
 
       <Card loading={loading}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {components.map(comp => (
-            <Card key={comp.id} type="inner" title={comp.componentName}>
-              {renderComponent(comp)}
-            </Card>
-          ))}
-        </div>
+        {dataLoading && (
+          <div style={{ textAlign: 'center', padding: 20 }}>
+            <Spin tip="加载数据中..." />
+          </div>
+        )}
+        {!loading && components.length === 0 ? (
+          <Empty description="暂无报表组件" />
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {components.map(comp => (
+              <Card 
+                key={comp.id} 
+                type="inner" 
+                title={comp.componentName}
+                size="small"
+              >
+                {renderComponent(comp)}
+              </Card>
+            ))}
+          </div>
+        )}
       </Card>
     </div>
   )

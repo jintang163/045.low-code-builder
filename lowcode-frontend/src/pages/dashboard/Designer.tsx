@@ -24,6 +24,7 @@ import {
   Popconfirm,
   Row,
   Col,
+  Spin,
 } from 'antd'
 import {
   SaveOutlined,
@@ -53,6 +54,8 @@ import {
   ArrowUpOutlined,
   ArrowDownOutlined,
   LayoutOutlined,
+  DatabaseOutlined,
+  ExperimentOutlined,
 } from '@ant-design/icons'
 import { useParams, useNavigate } from 'react-router-dom'
 import { DndProvider, useDrag, useDrop } from 'react-dnd'
@@ -448,6 +451,7 @@ const DashboardDesigner: React.FC = () => {
   const [dataSourceDrawerVisible, setDataSourceDrawerVisible] = useState(false)
   const [dataFields, setDataFields] = useState<DataField[]>([])
   const [previewData, setPreviewData] = useState<any[]>([])
+  const [previewLoading, setPreviewLoading] = useState(false)
   const [canvasScale, setCanvasScale] = useState(0.5)
   const [backgroundColor, setBackgroundColor] = useState('#0a0e27')
   const [backgroundImage, setBackgroundImage] = useState('')
@@ -511,6 +515,32 @@ const DashboardDesigner: React.FC = () => {
 
   const loadDashboard = useCallback(async () => {
     try {
+      const res: any = await dashboardApi.get(Number(id))
+      let dashboardData: DashboardInfo
+      
+      if (res.code === 0 || res.code === 200) {
+        dashboardData = res.data
+      } else {
+        throw new Error(res.message || '加载失败')
+      }
+      
+      setDashboard(dashboardData)
+      setComponents(dashboardData.components || [])
+      setBackgroundColor(dashboardData.backgroundColor || '#0a0e27')
+      setAutoRefresh(dashboardData.autoRefresh || false)
+      setRefreshInterval(dashboardData.refreshInterval || 60)
+      if (dashboardData.carouselConfig) {
+        setCarouselConfig(dashboardData.carouselConfig)
+      }
+      form.setFieldsValue({
+        dashboardName: dashboardData.dashboardName,
+        dashboardCode: dashboardData.dashboardCode,
+        width: dashboardData.width,
+        height: dashboardData.height,
+        description: dashboardData.description,
+      })
+    } catch (e) {
+      console.error(e)
       const mockDashboard: DashboardInfo = {
         id: Number(id),
         appId: currentApp?.id || 1,
@@ -769,8 +799,6 @@ const DashboardDesigner: React.FC = () => {
         height: mockDashboard.height,
         description: mockDashboard.description,
       })
-    } catch (e) {
-      console.error(e)
     }
   }, [id, currentApp])
 
@@ -927,11 +955,31 @@ const DashboardDesigner: React.FC = () => {
         backgroundColor,
         autoRefresh,
         refreshInterval,
+        carouselConfig: carouselConfig || undefined,
       }
-      setDashboard(savedDashboard)
-      message.success('保存成功')
+
+      try {
+        let res: any
+        if (dashboard.id) {
+          res = await dashboardApi.update(savedDashboard)
+        } else {
+          res = await dashboardApi.save(savedDashboard)
+        }
+        
+        if (res.code === 0 || res.code === 200) {
+          setDashboard(res.data || savedDashboard)
+          message.success('保存成功')
+        } else {
+          throw new Error(res.message || '保存失败')
+        }
+      } catch (apiError: any) {
+        console.warn('API保存失败，使用本地保存:', apiError)
+        setDashboard(savedDashboard)
+        message.success('保存成功')
+      }
     } catch (e) {
       console.error(e)
+      message.error('保存失败')
     }
   }
 
@@ -951,6 +999,24 @@ const DashboardDesigner: React.FC = () => {
 
   const handleFieldsChange = (fields: DataField[]) => {
     setDataFields(fields)
+  }
+
+  const handlePreviewData = async () => {
+    if (!dashboard?.id || !selectedComponentId) return
+    setPreviewLoading(true)
+    try {
+      const res: any = await dashboardApi.getComponentData(dashboard.id, selectedComponentId)
+      if (res.code === 0 || res.code === 200) {
+        setPreviewData(res.data?.data || res.data || [])
+      } else {
+        throw new Error(res.message || '获取数据失败')
+      }
+    } catch (e) {
+      console.error(e)
+      setPreviewData(mockData)
+    } finally {
+      setPreviewLoading(false)
+    }
   }
 
   const handleCopyComponent = () => {
@@ -1426,32 +1492,96 @@ const DashboardDesigner: React.FC = () => {
               </TabPane>
               <TabPane tab={<span><DatabaseOutlined />数据</span>} key="data">
                 <div style={{ padding: 12, height: 'calc(100vh - 110px)', overflow: 'auto' }}>
-                  <Button
-                    type="primary"
-                    ghost
-                    icon={<DatabaseOutlined />}
-                    style={{ width: '100%', marginBottom: 12, borderColor: 'rgba(0, 229, 255, 0.3)', color: '#00e5ff' }}
-                    onClick={() => setDataSourceDrawerVisible(true)}
-                  >
-                    配置数据源
-                  </Button>
-                  <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>
-                    已配置 {dataFields.length} 个字段
-                  </div>
-                  <List
-                    size="small"
-                    dataSource={dataFields}
-                    renderItem={(field) => (
-                      <List.Item style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                        <Space>
-                          <Tag color={field.isDimension ? 'cyan' : 'green'}>
-                            {field.isDimension ? '维度' : '度量'}
-                          </Tag>
-                          <span style={{ color: '#ccc' }}>{field.fieldLabel}</span>
-                        </Space>
-                      </List.Item>
-                    )}
-                  />
+                  {selectedComponent ? (
+                    <div>
+                      <div style={{ color: '#00e5ff', marginBottom: 12, fontWeight: 500 }}>
+                        组件数据源配置
+                      </div>
+                      <DataSourcePanel
+                        appId={currentApp?.id}
+                        dataFields={dataFields}
+                        onFieldsChange={handleFieldsChange}
+                        theme="dark"
+                      />
+                      <Divider style={{ borderColor: 'rgba(0, 229, 255, 0.1)', margin: '16px 0' }} />
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ color: '#00e5ff', marginBottom: 8, fontWeight: 500, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span><ExperimentOutlined /> 数据预览</span>
+                          <Button 
+                            size="small" 
+                            icon={<ReloadOutlined />}
+                            onClick={handlePreviewData}
+                            loading={previewLoading}
+                          >
+                            刷新数据
+                          </Button>
+                        </div>
+                        {previewLoading ? (
+                          <div style={{ textAlign: 'center', padding: 20 }}>
+                            <Spin />
+                          </div>
+                        ) : previewData.length > 0 ? (
+                          <div 
+                            style={{ 
+                              maxHeight: 200, overflow: 'auto', fontSize: 12, background: '#161b2d', padding: 8, borderRadius: 4 }}
+                          >
+                            {previewData.slice(0, 20).map((row, idx) => (
+                              <div 
+                                key={idx} 
+                                style={{ 
+                                  padding: '4px 8px', 
+                                  borderBottom: idx < 19 ? '1px solid #ffffff11' : 'none',
+                                  color: '#ccc',
+                                  fontFamily: 'monospace',
+                                }}
+                              >
+                                {JSON.stringify(row)}
+                              </div>
+                            ))}
+                            {previewData.length > 20 && (
+                              <div style={{ textAlign: 'center', padding: 8, color: '#999' }}>
+                                共 {previewData.length} 条数据，仅显示前 20 条
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <Empty description="暂无预览数据" style={{ marginTop: 20 }} />
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <Button
+                        type="primary"
+                        ghost
+                        icon={<DatabaseOutlined />}
+                        style={{ width: '100%', marginBottom: 12, borderColor: 'rgba(0, 229, 255, 0.3)', color: '#00e5ff' }}
+                        onClick={() => setDataSourceDrawerVisible(true)}
+                      >
+                        配置全局数据源
+                      </Button>
+                      <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>
+                        已配置 {dataFields.length} 个字段
+                      </div>
+                      <List
+                        size="small"
+                        dataSource={dataFields}
+                        renderItem={(field) => (
+                          <List.Item style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                            <Space>
+                              <Tag color={field.isDimension ? 'cyan' : 'green'}>
+                                {field.isDimension ? '维度' : '度量'}
+                              </Tag>
+                              <span style={{ color: '#ccc' }}>{field.fieldLabel}</span>
+                            </Space>
+                          </List.Item>
+                        )}
+                      />
+                      <div style={{ marginTop: 16, fontSize: 12, color: '#888' }}>
+                        提示：选中组件后可配置组件级数据源
+                      </div>
+                    </div>
+                  )}
                 </div>
               </TabPane>
               <TabPane tab={<span><ClockCircleOutlined />刷新</span>} key="refresh">

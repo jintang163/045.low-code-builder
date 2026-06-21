@@ -15,6 +15,7 @@ import {
   Input,
   InputNumber,
   Divider,
+  Spin,
 } from 'antd'
 import {
   FullscreenOutlined,
@@ -34,21 +35,24 @@ import {
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import BaseChart, { ChartType, ChartDataConfig, ChartStyleConfig } from '@/components/chart/BaseChart'
 import IndicatorCard from '@/components/chart/IndicatorCard'
-import { dashboardApi, screenApi, DashboardInfo, DashboardComponent, CarouselConfig } from '@/api/dashboard'
+import { dashboardApi, DashboardInfo, DashboardComponent, CarouselConfig } from '@/api/dashboard'
+import { LinkageProvider, useLinkage } from '@/context/LinkageContext'
 import dayjs from 'dayjs'
 import { v4 as uuidv4 } from 'uuid'
 
 const { Option } = Select
 
-const DashboardDisplay: React.FC = () => {
+const DashboardDisplayContent: React.FC = () => {
   const { id } = useParams()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const isShareMode = searchParams.get('share') === 'true'
+  const { onChartClick, registerTarget, getFiltersForComponent, filterData, state } = useLinkage()
 
   const [dashboard, setDashboard] = useState<DashboardInfo | null>(null)
   const [components, setComponents] = useState<DashboardComponent[]>([])
   const [loading, setLoading] = useState(false)
+  const [dataLoading, setDataLoading] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [showToolbar, setShowToolbar] = useState(true)
   const [settingsVisible, setSettingsVisible] = useState(false)
@@ -64,6 +68,7 @@ const DashboardDisplay: React.FC = () => {
   const [shareModalVisible, setShareModalVisible] = useState(false)
   const [shareUrl, setShareUrl] = useState('')
   const [currentTime, setCurrentTime] = useState(dayjs().format('YYYY-MM-DD HH:mm:ss'))
+  const [componentDataMap, setComponentDataMap] = useState<Record<string, any[]>>({})
 
   const containerRef = useRef<HTMLDivElement>(null)
   const toolbarTimerRef = useRef<any>(null)
@@ -316,9 +321,66 @@ const DashboardDisplay: React.FC = () => {
     return () => clearInterval(timer)
   }, [id])
 
+  const loadComponentData = useCallback(async () => {
+    if (!dashboard?.id || components.length === 0) return
+    setDataLoading(true)
+    try {
+      const res: any = await dashboardApi.getDashboardData(dashboard.id)
+      if (res.code === 0 || res.code === 200) {
+        const dataMap: Record<string, any[]> = {}
+        const allData = res.data || {}
+        for (const comp of components) {
+          if (allData[comp.id]) {
+            dataMap[comp.id] = allData[comp.id]?.data || allData[comp.id] || []
+          }
+        }
+        setComponentDataMap(dataMap)
+      } else {
+        throw new Error(res.message || '获取数据失败')
+      }
+    } catch (e) {
+      console.error(e)
+      const dataMap: Record<string, any[]> = {}
+      for (const comp of components) {
+        dataMap[comp.id] = mockData
+      }
+      setComponentDataMap(dataMap)
+    } finally {
+      setDataLoading(false)
+    }
+  }, [dashboard?.id, components])
+
   const loadDashboard = useCallback(async () => {
     setLoading(true)
     try {
+      const res: any = await dashboardApi.get(Number(id))
+      let dashboardData: DashboardInfo
+      
+      if (res.code === 0 || res.code === 200) {
+        dashboardData = res.data
+      } else {
+        throw new Error(res.message || '加载失败')
+      }
+      
+      setDashboard(dashboardData)
+      setComponents(dashboardData.components || [])
+      setAutoRefresh(dashboardData.autoRefresh || false)
+      setRefreshInterval(dashboardData.refreshInterval || 30)
+      
+      if (dashboardData.carouselConfig) {
+        setCarouselEnabled(dashboardData.carouselConfig.enabled || false)
+        setCarouselInterval(dashboardData.carouselConfig.interval || 10)
+        setCarouselPages(dashboardData.carouselConfig.pages || [])
+        setShowPageIndicator(dashboardData.carouselConfig.showIndicator !== false)
+        setIsPlaying(dashboardData.carouselConfig.autoPlay !== false)
+      } else {
+        const pages = [
+          { id: '1', pageName: '总览页面', componentIds: (dashboardData.components || []).map(c => c.id) },
+        ]
+        setCarouselPages(pages)
+      }
+    } catch (e) {
+      console.error(e)
       const mockDashboard: DashboardInfo = {
         id: Number(id),
         appId: 1,
@@ -353,12 +415,16 @@ const DashboardDisplay: React.FC = () => {
         { id: '3', pageName: '指标页面', componentIds: mockComponents.filter(c => c.componentType === 'indicator').map(c => c.id) },
       ]
       setCarouselPages(pages)
-    } catch (e) {
-      console.error(e)
     } finally {
       setLoading(false)
     }
   }, [id])
+
+  useEffect(() => {
+    if (components.length > 0 && dashboard?.id) {
+      loadComponentData()
+    }
+  }, [components.length, dashboard?.id, loadComponentData])
 
   useEffect(() => {
     if (autoRefresh && refreshInterval > 0) {
@@ -387,10 +453,7 @@ const DashboardDisplay: React.FC = () => {
   }, [carouselEnabled, isPlaying, carouselInterval, carouselPages.length])
 
   const refreshData = () => {
-    setLoading(true)
-    setTimeout(() => {
-      setLoading(false)
-    }, 500)
+    loadComponentData()
   }
 
   const toggleFullscreen = () => {
@@ -417,11 +480,18 @@ const DashboardDisplay: React.FC = () => {
 
   const handleShare = async () => {
     try {
-      const url = `${window.location.origin}/screen/display/${id}?share=true&code=${Date.now()}`
-      setShareUrl(url)
+      const res: any = await dashboardApi.getShareLink(Number(id))
+      if (res.code === 0 || res.code === 200) {
+        const shareInfo = res.data
+        setShareUrl(shareInfo.shareUrl || `${window.location.origin}/screen/display/${id}?share=true&code=${shareInfo.shareCode || Date.now()}`)
+      } else {
+        throw new Error(res.message || '获取分享链接失败')
+      }
       setShareModalVisible(true)
     } catch (e) {
       console.error(e)
+      setShareUrl(`${window.location.origin}/screen/display/${id}?share=true&code=${Date.now()}`)
+      setShareModalVisible(true)
     }
   }
 
@@ -448,8 +518,19 @@ const DashboardDisplay: React.FC = () => {
 
   const visibleComponents = getVisibleComponents()
 
+  const handleChartClick = (compId: string, data: any) => {
+    onChartClick({
+      componentId: compId,
+      triggerType: 'click',
+      data: data || {},
+    })
+  }
+
   const renderComponent = (comp: DashboardComponent) => {
     const props = comp.propsConfig ? JSON.parse(comp.propsConfig) : {}
+    const rawData = componentDataMap[comp.id] || mockData
+    const filters = getFiltersForComponent(comp.id)
+    const chartData = filterData(rawData, filters)
 
     const chartTypes = ['line', 'bar', 'pie', 'doughnut', 'area', 'barStack', 'lineBar', 'radar', 'gauge', 'funnel', 'heatmap', 'scatter', 'chart']
     if (chartTypes.includes(comp.componentType)) {
@@ -471,19 +552,21 @@ const DashboardDisplay: React.FC = () => {
       return (
         <BaseChart
           type={chartType}
-          data={mockData}
+          data={chartData}
           dataConfig={dataConfig}
           styleConfig={styleConfig}
           height="100%"
+          onChartClick={(params: any) => handleChartClick(comp.id, params?.data || {})}
         />
       )
     }
 
     if (comp.componentType === 'indicator') {
+      const firstMeasure = chartData[0]?.[props.valueField || 'sales'] || props.value || 0
       return (
         <IndicatorCard
           title={props.title || '指标名称'}
-          value={props.value || 0}
+          value={firstMeasure}
           unit={props.unit}
           trend={props.trend}
           trendValue={props.trendValue}
@@ -505,6 +588,7 @@ const DashboardDisplay: React.FC = () => {
           fontSize: props.fontSize || 16,
           fontWeight: props.fontWeight || 'normal',
           color: props.color || '#fff',
+          padding: 16,
         }}>
           {props.content || '文本内容'}
         </div>
@@ -512,6 +596,7 @@ const DashboardDisplay: React.FC = () => {
     }
 
     if (comp.componentType === 'table') {
+      const columns = chartData.length > 0 ? Object.keys(chartData[0]) : []
       return (
         <div style={{
           height: '100%',
@@ -527,21 +612,17 @@ const DashboardDisplay: React.FC = () => {
           <table style={{ width: '100%', color: '#ccc', fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(0, 229, 255, 0.2)' }}>
-                <th style={{ textAlign: 'left', padding: '8px 12px' }}>品类</th>
-                <th style={{ textAlign: 'right', padding: '8px 12px' }}>销售额</th>
-                <th style={{ textAlign: 'right', padding: '8px 12px' }}>订单数</th>
-                <th style={{ textAlign: 'right', padding: '8px 12px' }}>利润</th>
-                <th style={{ textAlign: 'right', padding: '8px 12px' }}>目标</th>
+                {columns.map(col => (
+                  <th key={col} style={{ textAlign: 'left', padding: '8px 12px' }}>{col}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {mockData.slice(0, 6).map((row, idx) => (
+              {chartData.slice(0, 10).map((row, idx) => (
                 <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                  <td style={{ padding: '8px 12px' }}>{row.category}</td>
-                  <td style={{ textAlign: 'right', padding: '8px 12px', color: '#00e5ff' }}>¥{row.sales.toLocaleString()}</td>
-                  <td style={{ textAlign: 'right', padding: '8px 12px' }}>{row.orders}</td>
-                  <td style={{ textAlign: 'right', padding: '8px 12px', color: '#52c41a' }}>¥{row.profit.toLocaleString()}</td>
-                  <td style={{ textAlign: 'right', padding: '8px 12px' }}>¥{row.target.toLocaleString()}</td>
+                  {columns.map(col => (
+                    <td key={col} style={{ padding: '8px 12px' }}>{row[col]}</td>
+                  ))}
                 </tr>
               ))}
             </tbody>
@@ -904,6 +985,14 @@ const DashboardDisplay: React.FC = () => {
         </div>
       )}
     </div>
+  )
+}
+
+const DashboardDisplay: React.FC = () => {
+  return (
+    <LinkageProvider>
+      <DashboardDisplayContent />
+    </LinkageProvider>
   )
 }
 

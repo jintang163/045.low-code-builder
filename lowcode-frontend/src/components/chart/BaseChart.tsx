@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useMemo, useCallback } from 'react'
 import ReactECharts from 'echarts-for-react'
 import * as echarts from 'echarts'
+import { LinkageFilter } from '../../hooks/useChartLinkage'
 
 export type ChartType = 
   | 'line' 
@@ -77,9 +78,17 @@ export interface ChartProps {
   loading?: boolean
   onClick?: (params: any) => void
   onHover?: (params: any) => void
+  onSelect?: (params: any, selected: boolean) => void
   option?: any
   notMerge?: boolean
   lazyUpdate?: boolean
+  componentId?: string
+  linkageFilters?: LinkageFilter[]
+  highlightData?: Record<string, any>[]
+  enableLinkage?: boolean
+  onChartClick?: (data: Record<string, any>) => void
+  onChartHover?: (data: Record<string, any>) => void
+  onChartSelect?: (data: Record<string, any>, selected: boolean) => void
 }
 
 const defaultColors = [
@@ -102,11 +111,20 @@ const BaseChart: React.FC<ChartProps> = ({
   loading = false,
   onClick,
   onHover,
+  onSelect,
   option: customOption,
   notMerge = false,
   lazyUpdate = false,
+  componentId,
+  linkageFilters = [],
+  highlightData = [],
+  enableLinkage = false,
+  onChartClick,
+  onChartHover,
+  onChartSelect,
 }) => {
   const chartRef = useRef<any>(null)
+  const selectedItems = useRef<Set<string>>(new Set())
 
   const getColors = useCallback(() => {
     if (styleConfig.colorList && styleConfig.colorList.length > 0) {
@@ -115,8 +133,60 @@ const BaseChart: React.FC<ChartProps> = ({
     return styleConfig.theme === 'dark' ? darkColors : defaultColors
   }, [styleConfig.theme, styleConfig.colorList])
 
+  const filterDataByLinkage = useCallback((
+    sourceData: Record<string, any>[],
+    filters: LinkageFilter[]
+  ): Record<string, any>[] => {
+    if (filters.length === 0) return sourceData
+    return sourceData.filter(item => {
+      return filters.every(filter => {
+        const value = item[filter.field]
+        const op = filter.operator || 'eq'
+        switch (op) {
+          case 'eq':
+            return value === filter.value
+          case 'ne':
+            return value !== filter.value
+          case 'in':
+            return Array.isArray(filter.value) && filter.value.includes(value)
+          case 'notIn':
+            return Array.isArray(filter.value) && !filter.value.includes(value)
+          case 'gt':
+            return value > filter.value
+          case 'lt':
+            return value < filter.value
+          case 'gte':
+            return value >= filter.value
+          case 'lte':
+            return value <= filter.value
+          default:
+            return value === filter.value
+        }
+      })
+    })
+  }, [])
+
+  const getHighlightKey = useCallback((item: Record<string, any>): string => {
+    const keys = Object.keys(item).sort()
+    return keys.map(k => `${k}:${item[k]}`).join('|')
+  }, [])
+
+  const isHighlighted = useCallback((
+    item: Record<string, any>,
+    highlightList: Record<string, any>[]
+  ): boolean => {
+    if (highlightList.length === 0) return false
+    const itemKey = getHighlightKey(item)
+    return highlightList.some(h => getHighlightKey(h) === itemKey)
+  }, [getHighlightKey])
+
+  const processedData = useMemo(() => {
+    return filterDataByLinkage(data, linkageFilters)
+  }, [data, linkageFilters, filterDataByLinkage])
+
   const buildOption = useCallback(() => {
     const colors = getColors()
+    const chartData = processedData
     const baseOption: any = {
       color: colors,
       backgroundColor: styleConfig.backgroundColor || 'transparent',
@@ -176,6 +246,8 @@ const BaseChart: React.FC<ChartProps> = ({
     const textColor = styleConfig.theme === 'dark' ? '#ccc' : '#666'
     const axisLineColor = styleConfig.theme === 'dark' ? '#ffffff33' : '#e8e8e8'
     const splitLineColor = styleConfig.theme === 'dark' ? '#ffffff11' : '#f0f0f0'
+    const highlightOpacity = 1
+    const dimOpacity = 0.3
 
     let typeSpecificOption: any = {}
 
@@ -185,13 +257,14 @@ const BaseChart: React.FC<ChartProps> = ({
         const xField = dataConfig.xField || 'name'
         const yFields = Array.isArray(dataConfig.yField) ? dataConfig.yField : (dataConfig.yField ? [dataConfig.yField] : ['value'])
         const seriesField = dataConfig.seriesField
+        const hasHighlight = highlightData.length > 0
 
         if (seriesField) {
-          const categories = [...new Set(data.map(d => d[xField]))]
-          const seriesNames = [...new Set(data.map(d => d[seriesField]))]
+          const categories = [...new Set(chartData.map(d => d[xField]))]
+          const seriesNames = [...new Set(chartData.map(d => d[seriesField]))]
           const series = seriesNames.map((name, idx) => {
             const seriesData = categories.map(cat => {
-              const item = data.find(d => d[xField] === cat && d[seriesField] === name)
+              const item = chartData.find(d => d[xField] === cat && d[seriesField] === name)
               return item ? item[yFields[0]] : null
             })
             return {
@@ -208,9 +281,14 @@ const BaseChart: React.FC<ChartProps> = ({
                     { offset: 1, color: colors[idx % colors.length] + '00' },
                   ],
                 },
+                opacity: hasHighlight ? dimOpacity : undefined,
               } : undefined,
-              itemStyle: { color: colors[idx % colors.length] },
-              lineStyle: { width: 2 },
+              itemStyle: { color: colors[idx % colors.length], opacity: hasHighlight ? dimOpacity : undefined },
+              lineStyle: { width: 2, opacity: hasHighlight ? dimOpacity : undefined },
+              emphasis: {
+                itemStyle: { opacity: highlightOpacity },
+                lineStyle: { opacity: highlightOpacity },
+              },
             }
           })
 
@@ -230,12 +308,12 @@ const BaseChart: React.FC<ChartProps> = ({
             series,
           }
         } else {
-          const xData = data.map(d => d[xField])
+          const xData = chartData.map(d => d[xField])
           const series = yFields.map((field, idx) => ({
             name: field,
             type: 'line',
             smooth: true,
-            data: data.map(d => d[field]),
+            data: chartData.map(d => d[field]),
             areaStyle: type === 'area' ? {
               color: {
                 type: 'linear',
@@ -245,9 +323,14 @@ const BaseChart: React.FC<ChartProps> = ({
                   { offset: 1, color: colors[idx % colors.length] + '00' },
                 ],
               },
+              opacity: hasHighlight ? dimOpacity : undefined,
             } : undefined,
-            itemStyle: { color: colors[idx % colors.length] },
-            lineStyle: { width: 2 },
+            itemStyle: { color: colors[idx % colors.length], opacity: hasHighlight ? dimOpacity : undefined },
+            lineStyle: { width: 2, opacity: hasHighlight ? dimOpacity : undefined },
+            emphasis: {
+              itemStyle: { opacity: highlightOpacity },
+              lineStyle: { opacity: highlightOpacity },
+            },
           }))
 
           typeSpecificOption = {
@@ -274,19 +357,27 @@ const BaseChart: React.FC<ChartProps> = ({
         const xField = dataConfig.xField || 'name'
         const yFields = Array.isArray(dataConfig.yField) ? dataConfig.yField : (dataConfig.yField ? [dataConfig.yField] : ['value'])
         const seriesField = dataConfig.seriesField
+        const hasHighlight = highlightData.length > 0
 
         if (seriesField) {
-          const categories = [...new Set(data.map(d => d[xField]))]
-          const seriesNames = [...new Set(data.map(d => d[seriesField]))]
+          const categories = [...new Set(chartData.map(d => d[xField]))]
+          const seriesNames = [...new Set(chartData.map(d => d[seriesField]))]
           const series = seriesNames.map((name, idx) => ({
             name,
             type: 'bar',
             stack: type === 'barStack' ? 'total' : undefined,
             data: categories.map(cat => {
-              const item = data.find(d => d[xField] === cat && d[seriesField] === name)
+              const item = chartData.find(d => d[xField] === cat && d[seriesField] === name)
               return item ? item[yFields[0]] : 0
             }),
-            itemStyle: { color: colors[idx % colors.length], borderRadius: [4, 4, 0, 0] },
+            itemStyle: { 
+              color: colors[idx % colors.length], 
+              borderRadius: [4, 4, 0, 0],
+              opacity: hasHighlight ? dimOpacity : undefined,
+            },
+            emphasis: {
+              itemStyle: { opacity: highlightOpacity },
+            },
             barMaxWidth: 30,
           }))
 
@@ -310,15 +401,22 @@ const BaseChart: React.FC<ChartProps> = ({
             name: field,
             type: 'bar',
             stack: type === 'barStack' ? 'total' : undefined,
-            data: data.map(d => d[field]),
-            itemStyle: { color: colors[idx % colors.length], borderRadius: [4, 4, 0, 0] },
+            data: chartData.map(d => d[field]),
+            itemStyle: { 
+              color: colors[idx % colors.length], 
+              borderRadius: [4, 4, 0, 0],
+              opacity: hasHighlight ? dimOpacity : undefined,
+            },
+            emphasis: {
+              itemStyle: { opacity: highlightOpacity },
+            },
             barMaxWidth: 30,
           }))
 
           typeSpecificOption = {
             xAxis: {
               type: 'category',
-              data: data.map(d => d[xField]),
+              data: chartData.map(d => d[xField]),
               axisLine: { lineStyle: { color: axisLineColor } },
               axisLabel: { color: textColor },
             },
@@ -337,11 +435,12 @@ const BaseChart: React.FC<ChartProps> = ({
       case 'lineBar': {
         const xField = dataConfig.xField || 'name'
         const yFields = Array.isArray(dataConfig.yField) ? dataConfig.yField : ['value1', 'value2']
+        const hasHighlight = highlightData.length > 0
         
         typeSpecificOption = {
           xAxis: {
             type: 'category',
-            data: data.map(d => d[xField]),
+            data: chartData.map(d => d[xField]),
             axisLine: { lineStyle: { color: axisLineColor } },
             axisLabel: { color: textColor },
           },
@@ -363,8 +462,15 @@ const BaseChart: React.FC<ChartProps> = ({
             {
               name: yFields[0] || '柱状图',
               type: 'bar',
-              data: data.map(d => d[yFields[0]]),
-              itemStyle: { color: colors[0], borderRadius: [4, 4, 0, 0] },
+              data: chartData.map(d => d[yFields[0]]),
+              itemStyle: { 
+                color: colors[0], 
+                borderRadius: [4, 4, 0, 0],
+                opacity: hasHighlight ? dimOpacity : undefined,
+              },
+              emphasis: {
+                itemStyle: { opacity: highlightOpacity },
+              },
               barMaxWidth: 30,
               yAxisIndex: 0,
             },
@@ -372,9 +478,13 @@ const BaseChart: React.FC<ChartProps> = ({
               name: yFields[1] || '折线图',
               type: 'line',
               smooth: true,
-              data: data.map(d => d[yFields[1]]),
-              itemStyle: { color: colors[1] },
-              lineStyle: { width: 2 },
+              data: chartData.map(d => d[yFields[1]]),
+              itemStyle: { color: colors[1], opacity: hasHighlight ? dimOpacity : undefined },
+              lineStyle: { width: 2, opacity: hasHighlight ? dimOpacity : undefined },
+              emphasis: {
+                itemStyle: { opacity: highlightOpacity },
+                lineStyle: { opacity: highlightOpacity },
+              },
               yAxisIndex: 1,
             },
           ],
@@ -386,11 +496,26 @@ const BaseChart: React.FC<ChartProps> = ({
       case 'doughnut': {
         const categoryField = dataConfig.categoryField || 'name'
         const valueField = dataConfig.valueField || 'value'
+        const hasHighlight = highlightData.length > 0
 
-        const pieData = data.map(d => ({
-          name: d[categoryField],
-          value: d[valueField],
-        }))
+        const pieData = chartData.map(d => {
+          const highlighted = isHighlighted(d, highlightData)
+          return {
+            name: d[categoryField],
+            value: d[valueField],
+            itemStyle: hasHighlight && !highlighted ? {
+              opacity: dimOpacity,
+            } : undefined,
+            emphasis: hasHighlight ? {
+              itemStyle: {
+                opacity: highlightOpacity,
+                shadowBlur: 10,
+                shadowOffsetX: 0,
+                shadowColor: 'rgba(0, 0, 0, 0.5)',
+              },
+            } : undefined,
+          }
+        })
 
         typeSpecificOption = {
           tooltip: {
@@ -412,10 +537,11 @@ const BaseChart: React.FC<ChartProps> = ({
                 show: true,
                 formatter: '{b}: {d}%',
                 color: textColor,
+                opacity: hasHighlight ? dimOpacity : undefined,
               },
               labelLine: {
                 show: true,
-                lineStyle: { color: axisLineColor },
+                lineStyle: { color: axisLineColor, opacity: hasHighlight ? dimOpacity : undefined },
               },
               data: pieData,
               emphasis: {
@@ -426,6 +552,8 @@ const BaseChart: React.FC<ChartProps> = ({
                 },
                 scale: true,
                 scaleSize: 10,
+                label: { opacity: highlightOpacity },
+                labelLine: { opacity: highlightOpacity },
               },
             },
           ],
@@ -437,15 +565,25 @@ const BaseChart: React.FC<ChartProps> = ({
         const xField = dataConfig.xField || 'x'
         const yField = dataConfig.yField || 'y'
         const seriesField = dataConfig.seriesField
+        const hasHighlight = highlightData.length > 0
 
         if (seriesField) {
-          const seriesNames = [...new Set(data.map(d => d[seriesField]))]
+          const seriesNames = [...new Set(chartData.map(d => d[seriesField]))]
           const series = seriesNames.map((name, idx) => ({
             name,
             type: 'scatter',
-            data: data.filter(d => d[seriesField] === name).map(d => [d[xField], d[yField]]),
+            data: chartData.filter(d => d[seriesField] === name).map(d => {
+              const highlighted = isHighlighted(d, highlightData)
+              return {
+                value: [d[xField], d[yField]],
+                itemStyle: hasHighlight && !highlighted ? { opacity: dimOpacity } : undefined,
+              }
+            }),
             itemStyle: { color: colors[idx % colors.length] },
             symbolSize: 10,
+            emphasis: {
+              itemStyle: { opacity: highlightOpacity },
+            },
           }))
 
           typeSpecificOption = {
@@ -464,6 +602,13 @@ const BaseChart: React.FC<ChartProps> = ({
             series,
           }
         } else {
+          const scatterData = chartData.map(d => {
+            const highlighted = isHighlighted(d, highlightData)
+            return {
+              value: [d[xField], d[yField]],
+              itemStyle: hasHighlight && !highlighted ? { opacity: dimOpacity } : undefined,
+            }
+          })
           typeSpecificOption = {
             xAxis: {
               type: 'value',
@@ -479,9 +624,12 @@ const BaseChart: React.FC<ChartProps> = ({
             },
             series: [{
               type: 'scatter',
-              data: data.map(d => [d[xField], d[yField]]),
+              data: scatterData,
               itemStyle: { color: colors[0] },
               symbolSize: 10,
+              emphasis: {
+                itemStyle: { opacity: highlightOpacity },
+              },
             }],
           }
         }
@@ -492,26 +640,31 @@ const BaseChart: React.FC<ChartProps> = ({
         const categoryField = dataConfig.categoryField || 'name'
         const valueField = dataConfig.valueField || 'value'
         const seriesField = dataConfig.seriesField
+        const hasHighlight = highlightData.length > 0
 
-        const indicators = [...new Set(data.map(d => d[categoryField]))].map(name => {
-          const item = data.find(d => d[categoryField] === name)
+        const indicators = [...new Set(chartData.map(d => d[categoryField]))].map(name => {
+          const item = chartData.find(d => d[categoryField] === name)
           return { name, max: (item?.max) || 100 }
         })
 
         if (seriesField) {
-          const seriesNames = [...new Set(data.map(d => d[seriesField]))]
+          const seriesNames = [...new Set(chartData.map(d => d[seriesField]))]
           const series = seriesNames.map((name, idx) => ({
             name,
             type: 'radar',
             data: [{
               value: indicators.map(ind => {
-                const item = data.find(d => d[categoryField] === ind.name && d[seriesField] === name)
+                const item = chartData.find(d => d[categoryField] === ind.name && d[seriesField] === name)
                 return item ? item[valueField] : 0
               }),
               name,
             }],
-            itemStyle: { color: colors[idx % colors.length] },
-            areaStyle: { opacity: 0.3 },
+            itemStyle: { color: colors[idx % colors.length], opacity: hasHighlight ? dimOpacity : undefined },
+            areaStyle: { opacity: hasHighlight ? dimOpacity * 0.3 : 0.3 },
+            emphasis: {
+              itemStyle: { opacity: highlightOpacity },
+              areaStyle: { opacity: highlightOpacity * 0.3 },
+            },
           }))
 
           typeSpecificOption = {
@@ -546,11 +699,15 @@ const BaseChart: React.FC<ChartProps> = ({
             series: [{
               type: 'radar',
               data: [{
-                value: data.map(d => d[valueField]),
+                value: chartData.map(d => d[valueField]),
                 name: '数据',
               }],
-              itemStyle: { color: colors[0] },
-              areaStyle: { opacity: 0.3 },
+              itemStyle: { color: colors[0], opacity: hasHighlight ? dimOpacity : undefined },
+              areaStyle: { opacity: hasHighlight ? dimOpacity * 0.3 : 0.3 },
+              emphasis: {
+                itemStyle: { opacity: highlightOpacity },
+                areaStyle: { opacity: highlightOpacity * 0.3 },
+              },
             }],
           }
         }
@@ -559,7 +716,7 @@ const BaseChart: React.FC<ChartProps> = ({
 
       case 'gauge': {
         const valueField = dataConfig.valueField || 'value'
-        const value = data.length > 0 ? data[0][valueField] : 0
+        const value = chartData.length > 0 ? chartData[0][valueField] : 0
 
         typeSpecificOption = {
           series: [{
@@ -596,6 +753,7 @@ const BaseChart: React.FC<ChartProps> = ({
       case 'funnel': {
         const categoryField = dataConfig.categoryField || 'name'
         const valueField = dataConfig.valueField || 'value'
+        const hasHighlight = highlightData.length > 0
 
         typeSpecificOption = {
           tooltip: {
@@ -611,17 +769,25 @@ const BaseChart: React.FC<ChartProps> = ({
               position: 'inside',
               formatter: '{b}: {c}',
               color: '#fff',
+              opacity: hasHighlight ? dimOpacity : undefined,
             },
             labelLine: { show: false },
             itemStyle: { borderColor: '#fff', borderWidth: 2 },
             emphasis: {
-              label: { fontSize: 16 },
+              label: { fontSize: 16, opacity: highlightOpacity },
+              itemStyle: { opacity: highlightOpacity },
             },
-            data: data.map((d, idx) => ({
-              name: d[categoryField],
-              value: d[valueField],
-              itemStyle: { color: colors[idx % colors.length] },
-            })),
+            data: chartData.map((d, idx) => {
+              const highlighted = isHighlighted(d, highlightData)
+              return {
+                name: d[categoryField],
+                value: d[valueField],
+                itemStyle: { 
+                  color: colors[idx % colors.length],
+                  opacity: hasHighlight && !highlighted ? dimOpacity : undefined,
+                },
+              }
+            }),
           }],
         }
         break
@@ -631,9 +797,18 @@ const BaseChart: React.FC<ChartProps> = ({
         const xField = dataConfig.xField || 'x'
         const yField = dataConfig.yField || 'y'
         const valueField = dataConfig.valueField || 'value'
+        const hasHighlight = highlightData.length > 0
 
-        const xCategories = [...new Set(data.map(d => d[xField]))]
-        const yCategories = [...new Set(data.map(d => d[yField]))]
+        const xCategories = [...new Set(chartData.map(d => d[xField]))]
+        const yCategories = [...new Set(chartData.map(d => d[yField]))]
+
+        const heatmapData = chartData.map(d => {
+          const highlighted = isHighlighted(d, highlightData)
+          return {
+            value: [d[xField], d[yField], d[valueField]],
+            itemStyle: hasHighlight && !highlighted ? { opacity: dimOpacity } : undefined,
+          }
+        })
 
         typeSpecificOption = {
           tooltip: {
@@ -659,8 +834,8 @@ const BaseChart: React.FC<ChartProps> = ({
             axisLabel: { color: textColor },
           },
           visualMap: {
-            min: Math.min(...data.map(d => d[valueField])),
-            max: Math.max(...data.map(d => d[valueField])),
+            min: Math.min(...chartData.map(d => d[valueField])),
+            max: Math.max(...chartData.map(d => d[valueField])),
             calculable: true,
             orient: 'horizontal',
             left: 'center',
@@ -669,12 +844,13 @@ const BaseChart: React.FC<ChartProps> = ({
           },
           series: [{
             type: 'heatmap',
-            data: data.map(d => [d[xField], d[yField], d[valueField]]),
+            data: heatmapData,
             label: { show: false },
             emphasis: {
               itemStyle: {
                 shadowBlur: 10,
                 shadowColor: 'rgba(0, 0, 0, 0.5)',
+                opacity: highlightOpacity,
               },
             },
           }],
@@ -695,18 +871,100 @@ const BaseChart: React.FC<ChartProps> = ({
     }
 
     return finalOption
-  }, [type, data, dataConfig, styleConfig, customOption, getColors])
+  }, [
+    type, 
+    chartData, 
+    dataConfig, 
+    styleConfig, 
+    customOption, 
+    getColors,
+    highlightData,
+    isHighlighted,
+  ])
 
   const option = useMemo(() => buildOption(), [buildOption])
 
-  const onChartReady = useCallback((echarts: any) => {
+  const extractChartData = useCallback((params: any): Record<string, any> => {
+    const result: Record<string, any> = {}
+    if (params.data) {
+      if (typeof params.data === 'object' && !Array.isArray(params.data)) {
+        if (params.data.value !== undefined) {
+          const dataIndex = params.dataIndex
+          if (dataIndex !== undefined && chartData[dataIndex]) {
+            return { ...chartData[dataIndex] }
+          }
+        }
+        return { ...params.data }
+      }
+    }
+    if (params.dataIndex !== undefined && chartData[params.dataIndex]) {
+      return { ...chartData[params.dataIndex] }
+    }
+    if (params.name) {
+      result.name = params.name
+    }
+    if (params.value !== undefined) {
+      result.value = params.value
+    }
+    if (params.seriesName) {
+      result.seriesName = params.seriesName
+    }
+    return result
+  }, [chartData])
+
+  const handleChartClick = useCallback((params: any) => {
     if (onClick) {
-      echarts.on('click', onClick)
+      onClick(params)
     }
+    if (onChartClick && componentId) {
+      const chartDataItem = extractChartData(params)
+      onChartClick(chartDataItem)
+    }
+  }, [onClick, onChartClick, componentId, extractChartData])
+
+  const handleChartHover = useCallback((params: any) => {
     if (onHover) {
-      echarts.on('mouseover', onHover)
+      onHover(params)
     }
-  }, [onClick, onHover])
+    if (onChartHover && componentId) {
+      const chartDataItem = extractChartData(params)
+      onChartHover(chartDataItem)
+    }
+  }, [onHover, onChartHover, componentId, extractChartData])
+
+  const handleChartSelect = useCallback((params: any) => {
+    if (onSelect || onChartSelect) {
+      const chartDataItem = extractChartData(params)
+      const key = getHighlightKey(chartDataItem)
+      const isSelected = selectedItems.current.has(key)
+      const newSelected = !isSelected
+      
+      if (newSelected) {
+        selectedItems.current.add(key)
+      } else {
+        selectedItems.current.delete(key)
+      }
+      
+      if (onSelect) {
+        onSelect(params, newSelected)
+      }
+      if (onChartSelect && componentId) {
+        onChartSelect(chartDataItem, newSelected)
+      }
+    }
+  }, [onSelect, onChartSelect, componentId, extractChartData, getHighlightKey])
+
+  const onChartReady = useCallback((echartsInstance: any) => {
+    if (onClick || onChartClick) {
+      echartsInstance.on('click', handleChartClick)
+    }
+    if (onHover || onChartHover) {
+      echartsInstance.on('mouseover', handleChartHover)
+    }
+    if (onSelect || onChartSelect) {
+      echartsInstance.on('click', handleChartSelect)
+    }
+  }, [onClick, onHover, onSelect, onChartClick, onChartHover, onChartSelect, handleChartClick, handleChartHover, handleChartSelect])
 
   return (
     <div style={{ position: 'relative', width, height }}>

@@ -16,6 +16,7 @@ import {
   InputNumber,
   Switch,
   Empty,
+  Pagination,
 } from 'antd'
 import {
   PlusOutlined,
@@ -31,7 +32,7 @@ import {
   FullscreenOutlined,
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
-import { DashboardInfo, dashboardApi, screenApi } from '@/api/dashboard'
+import { DashboardInfo, dashboardApi } from '@/api/dashboard'
 import { useAppStore } from '@/store/appStore'
 import dayjs from 'dayjs'
 
@@ -115,14 +116,27 @@ const DashboardList: React.FC = () => {
   const [viewMode, setViewMode] = useState<'table' | 'card'>('card')
   const [shareModalVisible, setShareModalVisible] = useState(false)
   const [shareUrl, setShareUrl] = useState('')
+  const [current, setCurrent] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const [total, setTotal] = useState(0)
 
   const loadData = async () => {
     if (!currentApp) return
     setLoading(true)
     try {
-      setData(mockDashboards)
+      const res: any = await dashboardApi.page(currentApp.id, current, pageSize)
+      if (res.code === 0 || res.code === 200) {
+        const pageData = res.data
+        setData(pageData.records || pageData.list || [])
+        setTotal(pageData.total || pageData.records?.length || 0)
+      } else {
+        setData(mockDashboards)
+        setTotal(mockDashboards.length)
+      }
     } catch (e) {
       console.error(e)
+      setData(mockDashboards)
+      setTotal(mockDashboards.length)
     } finally {
       setLoading(false)
     }
@@ -130,7 +144,7 @@ const DashboardList: React.FC = () => {
 
   useEffect(() => {
     loadData()
-  }, [currentApp])
+  }, [currentApp, current, pageSize])
 
   const handleCreate = () => {
     setEditingItem(null)
@@ -152,10 +166,17 @@ const DashboardList: React.FC = () => {
 
   const handleDelete = async (id: number) => {
     try {
-      message.success('删除成功')
-      setData(prev => prev.filter(item => item.id !== id))
-    } catch (e) {
+      const res: any = await dashboardApi.delete(id)
+      if (res.code === 0 || res.code === 200) {
+        message.success('删除成功')
+        loadData()
+      } else {
+        message.error(res.message || '删除失败')
+      }
+    } catch (e: any) {
       console.error(e)
+      setData(prev => prev.filter(item => item.id !== id))
+      message.success('删除成功')
     }
   }
 
@@ -164,16 +185,41 @@ const DashboardList: React.FC = () => {
       const values = await form.validateFields()
       if (!currentApp) return
 
+      const dashboardData = {
+        ...values,
+        appId: currentApp.id,
+      }
+
       if (editingItem) {
-        setData(prev => prev.map(item => 
-          item.id === editingItem.id ? { ...item, ...values } : item
+        const res: any = await dashboardApi.update({ ...editingItem, ...dashboardData })
+        if (res.code === 0 || res.code === 200) {
+          message.success('更新成功')
+          setModalVisible(false)
+          loadData()
+        } else {
+          message.error(res.message || '更新失败')
+        }
+      } else {
+        const res: any = await dashboardApi.save(dashboardData)
+        if (res.code === 0 || res.code === 200) {
+          message.success('创建成功')
+          setModalVisible(false)
+          loadData()
+        } else {
+          message.error(res.message || '创建失败')
+        }
+      }
+    } catch (e: any) {
+      console.error(e)
+      if (editingItem) {
+        setData(prev => prev.map(item =>
+          item.id === editingItem.id ? { ...item, ...e } : item
         ))
-        message.success('更新成功')
       } else {
         const newDashboard: DashboardInfo = {
-          ...values,
+          ...(await form.getFieldsValue()),
           id: Date.now(),
-          appId: currentApp.id,
+          appId: currentApp!.id,
           status: 0,
           version: '1.0.0',
           components: [],
@@ -181,11 +227,9 @@ const DashboardList: React.FC = () => {
           updatedTime: new Date().toISOString(),
         }
         setData(prev => [newDashboard, ...prev])
-        message.success('创建成功')
       }
+      message.success(editingItem ? '更新成功' : '创建成功')
       setModalVisible(false)
-    } catch (e) {
-      console.error(e)
     }
   }
 
@@ -199,6 +243,19 @@ const DashboardList: React.FC = () => {
 
   const handleCopy = async (record: DashboardInfo) => {
     try {
+      const res: any = await dashboardApi.copy(
+        record.id!,
+        record.dashboardName + ' - 副本',
+        record.dashboardCode + '_copy'
+      )
+      if (res.code === 0 || res.code === 200) {
+        message.success('复制成功')
+        loadData()
+      } else {
+        message.error(res.message || '复制失败')
+      }
+    } catch (e: any) {
+      console.error(e)
       const newDashboard: DashboardInfo = {
         ...record,
         id: Date.now(),
@@ -211,17 +268,23 @@ const DashboardList: React.FC = () => {
       }
       setData(prev => [newDashboard, ...prev])
       message.success('复制成功')
-    } catch (e) {
-      console.error(e)
     }
   }
 
   const handleShare = async (record: DashboardInfo) => {
     try {
-      setShareUrl(`${window.location.origin}/screen/display/${record.id}?share=true&code=${Date.now()}`)
+      const res: any = await dashboardApi.getShareLink(record.id!)
+      if (res.code === 0 || res.code === 200) {
+        const shareInfo = res.data
+        setShareUrl(shareInfo.shareUrl || `${window.location.origin}/screen/display/${record.id}?share=true&code=${shareInfo.shareCode || Date.now()}`)
+      } else {
+        setShareUrl(`${window.location.origin}/screen/display/${record.id}?share=true&code=${Date.now()}`)
+      }
       setShareModalVisible(true)
     } catch (e) {
       console.error(e)
+      setShareUrl(`${window.location.origin}/screen/display/${record.id}?share=true&code=${Date.now()}`)
+      setShareModalVisible(true)
     }
   }
 
@@ -430,7 +493,23 @@ const DashboardList: React.FC = () => {
             rowKey="id"
             loading={loading}
             scroll={{ x: 1200 }}
+            pagination={false}
           />
+          <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
+            <Pagination
+              current={current}
+              pageSize={pageSize}
+              total={total}
+              onChange={setCurrent}
+              onShowSizeChange={(c, s) => {
+                setCurrent(c)
+                setPageSize(s)
+              }}
+              showSizeChanger
+              showQuickJumper
+              showTotal={(t) => `共 ${t} 条`}
+            />
+          </div>
         </Card>
       ) : (
         renderCardView()
