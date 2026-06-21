@@ -28,6 +28,9 @@ import ReportPreview from '@/pages/report/Preview'
 import DashboardList from '@/pages/dashboard/List'
 import DashboardDesigner from '@/pages/dashboard/Designer'
 import DashboardDisplay from '@/pages/dashboard/Display'
+import ABTestList from '@/pages/abtest/List'
+import ABTestDesigner from '@/pages/abtest/Designer'
+import ABTestDetail from '@/pages/abtest/Detail'
 
 const routes = [
   {
@@ -245,6 +248,27 @@ const routes = [
           {
             path: 'designer',
             element: <DashboardDesigner />,
+          },
+        ],
+      },
+      {
+        path: 'abtest',
+        children: [
+          {
+            path: '',
+            element: <ABTestList />,
+          },
+          {
+            path: 'designer/:id',
+            element: <ABTestDesigner />,
+          },
+          {
+            path: 'designer',
+            element: <ABTestDesigner />,
+          },
+          {
+            path: 'detail/:id',
+            element: <ABTestDetail />,
           },
         ],
       },

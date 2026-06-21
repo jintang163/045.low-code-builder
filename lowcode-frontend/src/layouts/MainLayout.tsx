@@ -24,6 +24,7 @@ import {
   ThunderboltOutlined,
   BarChartOutlined,
   FileTextOutlined,
+  ExperimentOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAppStore } from '@/store/appStore'
@@ -66,6 +67,11 @@ const MainLayout: React.FC = ({ children }: { children?: React.ReactNode }) => {
       key: '/page',
       icon: <FormOutlined />,
       label: '页面设计',
+    },
+    {
+      key: '/abtest',
+      icon: <ExperimentOutlined />,
+      label: 'A/B测试',
     },
     {
       key: '/logic',
@@ -200,6 +206,9 @@ const MainLayout: React.FC = ({ children }: { children?: React.ReactNode }) => {
       '/report/designer': '报表设计器',
       '/screen': '大屏设计',
       '/screen/designer': '大屏设计器',
+      '/abtest': 'A/B测试',
+      '/abtest/designer': 'A/B测试设计器',
+      '/abtest/detail': 'A/B测试详情',
       '/component': '组件管理',
       '/component/debugger': '组件调试',
       '/permission': '权限管理',
