@@ -227,3 +227,92 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
+
+-- =====================================================
+-- 跨应用服务调用模块数据库表结构
+-- =====================================================
+
+-- 检查并创建应用暴露的API接口表
+CREATE TABLE IF NOT EXISTS `sys_app_exposed_api` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `app_id` bigint NOT NULL COMMENT '所属应用ID',
+  `app_code` varchar(100) DEFAULT NULL COMMENT '所属应用编码',
+  `api_name` varchar(100) NOT NULL COMMENT '接口名称',
+  `api_code` varchar(200) NOT NULL COMMENT '接口编码（唯一）',
+  `api_type` varchar(20) DEFAULT 'HTTP' COMMENT '接口类型：HTTP/INNER',
+  `http_method` varchar(10) DEFAULT 'POST' COMMENT 'HTTP方法：GET/POST/PUT/DELETE',
+  `api_path` varchar(500) DEFAULT NULL COMMENT '接口路径',
+  `request_schema` text COMMENT '请求参数定义（JSON Schema）',
+  `response_schema` text COMMENT '响应参数定义（JSON Schema）',
+  `description` varchar(500) DEFAULT NULL COMMENT '接口描述',
+  `auth_type` varchar(20) DEFAULT 'TOKEN' COMMENT '鉴权方式：NONE/TOKEN/APP_KEY',
+  `is_transactional` tinyint DEFAULT 0 COMMENT '是否需要事务:0-否,1-是',
+  `timeout_ms` int DEFAULT 5000 COMMENT '超时时间(毫秒)',
+  `status` tinyint DEFAULT 1 COMMENT '状态：0-禁用 1-启用',
+  `created_by` bigint DEFAULT NULL COMMENT '创建人',
+  `created_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_by` bigint DEFAULT NULL COMMENT '更新人',
+  `updated_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted` int DEFAULT 0 COMMENT '逻辑删除:0-未删除,1-已删除',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_api_code` (`api_code`),
+  KEY `idx_app_id` (`app_id`),
+  KEY `idx_app_code` (`app_code`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应用暴露的API接口表';
+
+-- 检查并创建应用暴露的事件表
+CREATE TABLE IF NOT EXISTS `sys_app_exposed_event` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `app_id` bigint NOT NULL COMMENT '所属应用ID',
+  `app_code` varchar(100) DEFAULT NULL COMMENT '所属应用编码',
+  `event_name` varchar(100) NOT NULL COMMENT '事件名称',
+  `event_code` varchar(200) NOT NULL COMMENT '事件编码（唯一）',
+  `payload_schema` text COMMENT '事件载荷定义（JSON Schema）',
+  `description` varchar(500) DEFAULT NULL COMMENT '事件描述',
+  `status` tinyint DEFAULT 1 COMMENT '状态：0-禁用 1-启用',
+  `created_by` bigint DEFAULT NULL COMMENT '创建人',
+  `created_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_by` bigint DEFAULT NULL COMMENT '更新人',
+  `updated_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted` int DEFAULT 0 COMMENT '逻辑删除:0-未删除,1-已删除',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_event_code` (`event_code`),
+  KEY `idx_app_id` (`app_id`),
+  KEY `idx_app_code` (`app_code`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应用暴露的事件表';
+
+-- 为跨应用API表添加新增字段（兼容升级）
+SET @tablename = 'sys_app_exposed_api';
+SET @columnname = 'is_transactional';
+SET @preparedStatement = (SELECT IF(
+  (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE
+      (table_schema = @dbname)
+      AND (table_name = @tablename)
+      AND (column_name = @columnname)
+  ) > 0,
+  'SELECT 1',
+  CONCAT('ALTER TABLE ', @tablename, ' ADD COLUMN ', @columnname, ' tinyint DEFAULT 0 COMMENT ''是否需要事务:0-否,1-是'' AFTER auth_type')
+));
+PREPARE alterIfNotExists FROM @preparedStatement;
+EXECUTE alterIfNotExists;
+DEALLOCATE PREPARE alterIfNotExists;
+
+SET @columnname = 'timeout_ms';
+SET @preparedStatement = (SELECT IF(
+  (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE
+      (table_schema = @dbname)
+      AND (table_name = @tablename)
+      AND (column_name = @columnname)
+  ) > 0,
+  'SELECT 1',
+  CONCAT('ALTER TABLE ', @tablename, ' ADD COLUMN ', @columnname, ' int DEFAULT 5000 COMMENT ''超时时间(毫秒)'' AFTER is_transactional')
+));
+PREPARE alterIfNotExists FROM @preparedStatement;
+EXECUTE alterIfNotExists;
+DEALLOCATE PREPARE alterIfNotExists;

@@ -19,7 +19,7 @@ public class RpaDatabaseInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
-        log.info("开始初始化RPA数据库表...");
+        log.info("开始初始化Flow模块数据库表（RPA、跨应用服务等）...");
 
         try {
             ClassPathResource resource = new ClassPathResource("db/rpa.sql");
@@ -53,7 +53,7 @@ public class RpaDatabaseInitializer implements CommandLineRunner {
                 }
             }
 
-            log.info("RPA数据库表初始化完成，执行了{}条语句", executedCount);
+            log.info("Flow模块数据库表初始化完成，执行了{}条语句", executedCount);
 
             try {
                 Integer scriptCount = jdbcTemplate.queryForObject(
@@ -65,8 +65,18 @@ public class RpaDatabaseInitializer implements CommandLineRunner {
                 log.warn("查询RPA表统计信息失败", e);
             }
 
+            try {
+                Integer apiCount = jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM sys_app_exposed_api", Integer.class);
+                Integer eventCount = jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM sys_app_exposed_event", Integer.class);
+                log.info("跨应用服务表统计 - 暴露API数: {}, 暴露事件数: {}", apiCount, eventCount);
+            } catch (Exception e) {
+                log.warn("查询跨应用服务表统计信息失败", e);
+            }
+
         } catch (Exception e) {
-            log.error("RPA数据库表初始化失败", e);
+            log.error("Flow模块数据库表初始化失败", e);
         }
     }
 }

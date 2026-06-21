@@ -156,14 +156,18 @@ public class BusinessLogicService extends ServiceImpl<BusinessLogicMapper, Busin
         sb.append("import lombok.extern.slf4j.Slf4j;\n");
         sb.append("import com.alibaba.fastjson2.JSON;\n");
         sb.append("import com.lowcode.flow.dto.RpaExecuteDTO;\n");
+        sb.append("import com.lowcode.flow.dto.CrossAppCallDTO;\n");
         sb.append("import com.lowcode.flow.entity.RpaExecution;\n");
-        sb.append("import com.lowcode.flow.service.RpaExecutionService;\n\n");
+        sb.append("import com.lowcode.flow.service.RpaExecutionService;\n");
+        sb.append("import com.lowcode.flow.service.CrossAppService;\n\n");
         sb.append("@Slf4j\n");
         sb.append("@Component\n");
         sb.append("public class ").append(className).append(" {\n\n");
 
         sb.append("    @Autowired\n");
         sb.append("    private RpaExecutionService rpaExecutionService;\n\n");
+        sb.append("    @Autowired\n");
+        sb.append("    private CrossAppService crossAppService;\n\n");
 
         sb.append("    public Object execute(Long logicId, Map<String, Object> params) {\n");
         sb.append("        log.info(\"开始执行业务逻辑: ").append(logic.getLogicName()).append("\");\n");
@@ -264,6 +268,11 @@ public class BusinessLogicService extends ServiceImpl<BusinessLogicMapper, Busin
                 case "RPA_EXECUTE":
                 case "RPA_EXTRACT":
                     generateRpaCode(sb, node, indentStr);
+                    break;
+                case "CROSS_APP_CALL":
+                case "CROSS_APP_API":
+                case "CROSS_APP_EVENT":
+                    generateCrossAppCode(sb, node, indentStr);
                     break;
                 case "CODE":
                 case "SUB_LOGIC":
@@ -384,6 +393,67 @@ public class BusinessLogicService extends ServiceImpl<BusinessLogicMapper, Busin
         sb.append(indent).append("}\n\n");
     }
 
+    private void generateCrossAppCode(StringBuilder sb, LogicNode node, String indent) {
+        String configStr = node.getNodeConfig();
+        String targetAppCode = "\"\"";
+        String targetCode = "\"\"";
+        String callType = "\"API\"";
+        String resultVariable = "crossAppResult_" + node.getNodeId().replace("-", "_");
+        String callParams = "new java.util.HashMap<>()";
+        String timeoutMs = "5000";
+
+        if (configStr != null && !configStr.isEmpty()) {
+            try {
+                com.alibaba.fastjson2.JSONObject config = com.alibaba.fastjson2.JSON.parseObject(configStr);
+                if (config.getString("targetAppCode") != null) {
+                    targetAppCode = "\"" + config.getString("targetAppCode") + "\"";
+                }
+                if (config.getString("targetCode") != null) {
+                    targetCode = "\"" + config.getString("targetCode") + "\"";
+                }
+                if (config.getString("callType") != null) {
+                    callType = "\"" + config.getString("callType") + "\"";
+                }
+                if (config.getString("resultVariable") != null && !config.getString("resultVariable").isEmpty()) {
+                    resultVariable = config.getString("resultVariable");
+                }
+                if (config.getString("callParams") != null && !config.getString("callParams").isEmpty()) {
+                    callParams = "com.alibaba.fastjson2.JSON.parseObject(\"" + config.getString("callParams").replace("\"", "\\\"") + "\")";
+                }
+                if (config.get("timeoutMs") != null) {
+                    timeoutMs = String.valueOf(config.get("timeoutMs"));
+                }
+            } catch (Exception e) {
+                // 配置解析失败，使用默认值
+            }
+        }
+
+        sb.append(indent).append("// 跨应用服务调用节点: ").append(node.getNodeName()).append("\n");
+        sb.append(indent).append("log.info(\"开始跨应用调用: targetApp={}, targetCode={}\", ").append(targetAppCode).append(", ").append(targetCode).append(");\n");
+        sb.append(indent).append("try {\n");
+        sb.append(indent).append("    Map<String, Object> crossAppParams = ").append(callParams).append(";\n");
+        sb.append(indent).append("    // 合并流程变量到参数\n");
+        sb.append(indent).append("    for (Map.Entry<String, Object> entry : variables.entrySet()) {\n");
+        sb.append(indent).append("        if (!crossAppParams.containsKey(entry.getKey())) {\n");
+        sb.append(indent).append("            crossAppParams.put(entry.getKey(), entry.getValue());\n");
+        sb.append(indent).append("        }\n");
+        sb.append(indent).append("    }\n");
+        sb.append(indent).append("    com.lowcode.flow.dto.CrossAppCallDTO crossAppCallDTO = new com.lowcode.flow.dto.CrossAppCallDTO();\n");
+        sb.append(indent).append("    crossAppCallDTO.setTargetAppCode(").append(targetAppCode).append(");\n");
+        sb.append(indent).append("    crossAppCallDTO.setCallType(").append(callType).append(");\n");
+        sb.append(indent).append("    crossAppCallDTO.setTargetCode(").append(targetCode).append(");\n");
+        sb.append(indent).append("    crossAppCallDTO.setParams(crossAppParams);\n");
+        sb.append(indent).append("    crossAppCallDTO.setTimeoutMs(").append(timeoutMs).append(");\n");
+        sb.append(indent).append("    crossAppCallDTO.setCallerLogicId(logicId);\n");
+        sb.append(indent).append("    Map<String, Object> ").append(resultVariable).append(" = crossAppService.executeCrossAppCall(crossAppCallDTO);\n");
+        sb.append(indent).append("    variables.put(\"").append(resultVariable).append("\", ").append(resultVariable).append(");\n");
+        sb.append(indent).append("    log.info(\"跨应用调用成功: {}\", ").append(targetCode).append(");\n");
+        sb.append(indent).append("} catch (Exception e) {\n");
+        sb.append(indent).append("    log.error(\"跨应用调用失败\", e);\n");
+        sb.append(indent).append("    throw new RuntimeException(\"跨应用调用失败: \" + e.getMessage(), e);\n");
+        sb.append(indent).append("}\n\n");
+    }
+
     private String getIndent(int level) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < level; i++) {
@@ -495,6 +565,12 @@ public class BusinessLogicService extends ServiceImpl<BusinessLogicMapper, Busin
                 createNodeType("RPA_EXTRACT", "RPA数据抓取", "RPA", "通过RPA从网页抓取数据")
         );
         result.put("rpa", rpa);
+
+        List<Map<String, Object>> crossApp = Arrays.asList(
+                createNodeType("CROSS_APP_API", "调用应用API", "CROSS_APP", "调用其他应用暴露的API接口"),
+                createNodeType("CROSS_APP_EVENT", "发布应用事件", "CROSS_APP", "向其他应用发布事件通知")
+        );
+        result.put("crossApp", crossApp);
 
         return result;
     }

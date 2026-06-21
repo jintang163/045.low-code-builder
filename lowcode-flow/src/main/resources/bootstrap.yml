@@ -74,6 +74,11 @@ rpa:
     url: ${RPA_EXECUTOR_URL:http://localhost:8000}
     timeout: 300000
 
+lowcode:
+  api:
+    gateway-url: ${GATEWAY_URL:http://localhost:8080}
+    internal-token: ${INTERNAL_TOKEN:lowcode-internal-token}
+
 ---
 spring:
   config:
@@ -97,3 +102,8 @@ rpa:
   executor:
     url: ${RPA_EXECUTOR_URL:http://lowcode-rpa-executor:8000}
     timeout: 300000
+
+lowcode:
+  api:
+    gateway-url: ${GATEWAY_URL:http://gateway:8080}
+    internal-token: ${INTERNAL_TOKEN:lowcode-internal-token}

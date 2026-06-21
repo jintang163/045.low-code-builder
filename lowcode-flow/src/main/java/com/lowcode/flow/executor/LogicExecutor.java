@@ -3,12 +3,14 @@ package com.lowcode.flow.executor;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.lowcode.common.exception.BusinessException;
+import com.lowcode.flow.dto.CrossAppCallDTO;
 import com.lowcode.flow.dto.RpaExecuteDTO;
 import com.lowcode.flow.entity.BusinessLogic;
 import com.lowcode.flow.entity.LogicEdge;
 import com.lowcode.flow.entity.LogicNode;
 import com.lowcode.flow.entity.RpaExecution;
 import com.lowcode.flow.service.BusinessLogicService;
+import com.lowcode.flow.service.CrossAppService;
 import com.lowcode.flow.service.RpaExecutionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +30,9 @@ public class LogicExecutor {
 
     @Autowired
     private RpaExecutionService rpaExecutionService;
+
+    @Autowired
+    private CrossAppService crossAppService;
 
     private final Map<String, Object> nodeHandlers = new ConcurrentHashMap<>();
 
@@ -235,6 +240,12 @@ public class LogicExecutor {
                     executeApiCallNode(node, variables, result);
                     break;
 
+                case "CROSS_APP_CALL":
+                case "CROSS_APP_API":
+                case "CROSS_APP_EVENT":
+                    executeCrossAppNode(node, variables, result, logicId);
+                    break;
+
                 case "PARALLEL":
                 case "SUB_LOGIC":
                 case "WORKFLOW":
@@ -383,6 +394,73 @@ public class LogicExecutor {
     private void executeApiCallNode(LogicNode node, Map<String, Object> variables, NodeExecutionResult result) {
         result.setOutput(new HashMap<>());
         log.info("API调用节点: {}", node.getNodeName());
+    }
+
+    @SuppressWarnings("unchecked")
+    private void executeCrossAppNode(LogicNode node, Map<String, Object> variables, NodeExecutionResult result, Long logicId) {
+        JSONObject config = parseConfig(node.getNodeConfig());
+
+        String targetAppCode = config.getString("targetAppCode");
+        String callType = config.getString("callType");
+        String targetCode = config.getString("targetCode");
+        String resultVariable = config.getString("resultVariable");
+        Integer timeoutMs = config.getInteger("timeoutMs");
+
+        if (targetAppCode == null || targetAppCode.trim().isEmpty()) {
+            throw new BusinessException("跨应用节点缺少targetAppCode配置");
+        }
+        if (targetCode == null || targetCode.trim().isEmpty()) {
+            throw new BusinessException("跨应用节点缺少targetCode配置");
+        }
+        if (callType == null || callType.trim().isEmpty()) {
+            callType = "API";
+        }
+        if (resultVariable == null || resultVariable.trim().isEmpty()) {
+            resultVariable = "crossAppResult_" + node.getNodeId().replace("-", "_");
+        }
+
+        String paramsStr = config.getString("callParams");
+        Map<String, Object> callParams = new HashMap<>();
+        if (paramsStr != null && !paramsStr.trim().isEmpty()) {
+            try {
+                callParams = JSON.parseObject(paramsStr, Map.class);
+            } catch (Exception e) {
+                log.warn("解析跨应用调用参数失败，使用空参数", e);
+            }
+        }
+
+        callParams = resolveParams(callParams, variables);
+
+        CrossAppCallDTO dto = new CrossAppCallDTO();
+        dto.setTargetAppCode(targetAppCode);
+        dto.setCallType(callType);
+        dto.setTargetCode(targetCode);
+        dto.setParams(callParams);
+        dto.setTimeoutMs(timeoutMs != null ? timeoutMs : 5000);
+        dto.setCallerLogicId(logicId);
+        dto.setCallerAppId(null);
+
+        log.info("执行跨应用节点: {}, targetApp={}, targetCode={}, callType={}",
+                node.getNodeName(), targetAppCode, targetCode, callType);
+
+        Map<String, Object> callResult = crossAppService.executeCrossAppCall(dto);
+
+        result.setOutput(Map.of(resultVariable, callResult));
+
+        log.info("跨应用节点执行完成: {}, resultVariable={}", node.getNodeName(), resultVariable);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> resolveParams(Map<String, Object> params, Map<String, Object> variables) {
+        if (params == null || params.isEmpty()) {
+            return new HashMap<>();
+        }
+        Map<String, Object> resolved = new HashMap<>();
+        for (Map.Entry<String, Object> entry : params.entrySet()) {
+            Object value = entry.getValue();
+            resolved.put(entry.getKey(), resolveValue(value, variables));
+        }
+        return resolved;
     }
 
     private JSONObject parseConfig(String configStr) {

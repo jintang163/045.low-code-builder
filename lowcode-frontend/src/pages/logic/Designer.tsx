@@ -47,11 +47,14 @@ import {
   SyncOutlined,
   PlaySquareOutlined,
   FilterOutlined,
+  ApartmentOutlined,
+  ShareAltOutlined,
 } from '@ant-design/icons'
 import { useParams, useNavigate } from 'react-router-dom'
 import { DndProvider, useDrag, useDrop } from 'react-dnd'
 import { HTML5Backend } from 'react-dnd-html5-backend'
-import { BusinessLogic, LogicNode, LogicEdge, logicApi, debugApi, rpaApi, RpaScript } from '@/api/flow'
+import { BusinessLogic, LogicNode, LogicEdge, logicApi, debugApi, rpaApi, RpaScript, crossAppApi, AppExposedApi, AppExposedEvent } from '@/api/flow'
+import { appApi, AppInfo } from '@/api'
 import { useAppStore } from '@/store/appStore'
 
 const { Header, Sider, Content } = Layout
@@ -65,6 +68,7 @@ const nodeCategories = [
   { key: 'variable', name: '变量操作', icon: '📦', color: '#722ed1' },
   { key: 'notify', name: '通知交互', icon: '🔔', color: '#eb2f96' },
   { key: 'rpa', name: 'RPA自动化', icon: '🤖', color: '#1890ff' },
+  { key: 'crossApp', name: '跨应用服务', icon: '🔗', color: '#722ed1' },
   { key: 'advanced', name: '高级操作', icon: '⚙️', color: '#13c2c2' },
 ]
 
@@ -107,6 +111,10 @@ const nodeTypes: Record<string, any[]> = {
   rpa: [
     { type: 'RPA_EXECUTE', name: '执行RPA脚本', icon: '🤖', description: '执行录制的RPA浏览器自动化脚本' },
     { type: 'RPA_EXTRACT', name: 'RPA数据抓取', icon: '📥', description: '通过RPA从网页抓取数据' },
+  ],
+  crossApp: [
+    { type: 'CROSS_APP_API', name: '调用应用API', icon: '🔗', description: '调用其他应用暴露的API接口' },
+    { type: 'CROSS_APP_EVENT', name: '发布应用事件', icon: '📢', description: '向其他应用发布事件通知' },
   ],
   advanced: [
     { type: 'API_CALL', name: '调用API', icon: '🌐', description: '调用外部HTTP API' },
@@ -308,6 +316,9 @@ const LogicDesigner: React.FC = () => {
   const [variables, setVariables] = useState<any[]>([])
   const [breakpoints, setBreakpoints] = useState<string[]>([])
   const [rpaScripts, setRpaScripts] = useState<RpaScript[]>([])
+  const [appList, setAppList] = useState<AppInfo[]>([])
+  const [exposedApis, setExposedApis] = useState<AppExposedApi[]>([])
+  const [exposedEvents, setExposedEvents] = useState<AppExposedEvent[]>([])
 
   const canvasRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -357,6 +368,35 @@ const LogicDesigner: React.FC = () => {
   useEffect(() => {
     loadRpaScripts()
   }, [loadRpaScripts])
+
+  const loadAppList = useCallback(async () => {
+    try {
+      const res = await appApi.list()
+      setAppList(res.data || [])
+    } catch (e) {
+      console.error(e)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadAppList()
+  }, [loadAppList])
+
+  const loadExposedServicesByApp = useCallback(async (appCode: string) => {
+    if (!appCode) {
+      setExposedApis([])
+      setExposedEvents([])
+      return
+    }
+    try {
+      const apiRes = await crossAppApi.listApisByAppCode(appCode)
+      setExposedApis(apiRes.data || [])
+      const eventRes = await crossAppApi.listEventsByAppCode(appCode)
+      setExposedEvents(eventRes.data || [])
+    } catch (e) {
+      console.error(e)
+    }
+  }, [])
 
   const saveHistory = useCallback(() => {
     const newHistory = history.slice(0, historyIndex + 1)
@@ -845,6 +885,120 @@ const LogicDesigner: React.FC = () => {
               <Form.Item name="timeout" label="超时时间(秒)">
                 <InputNumber style={{ width: '100%' }} min={10} max={3600} defaultValue={300} />
               </Form.Item>
+            </>
+          )
+        case 'CROSS_APP_API':
+        case 'CROSS_APP_EVENT':
+          const isEventType = type === 'CROSS_APP_EVENT'
+          return (
+            <>
+              <Form.Item
+                name="targetAppCode"
+                label="目标应用"
+                rules={[{ required: true, message: '请选择目标应用' }]}
+              >
+                <Select
+                  placeholder="选择要调用的目标应用"
+                  showSearch
+                  optionFilterProp="label"
+                  onChange={(value) => {
+                    loadExposedServicesByApp(value)
+                  }}
+                >
+                  {appList.map(app => (
+                    <Option key={app.appCode} value={app.appCode} label={app.appName}>
+                      <Space>
+                        <ApartmentOutlined />
+                        <span>{app.appName}</span>
+                        <Tag color="blue">{app.appCode}</Tag>
+                      </Space>
+                    </Option>
+                  ))}
+                </Select>
+              </Form.Item>
+              <Form.Item
+                name="targetCode"
+                label={isEventType ? '选择事件' : '选择API接口'}
+                rules={[{ required: true, message: `请选择${isEventType ? '事件' : 'API接口'}` }]}
+              >
+                <Select placeholder={`选择要调用的${isEventType ? '事件' : 'API接口'}`}>
+                  {isEventType
+                    ? exposedEvents.map(evt => (
+                        <Option key={evt.eventCode} value={evt.eventCode}>
+                          <Space>
+                            <ShareAltOutlined />
+                            <span>{evt.eventName}</span>
+                            <Tag color="purple">{evt.eventCode}</Tag>
+                          </Space>
+                          {evt.description && (
+                            <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
+                              {evt.description}
+                            </div>
+                          )}
+                        </Option>
+                      ))
+                    : exposedApis.map(api => (
+                        <Option key={api.apiCode} value={api.apiCode}>
+                          <Space>
+                            <ApiOutlined />
+                            <span>{api.apiName}</span>
+                            <Tag color={api.httpMethod === 'GET' ? 'green' : api.httpMethod === 'POST' ? 'blue' : 'orange'}>
+                              {api.httpMethod || 'POST'}
+                            </Tag>
+                            <Tag color="purple">{api.apiCode}</Tag>
+                          </Space>
+                          {api.description && (
+                            <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
+                              {api.description}
+                            </div>
+                          )}
+                        </Option>
+                      ))
+                  }
+                </Select>
+              </Form.Item>
+              {!isEventType && (
+                <>
+                  <Form.Item name="callType" label="调用类型" hidden>
+                    <Input value="API" />
+                  </Form.Item>
+                  <Form.Item name="timeoutMs" label="超时时间(毫秒)">
+                    <InputNumber style={{ width: '100%' }} min={1000} max={60000} step={1000} defaultValue={5000} />
+                  </Form.Item>
+                </>
+              )}
+              {isEventType && (
+                <Form.Item name="callType" label="调用类型" hidden>
+                  <Input value="EVENT" />
+                </Form.Item>
+              )}
+              <Form.Item name="callParams" label={isEventType ? "事件载荷(JSON)" : "请求参数(JSON)"}>
+                <Input.TextArea
+                  rows={5}
+                  placeholder={
+                    isEventType
+                      ? '{"field1": "value1", "field2": "${existingVariable}"}'
+                      : '{"param1": "value1", "param2": "${variableFromPrevNode}"}'
+                  }
+                />
+              </Form.Item>
+              <Form.Item name="resultVariable" label="结果变量名">
+                <Input
+                  placeholder={
+                    isEventType
+                      ? "如: publishResult，事件发布结果存入此变量"
+                      : "如: apiResult，接口返回结果存入此变量"
+                  }
+                />
+              </Form.Item>
+              <Divider orientation="left" orientationMargin={0}>
+                <Tag color="blue">提示</Tag>
+              </Divider>
+              <div style={{ fontSize: 12, color: '#666', lineHeight: 1.8 }}>
+                <div>• 参数中可使用 <code style={{ background: '#f0f0f0', padding: '2px 6px', borderRadius: 4 }}>$\{'{'}变量名{'}'}</code> 引用流程中的变量</div>
+                <div>• 调用前需在 <b>跨应用服务管理</b> 中注册目标应用的API或事件</div>
+                <div>• 系统会自动在请求头中添加调用方标识，用于鉴权</div>
+              </div>
             </>
           )
         default:

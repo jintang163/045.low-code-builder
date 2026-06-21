@@ -213,3 +213,84 @@ export const rpaApi = {
   calculateNextExecution: (cronExpression: string) =>
     request.get('/rpa/schedule/next-execution', { params: { cronExpression } }),
 }
+
+export interface AppExposedApi {
+  id?: number
+  appId: number
+  appCode?: string
+  apiName: string
+  apiCode: string
+  apiType?: string
+  httpMethod?: string
+  apiPath?: string
+  requestSchema?: string
+  responseSchema?: string
+  description?: string
+  authType?: string
+  isTransactional?: number
+  timeoutMs?: number
+  status?: number
+  createdTime?: string
+  updatedTime?: string
+}
+
+export interface AppExposedEvent {
+  id?: number
+  appId: number
+  appCode?: string
+  eventName: string
+  eventCode: string
+  payloadSchema?: string
+  description?: string
+  status?: number
+  createdTime?: string
+  updatedTime?: string
+}
+
+export interface CrossAppCallDTO {
+  targetAppCode: string
+  callType?: 'API' | 'EVENT'
+  targetCode: string
+  params?: Record<string, any>
+  timeoutMs?: number
+  callerAppId?: number
+  callerLogicId?: number
+}
+
+export const crossAppApi = {
+  executeCall: (dto: CrossAppCallDTO) =>
+    request.post<Record<string, any>>('/cross-app/call', dto),
+  publishEvent: (payload: Record<string, any>) =>
+    request.post<Record<string, any>>('/cross-app/event/publish', payload),
+
+  registerApi: (data: AppExposedApi) =>
+    request.post<AppExposedApi>('/cross-app/api/register', data),
+  updateApi: (data: AppExposedApi) =>
+    request.put<AppExposedApi>('/cross-app/api', data),
+  deleteApi: (id: number) => request.delete(`/cross-app/api/${id}`),
+  getApi: (id: number) => request.get<AppExposedApi>(`/cross-app/api/${id}`),
+  getApiByCode: (code: string) => request.get<AppExposedApi>(`/cross-app/api/code/${code}`),
+  listApisByApp: (appId: number) =>
+    request.get<AppExposedApi[]>(`/cross-app/api/list/app/${appId}`),
+  listApisByAppCode: (appCode: string) =>
+    request.get<AppExposedApi[]>(`/cross-app/api/list/app-code/${appCode}`),
+  pageApis: (current = 1, size = 10, appId?: number, keyword?: string) =>
+    request.get('/cross-app/api/page', { params: { current, size, appId, keyword } }),
+
+  registerEvent: (data: AppExposedEvent) =>
+    request.post<AppExposedEvent>('/cross-app/event/register', data),
+  updateEvent: (data: AppExposedEvent) =>
+    request.put<AppExposedEvent>('/cross-app/event', data),
+  deleteEvent: (id: number) => request.delete(`/cross-app/event/${id}`),
+  getEvent: (id: number) => request.get<AppExposedEvent>(`/cross-app/event/${id}`),
+  getEventByCode: (code: string) => request.get<AppExposedEvent>(`/cross-app/event/code/${code}`),
+  listEventsByApp: (appId: number) =>
+    request.get<AppExposedEvent[]>(`/cross-app/event/list/app/${appId}`),
+  listEventsByAppCode: (appCode: string) =>
+    request.get<AppExposedEvent[]>(`/cross-app/event/list/app-code/${appCode}`),
+  pageEvents: (current = 1, size = 10, appId?: number, keyword?: string) =>
+    request.get('/cross-app/event/page', { params: { current, size, appId, keyword } }),
+
+  discoverServices: (appCode?: string) =>
+    request.get<Record<string, any>>('/cross-app/discover', { params: { appCode } }),
+}
