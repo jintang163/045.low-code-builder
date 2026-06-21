@@ -313,9 +313,7 @@ public class WorkflowService extends ServiceImpl<WorkflowDefinitionMapper, Workf
                 SequenceFlow sequenceFlow = new SequenceFlow(sourceId, targetId);
                 sequenceFlow.setId(edgeId != null ? edgeId : "flow_" + i);
                 if (condition != null && !condition.trim().isEmpty()) {
-                    FormalExpression expression = new FormalExpression();
-                    expression.setExpression(condition);
-                    sequenceFlow.setConditionExpression(expression);
+                    sequenceFlow.setConditionExpression(condition);
                 }
                 process.addFlowElement(sequenceFlow);
             }
@@ -394,13 +392,16 @@ public class WorkflowService extends ServiceImpl<WorkflowDefinitionMapper, Workf
                 String delegateExpression = config.getString("delegateExpression");
                 String className = config.getString("className");
                 if (expression != null && !expression.isEmpty()) {
-                    serviceTask.setExpression(expression);
+                    serviceTask.setImplementationType("expression");
+                    serviceTask.setImplementation(expression);
                 } else if (delegateExpression != null && !delegateExpression.isEmpty()) {
-                    serviceTask.setDelegateExpression(delegateExpression);
+                    serviceTask.setImplementationType("delegateExpression");
+                    serviceTask.setImplementation(delegateExpression);
                 } else if (className != null && !className.isEmpty()) {
                     serviceTask.setImplementation(className);
                 } else {
-                    serviceTask.setExpression("${serviceTask.execute()}");
+                    serviceTask.setImplementationType("expression");
+                    serviceTask.setImplementation("${serviceTask.execute()}");
                 }
                 return serviceTask;
             }
@@ -418,10 +419,6 @@ public class WorkflowService extends ServiceImpl<WorkflowDefinitionMapper, Workf
                 BusinessRuleTask ruleTask = new BusinessRuleTask();
                 ruleTask.setId(nodeId);
                 ruleTask.setName(nodeName);
-                String ruleKeys = config.getString("ruleKeys");
-                if (ruleKeys != null) {
-                    ruleTask.setRuleKeys(Arrays.asList(ruleKeys.split(",")));
-                }
                 return ruleTask;
             }
             case "SEND_TASK": {
@@ -583,7 +580,7 @@ public class WorkflowService extends ServiceImpl<WorkflowDefinitionMapper, Workf
                         edge.put("targetNodeId", flow.getTargetRef());
                         edge.put("id", flow.getId());
                         edge.put("conditionExpression", flow.getConditionExpression() != null ?
-                                flow.getConditionExpression().getExpressionText() : null);
+                                flow.getConditionExpression() : null);
                         edges.add(edge);
                     }
                 }

@@ -7,6 +7,7 @@ import com.lowcode.model.dto.VersionCompareResult;
 import com.lowcode.model.entity.DataModel;
 import com.lowcode.model.entity.DataModelVersion;
 import com.lowcode.model.entity.ModelField;
+import com.lowcode.model.entity.ModelIndex;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -125,7 +126,7 @@ public class VersionRollbackService {
         }
 
         if (updateModel.getIndexes() != null) {
-            for (var index : updateModel.getIndexes()) {
+            for (ModelIndex index : updateModel.getIndexes()) {
                 index.setModelId(modelId);
                 index.setId(null);
                 index.setCreatedBy(null);

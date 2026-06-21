@@ -34,12 +34,18 @@ import {
   UserOutlined,
   ClickOutlined,
   PercentageOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  QuestionCircleOutlined,
+  DashboardOutlined,
+  DesktopOutlined,
 } from '@ant-design/icons'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   ABTestInfo,
   ABTestVariantStats,
   ABTestStats,
+  ABTestConfidenceResult,
   abtestApi,
   mockABTests,
   mockStats,
@@ -196,7 +202,7 @@ const ABTestDetail: React.FC = () => {
     try {
       const res: any = await abtestApi.promoteWinner(Number(id), variantId)
       if (res.code === 0 || res.code === 200) {
-        message.success('优胜版本已推广')
+        message.success('优胜版本已推广到正式页面')
       } else {
         message.error(res.message || '推广失败')
       }
@@ -213,10 +219,30 @@ const ABTestDetail: React.FC = () => {
 
   const getWinnerVariant = (): ABTestVariantStats | null => {
     if (!stats?.winnerVariantId) return null
-    return stats.variants.find(v => v.variantId === stats.winnerVariantId) || null
+    return stats.variantStats?.find(v => v.variantId === stats.winnerVariantId) || null
   }
 
-  const chartData = stats?.variants.map(v => ({
+  const getWinnerConfidence = (): ABTestConfidenceResult | null => {
+    if (!stats?.winnerVariantId || !stats.confidenceResults) return null
+    return stats.confidenceResults.find(c => c.variantId === stats.winnerVariantId) || null
+  }
+
+  const getRecommendationTag = (recommendation: string, isControl: boolean) => {
+    if (isControl || recommendation === 'CONTROL') {
+      return <Tag color="blue" icon={<DashboardOutlined />}>对照组</Tag>
+    }
+    switch (recommendation) {
+      case 'WINNER':
+        return <Tag color="gold" icon={<TrophyOutlined />}>优胜</Tag>
+      case 'LOSER':
+        return <Tag color="red" icon={<CloseCircleOutlined />}>劣势</Tag>
+      case 'INCONCLUSIVE':
+      default:
+        return <Tag color="default" icon={<QuestionCircleOutlined />}>无显著</Tag>
+    }
+  }
+
+  const chartData = stats?.variantStats?.map(v => ({
     variantName: v.variantName,
     conversionRate: v.conversionRate,
     pageViews: v.pageViews,
@@ -244,23 +270,34 @@ const ABTestDetail: React.FC = () => {
     },
   }
 
-  const columns = [
+  const variantColumns = [
     {
       title: '变体名称',
       dataIndex: 'variantName',
       key: 'variantName',
-      width: 200,
+      width: 220,
       render: (text: string, record: ABTestVariantStats) => (
-        <Space>
-          {record.variantType === 'control' ? (
-            <Tag color="blue" icon={<ControlOutlined />}>对照组</Tag>
-          ) : (
-            <Tag color="green" icon={<ThunderboltOutlined />}>实验组</Tag>
-          )}
-          <span style={{ fontWeight: 500 }}>{text}</span>
-          {stats?.winnerVariantId === record.variantId && (
-            <TrophyOutlined style={{ color: '#faad14' }} />
-          )}
+        <Space direction="vertical" size={4}>
+          <Space>
+            {record.variantType === 'control' ? (
+              <Tag color="blue" icon={<ControlOutlined />}>对照组</Tag>
+            ) : (
+              <Tag color="green" icon={<ThunderboltOutlined />}>实验组</Tag>
+            )}
+            <span style={{ fontWeight: 500 }}>{text}</span>
+            {stats?.winnerVariantId === record.variantId && (
+              <TrophyOutlined style={{ color: '#faad14' }} />
+            )}
+          </Space>
+          <Space size={8}>
+            {record.snapshotId && (
+              <Tag color="purple" style={{ fontSize: 11 }}>快照ID: {record.snapshotId}</Tag>
+            )}
+            {record.version && (
+              <Tag color="cyan" style={{ fontSize: 11 }}>版本: {record.version}</Tag>
+            )}
+            <Tag color="orange" style={{ fontSize: 11 }}>流量: {record.trafficWeight}%</Tag>
+          </Space>
         </Space>
       ),
     },
@@ -268,21 +305,21 @@ const ABTestDetail: React.FC = () => {
       title: '浏览量',
       dataIndex: 'pageViews',
       key: 'pageViews',
-      width: 120,
+      width: 100,
       render: (val: number) => val?.toLocaleString() || '-',
     },
     {
       title: '独立访客',
       dataIndex: 'uniqueVisitors',
       key: 'uniqueVisitors',
-      width: 120,
+      width: 110,
       render: (val: number) => val?.toLocaleString() || '-',
     },
     {
       title: '转化数',
       dataIndex: 'conversions',
       key: 'conversions',
-      width: 120,
+      width: 100,
       render: (val: number) => val?.toLocaleString() || '-',
     },
     {
@@ -294,42 +331,13 @@ const ABTestDetail: React.FC = () => {
         <Space direction="vertical" size={4} style={{ width: '100%' }}>
           <span style={{ fontWeight: 500 }}>{rate?.toFixed(2)}%</span>
           <Progress
-            percent={rate || 0}
+            percent={Math.min(rate || 0, 100)}
             size="small"
             strokeColor={record.variantType === 'control' ? '#1677ff' : '#52c41a'}
             showInfo={false}
           />
         </Space>
       ),
-    },
-    {
-      title: '置信区间',
-      dataIndex: 'confidenceInterval',
-      key: 'confidenceInterval',
-      width: 120,
-      render: (val: number, record: ABTestVariantStats) => {
-        const rate = record.conversionRate || 0
-        const ci = val || 0
-        return (
-          <span>
-            {(rate - ci).toFixed(2)}% ~ {(rate + ci).toFixed(2)}%
-          </span>
-        )
-      },
-    },
-    {
-      title: '统计显著性',
-      dataIndex: 'statisticalSignificance',
-      key: 'statisticalSignificance',
-      width: 120,
-      render: (val: number) => {
-        if (val === undefined || val === null || val === 0) {
-          return <Tag color="default">-</Tag>
-        }
-        const percent = (val * 100).toFixed(1)
-        const color = val >= 0.95 ? 'green' : val >= 0.9 ? 'blue' : 'orange'
-        return <Tag color={color}>{percent}%</Tag>
-      },
     },
     {
       title: '相对提升',
@@ -341,15 +349,115 @@ const ABTestDetail: React.FC = () => {
         const color = val > 0 ? 'green' : val < 0 ? 'red' : 'default'
         const icon = val > 0 ? '↑' : val < 0 ? '↓' : '-'
         return (
-          <span style={{ color: color === 'green' ? '#52c41a' : color === 'red' ? '#ff4d4f' : '#999' }}>
+          <span style={{ color: color === 'green' ? '#52c41a' : color === 'red' ? '#ff4d4f' : '#999', fontWeight: 500 }}>
             {icon} {Math.abs(val).toFixed(2)}%
           </span>
         )
       },
     },
+    {
+      title: '操作',
+      key: 'action',
+      width: 120,
+      render: (_: any, record: ABTestVariantStats) => (
+        abTest?.status === 3 && (
+          <Button
+            type="link"
+            size="small"
+            icon={<TrophyOutlined />}
+            onClick={() => handlePromote(record.variantId)}
+          >
+            推广此版本
+          </Button>
+        )
+      ),
+    },
+  ]
+
+  const confidenceColumns = [
+    {
+      title: '变体',
+      dataIndex: 'variantName',
+      key: 'variantName',
+      width: 220,
+      render: (text: string, record: ABTestConfidenceResult) => (
+        <Space>
+          {getRecommendationTag(record.recommendation, record.isControl)}
+          <span style={{ fontWeight: 500 }}>{text}</span>
+        </Space>
+      ),
+    },
+    {
+      title: '转化率',
+      dataIndex: 'conversionRate',
+      key: 'conversionRate',
+      width: 100,
+      render: (val: number) => <span style={{ fontWeight: 500 }}>{val?.toFixed(2)}%</span>,
+    },
+    {
+      title: '置信区间',
+      dataIndex: ['confidenceInterval', 'display'],
+      key: 'ciDisplay',
+      width: 180,
+      render: (display: string, record: ABTestConfidenceResult) => (
+        <Tooltip title={`下限: ${record.confidenceInterval?.lower?.toFixed(2)}%, 上限: ${record.confidenceInterval?.upper?.toFixed(2)}%`}>
+          <span style={{ fontFamily: 'monospace' }}>{display}</span>
+        </Tooltip>
+      ),
+    },
+    {
+      title: '提升幅度',
+      dataIndex: 'improvementVsControl',
+      key: 'improvementVsControl',
+      width: 120,
+      render: (val: number, record: ABTestConfidenceResult) => {
+        if (record.isControl) return <Tag color="blue">基准</Tag>
+        const color = val > 0 ? 'green' : val < 0 ? 'red' : 'default'
+        const icon = val > 0 ? '↑' : val < 0 ? '↓' : '-'
+        return (
+          <span style={{ color: color === 'green' ? '#52c41a' : color === 'red' ? '#ff4d4f' : '#999', fontWeight: 500 }}>
+            {icon} {Math.abs(val).toFixed(2)}%
+          </span>
+        )
+      },
+    },
+    {
+      title: 'Z值',
+      dataIndex: 'zScore',
+      key: 'zScore',
+      width: 80,
+      render: (val: number) => val?.toFixed(3) || '-',
+    },
+    {
+      title: 'P值',
+      dataIndex: 'pValue',
+      key: 'pValue',
+      width: 100,
+      render: (val: number) => {
+        if (val === undefined || val === null) return '-'
+        const significant = val < 0.05
+        return (
+          <span style={{ color: significant ? '#52c41a' : '#999', fontWeight: significant ? 500 : 400 }}>
+            {val.toFixed(4)}
+          </span>
+        )
+      },
+    },
+    {
+      title: '统计显著',
+      dataIndex: 'isSignificant',
+      key: 'isSignificant',
+      width: 100,
+      render: (val: boolean) => val ? (
+        <Tag color="green" icon={<CheckCircleOutlined />}>显著</Tag>
+      ) : (
+        <Tag color="default" icon={<QuestionCircleOutlined />}>不显著</Tag>
+      ),
+    },
   ]
 
   const winner = getWinnerVariant()
+  const winnerConfidence = getWinnerConfidence()
 
   return (
     <div style={{ background: '#f5f5f5', minHeight: '100vh', padding: 16 }}>
@@ -379,6 +487,14 @@ const ABTestDetail: React.FC = () => {
             >
               刷新数据
             </Button>
+            {id && (
+              <Button
+                icon={<DesktopOutlined />}
+                onClick={() => navigate(`/abtest/runtime/${id}`)}
+              >
+                预览运行时
+              </Button>
+            )}
             {abTest?.status === 0 && (
               <Button
                 type="primary"
@@ -476,6 +592,21 @@ const ABTestDetail: React.FC = () => {
               <Descriptions.Item label="变体数量">
                 {abTest.variants?.length || 0} 个
               </Descriptions.Item>
+              <Descriptions.Item label="对照组快照ID">
+                {abTest.controlSnapshotId ? (
+                  <Tag color="purple">{abTest.controlSnapshotId}</Tag>
+                ) : '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="对照组版本">
+                {abTest.controlVersion ? (
+                  <Tag color="cyan">{abTest.controlVersion}</Tag>
+                ) : '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="优胜变体ID">
+                {abTest.winnerVariantId ? (
+                  <Tag color="gold">{abTest.winnerVariantId}</Tag>
+                ) : '-'}
+              </Descriptions.Item>
               <Descriptions.Item label="描述" span={3}>
                 {abTest.description || '-'}
               </Descriptions.Item>
@@ -531,10 +662,17 @@ const ABTestDetail: React.FC = () => {
                   <span style={{ fontWeight: 500 }}>
                     统计显著！优胜版本为：{winner.variantName}
                   </span>
-                  <Tag color="green">
-                    转化率提升 {winner.improvementVsControl?.toFixed(2) || 0}%
-                  </Tag>
-                  <Tag color="blue">
+                  {winner.improvementVsControl !== undefined && (
+                    <Tag color="green">
+                      转化率提升 {winner.improvementVsControl.toFixed(2)}%
+                    </Tag>
+                  )}
+                  {winnerConfidence?.pValue !== undefined && (
+                    <Tag color="blue">
+                      P值: {winnerConfidence.pValue.toFixed(4)}
+                    </Tag>
+                  )}
+                  <Tag color="purple">
                     置信度 {stats.confidenceLevel}%
                   </Tag>
                 </Space>
@@ -567,15 +705,38 @@ const ABTestDetail: React.FC = () => {
         </Col>
 
         <Col span={24}>
-          <Card title="详细数据" loading={statsLoading}>
+          <Card title="变体详细数据" loading={statsLoading}>
             <Table
-              columns={columns}
-              dataSource={stats?.variants || []}
+              columns={variantColumns}
+              dataSource={stats?.variantStats || []}
               rowKey="variantId"
               pagination={false}
             />
           </Card>
         </Col>
+
+        {stats?.confidenceResults && stats.confidenceResults.length > 0 && (
+          <Col span={24}>
+            <Card
+              title={
+                <Space>
+                  <span>统计显著性分析</span>
+                  <Tag color={stats.isStatisticallySignificant ? 'green' : 'orange'}>
+                    {stats.isStatisticallySignificant ? '存在显著差异' : '无显著差异'}
+                  </Tag>
+                </Space>
+              }
+              loading={statsLoading}
+            >
+              <Table
+                columns={confidenceColumns}
+                dataSource={stats.confidenceResults}
+                rowKey="variantId"
+                pagination={false}
+              />
+            </Card>
+          </Col>
+        )}
 
         {abTest?.conclusion && (
           <Col span={24}>
@@ -610,7 +771,7 @@ const ABTestDetail: React.FC = () => {
         >
           {abTest?.variants?.map(v => (
             <Option key={v.id} value={v.id}>
-              {v.variantName} ({v.variantType === 'control' ? '对照组' : '实验组'}
+              {v.variantName} ({v.variantType === 'control' ? '对照组' : '实验组'})
             </Option>
           ))}
         </Select>

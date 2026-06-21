@@ -131,7 +131,7 @@ public class ABTestVariantServiceImpl extends ServiceImpl<ABTestVariantMapper, A
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void incrementPageView(Long variantId, String userId) {
+    public void incrementPageView(Long variantId, Long userId) {
         log.info("增加浏览量，variantId: {}, userId: {}", variantId, userId);
         try {
             ABTestVariant variant = getById(variantId);
@@ -139,10 +139,12 @@ public class ABTestVariantServiceImpl extends ServiceImpl<ABTestVariantMapper, A
                 throw new BusinessException(ErrorCode.NOT_FOUND, "变体不存在");
             }
             variant.setPageViews(variant.getPageViews() != null ? variant.getPageViews() + 1 : 1L);
-            String userKey = variantId + ":" + userId;
-            if (!viewedUsers.contains(userKey)) {
-                viewedUsers.add(userKey);
-                variant.setUniqueVisitors(variant.getUniqueVisitors() != null ? variant.getUniqueVisitors() + 1 : 1L);
+            if (userId != null) {
+                String userKey = variantId + ":" + userId;
+                if (!viewedUsers.contains(userKey)) {
+                    viewedUsers.add(userKey);
+                    variant.setUniqueVisitors(variant.getUniqueVisitors() != null ? variant.getUniqueVisitors() + 1 : 1L);
+                }
             }
             if (variant.getPageViews() > 0 && variant.getConversions() != null) {
                 variant.setConversionRate(BigDecimal.valueOf(variant.getConversions())
@@ -159,7 +161,7 @@ public class ABTestVariantServiceImpl extends ServiceImpl<ABTestVariantMapper, A
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void incrementConversion(Long variantId, String userId, String eventKey) {
+    public void incrementConversion(Long variantId, Long userId, String eventKey) {
         log.info("增加转化数，variantId: {}, userId: {}, eventKey: {}", variantId, userId, eventKey);
         try {
             ABTestVariant variant = getById(variantId);
@@ -189,6 +191,8 @@ public class ABTestVariantServiceImpl extends ServiceImpl<ABTestVariantMapper, A
         v1.setVariantType("CONTROL");
         v1.setDescription("原始版本");
         v1.setTrafficWeight(50);
+        v1.setSnapshotId(1L);
+        v1.setVersion("v1.0.0");
         v1.setPageViews(1000L);
         v1.setUniqueVisitors(800L);
         v1.setConversions(50L);
@@ -201,6 +205,8 @@ public class ABTestVariantServiceImpl extends ServiceImpl<ABTestVariantMapper, A
         v2.setVariantType("EXPERIMENT");
         v2.setDescription("新版本A");
         v2.setTrafficWeight(50);
+        v2.setSnapshotId(2L);
+        v2.setVersion("v1.1.0");
         v2.setPageViews(1000L);
         v2.setUniqueVisitors(850L);
         v2.setConversions(70L);

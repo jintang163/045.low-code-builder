@@ -9,7 +9,6 @@ import com.lowcode.flow.entity.BusinessLogic;
 import com.lowcode.flow.entity.LogicEdge;
 import com.lowcode.flow.entity.LogicNode;
 import com.lowcode.flow.mapper.BusinessLogicMapper;
-import com.lowcode.generator.service.CodeGeneratorService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -31,8 +30,8 @@ public class BusinessLogicService extends ServiceImpl<BusinessLogicMapper, Busin
     @Autowired
     private LogicEdgeService edgeService;
 
-    @Autowired
-    private CodeGeneratorService codeGeneratorService;
+    @Autowired(required = false)
+    private Object codeGeneratorService;
 
     public BusinessLogic getLogicDetail(Long id) {
         BusinessLogic logic = getById(id);

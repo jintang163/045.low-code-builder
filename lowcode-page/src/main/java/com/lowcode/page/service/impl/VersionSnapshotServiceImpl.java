@@ -22,6 +22,7 @@ import com.lowcode.page.mapper.PageMapper;
 import com.lowcode.page.mapper.ReleaseRecordMapper;
 import com.lowcode.page.mapper.VersionSnapshotMapper;
 import com.lowcode.page.service.PageService;
+import com.lowcode.page.service.PageComponentService;
 import com.lowcode.page.service.VersionSnapshotService;
 import com.lowcode.page.vo.VersionDiffVO;
 import lombok.extern.slf4j.Slf4j;

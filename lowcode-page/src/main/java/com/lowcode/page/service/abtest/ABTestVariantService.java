@@ -1,10 +1,11 @@
 package com.lowcode.page.service.abtest;
 
+import com.baomidou.mybatisplus.extension.service.IService;
 import com.lowcode.page.entity.abtest.ABTestVariant;
 
 import java.util.List;
 
-public interface ABTestVariantService {
+public interface ABTestVariantService extends IService<ABTestVariant> {
 
     List<ABTestVariant> getVariantList(Long testId);
 
@@ -14,7 +15,7 @@ public interface ABTestVariantService {
 
     void deleteVariant(Long id);
 
-    void incrementPageView(Long variantId, String userId);
+    void incrementPageView(Long variantId, Long userId);
 
-    void incrementConversion(Long variantId, String userId, String eventKey);
+    void incrementConversion(Long variantId, Long userId, String eventKey);
 }

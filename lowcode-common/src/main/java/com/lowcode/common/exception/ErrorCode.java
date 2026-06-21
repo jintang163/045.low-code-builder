@@ -42,7 +42,9 @@ public enum ErrorCode {
     PASSWORD_ERROR(60003, "密码错误"),
     USERNAME_EXISTS(60004, "用户名已存在"),
     TOKEN_INVALID(60005, "Token无效或已过期"),
-    TOKEN_EXPIRED(60006, "Token已过期");
+    TOKEN_EXPIRED(60006, "Token已过期"),
+
+    INTERNAL_SERVER_ERROR(500, "服务器内部错误");
 
     private final Integer code;
     private final String message;

@@ -5,9 +5,12 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.lowcode.common.exception.BusinessException;
 import com.lowcode.common.exception.ErrorCode;
+import com.lowcode.page.entity.VersionSnapshot;
 import com.lowcode.page.entity.abtest.ABTest;
 import com.lowcode.page.entity.abtest.ABTestVariant;
 import com.lowcode.page.mapper.abtest.ABTestMapper;
+import com.lowcode.page.service.PageService;
+import com.lowcode.page.service.VersionSnapshotService;
 import com.lowcode.page.service.abtest.ABTestService;
 import com.lowcode.page.service.abtest.ABTestVariantService;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +37,12 @@ public class ABTestServiceImpl extends ServiceImpl<ABTestMapper, ABTest> impleme
     @Autowired
     @Lazy
     private ABTestVariantService variantService;
+
+    @Autowired
+    private VersionSnapshotService versionSnapshotService;
+
+    @Autowired
+    private PageService pageService;
 
     private static final int STATUS_DRAFT = 0;
     private static final int STATUS_RUNNING = 1;
@@ -73,6 +82,9 @@ public class ABTestServiceImpl extends ServiceImpl<ABTestMapper, ABTest> impleme
             }
             wrapper.orderByDesc(ABTest::getCreatedTime);
             List<ABTest> list = list(wrapper);
+            for (ABTest test : list) {
+                test.setVariants(variantService.getVariantList(test.getId()));
+            }
             log.info("获取测试列表成功，数量: {}", list.size());
             return list;
         } catch (Exception e) {
@@ -97,6 +109,9 @@ public class ABTestServiceImpl extends ServiceImpl<ABTestMapper, ABTest> impleme
             }
             wrapper.orderByDesc(ABTest::getCreatedTime);
             Page<ABTest> page = page(new Page<>(current, size), wrapper);
+            for (ABTest test : page.getRecords()) {
+                test.setVariants(variantService.getVariantList(test.getId()));
+            }
             log.info("分页查询测试成功，总数: {}", page.getTotal());
             return page;
         } catch (Exception e) {
@@ -249,31 +264,88 @@ public class ABTestServiceImpl extends ServiceImpl<ABTestMapper, ABTest> impleme
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ABTest stopTest(Long winnerVariantId) {
-        log.info("结束测试，winnerVariantId: {}", winnerVariantId);
+    public ABTest stopTest(Long testId, Long winnerVariantId) {
+        log.info("结束测试，testId: {}, winnerVariantId: {}", testId, winnerVariantId);
         try {
-            ABTestVariant winnerVariant = variantService.getById(winnerVariantId);
-            if (winnerVariant == null) {
-                throw new BusinessException(ErrorCode.NOT_FOUND, "优胜变体不存在");
-            }
-            ABTest test = getById(winnerVariant.getTestId());
+            ABTest test = getById(testId);
             if (test == null) {
                 throw new BusinessException(ErrorCode.NOT_FOUND, "测试不存在");
             }
             if (test.getStatus() != STATUS_RUNNING && test.getStatus() != STATUS_PAUSED) {
                 throw new BusinessException(ErrorCode.PARAM_ERROR, "当前状态不允许结束测试");
             }
+            ABTestVariant winnerVariant = null;
+            if (winnerVariantId != null) {
+                winnerVariant = variantService.getById(winnerVariantId);
+                if (winnerVariant == null) {
+                    throw new BusinessException(ErrorCode.NOT_FOUND, "优胜变体不存在");
+                }
+                if (!winnerVariant.getTestId().equals(testId)) {
+                    throw new BusinessException(ErrorCode.PARAM_ERROR, "变体不属于该测试");
+                }
+                test.setWinnerVariantId(winnerVariantId);
+            }
             test.setStatus(STATUS_STOPPED);
-            test.setWinnerVariantId(winnerVariantId);
             test.setEndTime(LocalDateTime.now());
             updateById(test);
-            log.info("结束测试成功，testId: {}, winnerVariantId: {}", test.getId(), winnerVariantId);
-            return getTestDetail(test.getId());
+            log.info("结束测试成功，testId: {}, winnerVariantId: {}", testId, winnerVariantId);
+            return getTestDetail(testId);
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
-            log.error("结束测试失败，winnerVariantId: {}", winnerVariantId, e);
-            return getMockStoppedTest(winnerVariantId);
+            log.error("结束测试失败，testId: {}, winnerVariantId: {}", testId, winnerVariantId, e);
+            return getMockStoppedTest(testId, winnerVariantId);
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ABTest promoteWinner(Long testId, Long variantId) {
+        log.info("推广优胜版本，testId: {}, variantId: {}", testId, variantId);
+        try {
+            ABTest test = getById(testId);
+            if (test == null) {
+                throw new BusinessException(ErrorCode.NOT_FOUND, "测试不存在");
+            }
+            if (test.getStatus() != STATUS_STOPPED && test.getStatus() != STATUS_PAUSED) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "测试未结束，请先结束测试");
+            }
+            ABTestVariant variant = variantService.getById(variantId);
+            if (variant == null) {
+                throw new BusinessException(ErrorCode.NOT_FOUND, "变体不存在");
+            }
+            if (!variant.getTestId().equals(testId)) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "变体不属于该测试");
+            }
+
+            Long snapshotId = variant.getSnapshotId();
+            if (snapshotId == null) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "变体未关联快照，无法推广");
+            }
+
+            String resourceType = test.getResourceType();
+            Long resourceId = test.getResourceId();
+
+            if ("PAGE".equalsIgnoreCase(resourceType) && resourceId != null) {
+                log.info("通过快照回滚推广页面，resourceId: {}, snapshotId: {}", resourceId, snapshotId);
+                versionSnapshotService.rollbackToSnapshot(snapshotId,
+                        "A/B测试优胜版本推广: " + test.getTestName() + " / " + variant.getVariantName(),
+                        true);
+                pageService.publishPage(resourceId);
+                log.info("页面发布成功，pageId: {}", resourceId);
+            }
+
+            test.setWinnerVariantId(variantId);
+            test.setConclusion("已推广优胜版本: " + variant.getVariantName());
+            updateById(test);
+
+            log.info("推广优胜版本成功，testId: {}, variantId: {}", testId, variantId);
+            return getTestDetail(testId);
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("推广优胜版本失败，testId: {}, variantId: {}", testId, variantId, e);
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "推广失败: " + e.getMessage());
         }
     }
 
@@ -283,31 +355,83 @@ public class ABTestServiceImpl extends ServiceImpl<ABTestMapper, ABTest> impleme
         try {
             ABTest test = getTestDetail(id);
             Map<String, Object> stats = new HashMap<>();
-            stats.put("test", test);
+            stats.put("testId", test.getId());
+            stats.put("testName", test.getTestName());
+            stats.put("status", test.getStatus());
+            stats.put("confidenceLevel", test.getConfidenceLevel());
+            stats.put("startTime", test.getStartTime());
+            stats.put("endTime", test.getEndTime());
+            stats.put("winnerVariantId", test.getWinnerVariantId());
+
             List<ABTestVariant> variants = test.getVariants();
             List<Map<String, Object>> variantStats = new ArrayList<>();
             long totalPageViews = 0;
+            long totalUniqueVisitors = 0;
             long totalConversions = 0;
+
+            ABTestVariant controlVariant = null;
+            if (variants != null) {
+                for (ABTestVariant v : variants) {
+                    if ("CONTROL".equalsIgnoreCase(v.getVariantType())) {
+                        controlVariant = v;
+                        break;
+                    }
+                }
+            }
+            if (controlVariant == null && variants != null && !variants.isEmpty()) {
+                controlVariant = variants.get(0);
+            }
+
             if (variants != null) {
                 for (ABTestVariant variant : variants) {
                     Map<String, Object> variantStat = new HashMap<>();
                     variantStat.put("variantId", variant.getId());
                     variantStat.put("variantName", variant.getVariantName());
-                    variantStat.put("pageViews", variant.getPageViews());
-                    variantStat.put("uniqueVisitors", variant.getUniqueVisitors());
-                    variantStat.put("conversions", variant.getConversions());
-                    variantStat.put("conversionRate", variant.getConversionRate());
+                    variantStat.put("variantType", variant.getVariantType());
+                    variantStat.put("snapshotId", variant.getSnapshotId());
+                    variantStat.put("version", variant.getVersion());
+                    variantStat.put("trafficWeight", variant.getTrafficWeight());
+                    variantStat.put("pageViews", variant.getPageViews() != null ? variant.getPageViews() : 0);
+                    variantStat.put("uniqueVisitors", variant.getUniqueVisitors() != null ? variant.getUniqueVisitors() : 0);
+                    variantStat.put("conversions", variant.getConversions() != null ? variant.getConversions() : 0);
+                    variantStat.put("conversionRate", variant.getConversionRate() != null ? variant.getConversionRate() : BigDecimal.ZERO);
+
+                    if (controlVariant != null && !variant.getId().equals(controlVariant.getId())) {
+                        long controlPv = controlVariant.getPageViews() != null ? controlVariant.getPageViews() : 0;
+                        long controlConv = controlVariant.getConversions() != null ? controlVariant.getConversions() : 0;
+                        BigDecimal controlRate = controlPv > 0
+                                ? BigDecimal.valueOf(controlConv).divide(BigDecimal.valueOf(controlPv), 4, RoundingMode.HALF_UP)
+                                : BigDecimal.ZERO;
+                        BigDecimal variantRate = variantStat.containsKey("conversionRate")
+                                ? (BigDecimal) variantStat.get("conversionRate")
+                                : BigDecimal.ZERO;
+                        if (controlRate.compareTo(BigDecimal.ZERO) > 0) {
+                            BigDecimal improvement = variantRate.subtract(controlRate)
+                                    .divide(controlRate, 4, RoundingMode.HALF_UP);
+                            variantStat.put("improvementVsControl", improvement);
+                        } else {
+                            variantStat.put("improvementVsControl", BigDecimal.ZERO);
+                        }
+                    } else {
+                        variantStat.put("isControl", true);
+                    }
+
                     variantStats.add(variantStat);
                     if (variant.getPageViews() != null) {
                         totalPageViews += variant.getPageViews();
+                    }
+                    if (variant.getUniqueVisitors() != null) {
+                        totalUniqueVisitors += variant.getUniqueVisitors();
                     }
                     if (variant.getConversions() != null) {
                         totalConversions += variant.getConversions();
                     }
                 }
             }
+
             stats.put("variantStats", variantStats);
             stats.put("totalPageViews", totalPageViews);
+            stats.put("totalUniqueVisitors", totalUniqueVisitors);
             stats.put("totalConversions", totalConversions);
             if (totalPageViews > 0) {
                 stats.put("overallConversionRate", BigDecimal.valueOf(totalConversions)
@@ -315,12 +439,31 @@ public class ABTestServiceImpl extends ServiceImpl<ABTestMapper, ABTest> impleme
             } else {
                 stats.put("overallConversionRate", BigDecimal.ZERO);
             }
+
+            Map<String, Object> confidence = calculateConfidence(id);
+            stats.put("confidenceResults", confidence.get("confidenceResults"));
+            stats.put("isStatisticallySignificant", checkStatisticalSignificance(confidence));
+
             log.info("获取测试统计数据成功，id: {}", id);
             return stats;
         } catch (Exception e) {
             log.error("获取测试统计数据失败，id: {}", id, e);
             return getMockTestStats(id);
         }
+    }
+
+    private boolean checkStatisticalSignificance(Map<String, Object> confidence) {
+        if (confidence == null) return false;
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> results = (List<Map<String, Object>>) confidence.get("confidenceResults");
+        if (results == null) return false;
+        for (Map<String, Object> r : results) {
+            Object isSig = r.get("isSignificant");
+            if (Boolean.TRUE.equals(isSig)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
@@ -332,11 +475,12 @@ public class ABTestServiceImpl extends ServiceImpl<ABTestMapper, ABTest> impleme
             Map<String, Object> result = new HashMap<>();
             result.put("testId", testId);
             result.put("testName", test.getTestName());
+            result.put("confidenceLevel", test.getConfidenceLevel());
             List<Map<String, Object>> confidenceResults = new ArrayList<>();
             ABTestVariant controlVariant = null;
             if (variants != null) {
                 for (ABTestVariant variant : variants) {
-                    if ("CONTROL".equals(variant.getVariantType())) {
+                    if ("CONTROL".equalsIgnoreCase(variant.getVariantType())) {
                         controlVariant = variant;
                         break;
                     }
@@ -365,10 +509,13 @@ public class ABTestServiceImpl extends ServiceImpl<ABTestMapper, ABTest> impleme
         Map<String, Object> result = new HashMap<>();
         result.put("variantId", variant.getId());
         result.put("variantName", variant.getVariantName());
+        result.put("variantType", variant.getVariantType());
         long pv = variant.getPageViews() != null ? variant.getPageViews() : 0;
         long conv = variant.getConversions() != null ? variant.getConversions() : 0;
         BigDecimal conversionRate = pv > 0 ? BigDecimal.valueOf(conv).divide(BigDecimal.valueOf(pv), 4, RoundingMode.HALF_UP) : BigDecimal.ZERO;
         result.put("conversionRate", conversionRate);
+        result.put("pageViews", pv);
+        result.put("conversions", conv);
         if (controlVariant != null && !variant.getId().equals(controlVariant.getId())) {
             long controlPv = controlVariant.getPageViews() != null ? controlVariant.getPageViews() : 0;
             long controlConv = controlVariant.getConversions() != null ? controlVariant.getConversions() : 0;
@@ -377,22 +524,38 @@ public class ABTestServiceImpl extends ServiceImpl<ABTestMapper, ABTest> impleme
                     ? conversionRate.subtract(controlRate).divide(controlRate, 4, RoundingMode.HALF_UP)
                     : BigDecimal.ZERO;
             result.put("uplift", uplift);
+            result.put("improvementVsControl", uplift);
             double se = Math.sqrt(conversionRate.doubleValue() * (1 - conversionRate.doubleValue()) / Math.max(pv, 1)
                     + controlRate.doubleValue() * (1 - controlRate.doubleValue()) / Math.max(controlPv, 1));
             BigDecimal zScore = se > 0 ? BigDecimal.valueOf((conversionRate.doubleValue() - controlRate.doubleValue()) / se) : BigDecimal.ZERO;
             result.put("zScore", zScore);
             double pValue = 2 * (1 - normalCdf(Math.abs(zScore.doubleValue())));
-            result.put("pValue", BigDecimal.valueOf(pValue).setScale(4, RoundingMode.HALF_UP));
+            result.put("pValue", BigDecimal.valueOf(pValue).setScale(6, RoundingMode.HALF_UP));
             BigDecimal marginOfError = BigDecimal.valueOf(1.96 * se);
             result.put("confidenceIntervalLower", conversionRate.subtract(marginOfError).max(BigDecimal.ZERO));
             result.put("confidenceIntervalUpper", conversionRate.add(marginOfError).min(BigDecimal.ONE));
+            result.put("confidenceInterval",
+                    "[" + conversionRate.subtract(marginOfError).max(BigDecimal.ZERO).setScale(4, RoundingMode.HALF_UP)
+                    + ", " + conversionRate.add(marginOfError).min(BigDecimal.ONE).setScale(4, RoundingMode.HALF_UP) + "]");
             result.put("isSignificant", pValue < 0.05);
+            result.put("isControl", false);
+            if (pValue < 0.05 && uplift.compareTo(BigDecimal.ZERO) > 0) {
+                result.put("recommendation", "WINNER");
+            } else if (pValue < 0.05 && uplift.compareTo(BigDecimal.ZERO) < 0) {
+                result.put("recommendation", "LOSER");
+            } else {
+                result.put("recommendation", "INCONCLUSIVE");
+            }
         } else {
             result.put("isControl", true);
+            result.put("recommendation", "CONTROL");
             double se = Math.sqrt(conversionRate.doubleValue() * (1 - conversionRate.doubleValue()) / Math.max(pv, 1));
             BigDecimal marginOfError = BigDecimal.valueOf(1.96 * se);
             result.put("confidenceIntervalLower", conversionRate.subtract(marginOfError).max(BigDecimal.ZERO));
             result.put("confidenceIntervalUpper", conversionRate.add(marginOfError).min(BigDecimal.ONE));
+            result.put("confidenceInterval",
+                    "[" + conversionRate.subtract(marginOfError).max(BigDecimal.ZERO).setScale(4, RoundingMode.HALF_UP)
+                    + ", " + conversionRate.add(marginOfError).min(BigDecimal.ONE).setScale(4, RoundingMode.HALF_UP) + "]");
         }
         return result;
     }
@@ -415,19 +578,22 @@ public class ABTestServiceImpl extends ServiceImpl<ABTestMapper, ABTest> impleme
         return sign * y;
     }
 
+    // ==================== Mock 数据 ====================
+
     private ABTest getMockTestDetail(Long id) {
         ABTest test = new ABTest();
         test.setId(id);
         test.setAppId(1L);
-        test.setPageId(100L);
+        test.setResourceId(100L);
+        test.setResourceType("PAGE");
         test.setTestName("Mock测试详情");
         test.setTestCode("MOCK_TEST_" + id);
         test.setDescription("Mock测试描述信息");
-        test.setTestType("PAGE");
         test.setStatus(STATUS_RUNNING);
         test.setStartTime(LocalDateTime.now().minusDays(7));
-        test.setTrafficPercent(50);
-        test.setHashField("userId");
+        test.setTrafficAllocationType("PERCENTAGE");
+        test.setConfidenceLevel(new BigDecimal("0.95"));
+        test.setSampleSize(1000);
         test.setVariants(getMockVariantList(id));
         return test;
     }
@@ -441,6 +607,8 @@ public class ABTestServiceImpl extends ServiceImpl<ABTestMapper, ABTest> impleme
         v1.setVariantType("CONTROL");
         v1.setDescription("原始版本");
         v1.setTrafficWeight(50);
+        v1.setSnapshotId(1L);
+        v1.setVersion("v1.0.0");
         v1.setPageViews(1000L);
         v1.setUniqueVisitors(800L);
         v1.setConversions(50L);
@@ -453,6 +621,8 @@ public class ABTestServiceImpl extends ServiceImpl<ABTestMapper, ABTest> impleme
         v2.setVariantType("EXPERIMENT");
         v2.setDescription("新版本A");
         v2.setTrafficWeight(50);
+        v2.setSnapshotId(2L);
+        v2.setVersion("v1.1.0");
         v2.setPageViews(1000L);
         v2.setUniqueVisitors(850L);
         v2.setConversions(70L);
@@ -470,8 +640,13 @@ public class ABTestServiceImpl extends ServiceImpl<ABTestMapper, ABTest> impleme
             test.setTestName("Mock测试" + i);
             test.setTestCode("MOCK_" + i);
             test.setDescription("Mock测试描述" + i);
+            test.setResourceType("PAGE");
+            test.setResourceId((long) i);
             test.setStatus(i % 3);
+            test.setTrafficAllocationType("PERCENTAGE");
+            test.setConfidenceLevel(new BigDecimal("0.95"));
             test.setCreatedTime(LocalDateTime.now().minusDays(i));
+            test.setVariants(getMockVariantList((long) i));
             list.add(test);
         }
         return list;
@@ -486,8 +661,10 @@ public class ABTestServiceImpl extends ServiceImpl<ABTestMapper, ABTest> impleme
             test.setAppId(appId);
             test.setTestName("Mock分页测试" + ((current - 1) * size + i));
             test.setTestCode("MOCK_PAGE_" + ((current - 1) * size + i));
+            test.setResourceType("PAGE");
             test.setStatus(STATUS_DRAFT);
             test.setCreatedTime(LocalDateTime.now().minusHours(i));
+            test.setVariants(getMockVariantList(test.getId()));
             records.add(test);
         }
         page.setRecords(records);
@@ -515,8 +692,8 @@ public class ABTestServiceImpl extends ServiceImpl<ABTestMapper, ABTest> impleme
         return test;
     }
 
-    private ABTest getMockStoppedTest(Long winnerVariantId) {
-        ABTest test = getMockTestDetail(1L);
+    private ABTest getMockStoppedTest(Long testId, Long winnerVariantId) {
+        ABTest test = getMockTestDetail(testId);
         test.setStatus(STATUS_STOPPED);
         test.setWinnerVariantId(winnerVariantId);
         test.setEndTime(LocalDateTime.now());
@@ -526,13 +703,19 @@ public class ABTestServiceImpl extends ServiceImpl<ABTestMapper, ABTest> impleme
     private Map<String, Object> getMockTestStats(Long id) {
         Map<String, Object> stats = new HashMap<>();
         stats.put("testId", id);
+        stats.put("testName", "Mock测试");
         stats.put("totalPageViews", 2000);
+        stats.put("totalUniqueVisitors", 1650);
         stats.put("totalConversions", 120);
         stats.put("overallConversionRate", new BigDecimal("0.0600"));
+        stats.put("isStatisticallySignificant", true);
         List<Map<String, Object>> variantStats = new ArrayList<>();
         Map<String, Object> v1 = new HashMap<>();
         v1.put("variantId", 1L);
         v1.put("variantName", "对照组");
+        v1.put("variantType", "CONTROL");
+        v1.put("isControl", true);
+        v1.put("trafficWeight", 50);
         v1.put("pageViews", 1000);
         v1.put("uniqueVisitors", 800);
         v1.put("conversions", 50);
@@ -541,10 +724,13 @@ public class ABTestServiceImpl extends ServiceImpl<ABTestMapper, ABTest> impleme
         Map<String, Object> v2 = new HashMap<>();
         v2.put("variantId", 2L);
         v2.put("variantName", "实验组A");
+        v2.put("variantType", "EXPERIMENT");
+        v2.put("trafficWeight", 50);
         v2.put("pageViews", 1000);
         v2.put("uniqueVisitors", 850);
         v2.put("conversions", 70);
         v2.put("conversionRate", new BigDecimal("0.0700"));
+        v2.put("improvementVsControl", new BigDecimal("0.4000"));
         variantStats.add(v2);
         stats.put("variantStats", variantStats);
         return stats;
@@ -561,19 +747,24 @@ public class ABTestServiceImpl extends ServiceImpl<ABTestMapper, ABTest> impleme
         control.put("variantName", "对照组");
         control.put("conversionRate", new BigDecimal("0.0500"));
         control.put("isControl", true);
+        control.put("recommendation", "CONTROL");
         control.put("confidenceIntervalLower", new BigDecimal("0.0380"));
         control.put("confidenceIntervalUpper", new BigDecimal("0.0620"));
+        control.put("confidenceInterval", "[0.0380, 0.0620]");
         confidenceResults.add(control);
         Map<String, Object> experiment = new HashMap<>();
         experiment.put("variantId", 2L);
         experiment.put("variantName", "实验组A");
         experiment.put("conversionRate", new BigDecimal("0.0700"));
         experiment.put("uplift", new BigDecimal("0.4000"));
+        experiment.put("improvementVsControl", new BigDecimal("0.4000"));
         experiment.put("zScore", new BigDecimal("2.05"));
         experiment.put("pValue", new BigDecimal("0.0404"));
         experiment.put("confidenceIntervalLower", new BigDecimal("0.0550"));
         experiment.put("confidenceIntervalUpper", new BigDecimal("0.0850"));
+        experiment.put("confidenceInterval", "[0.0550, 0.0850]");
         experiment.put("isSignificant", true);
+        experiment.put("recommendation", "WINNER");
         confidenceResults.add(experiment);
         result.put("confidenceResults", confidenceResults);
         return result;

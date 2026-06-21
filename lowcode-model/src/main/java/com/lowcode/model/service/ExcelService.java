@@ -311,7 +311,7 @@ public class ExcelService {
         } else if ("ENUM".equals(fieldType)) {
             if (field.getEnumValues() != null && !field.getEnumValues().isEmpty()) {
                 try {
-                    List<Map<String, Object>> enumValues = JSON.parseArray(field.getEnumValues(), Map.class);
+                    List<Map> enumValues = JSON.parseArray(field.getEnumValues(), Map.class);
                     if (!enumValues.isEmpty()) {
                         return enumValues.get(0).get("label") != null
                                 ? enumValues.get(0).get("label").toString()

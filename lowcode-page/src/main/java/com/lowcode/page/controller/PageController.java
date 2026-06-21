@@ -100,7 +100,7 @@ public class PageController {
 
         Map<String, Object> result;
         if (Boolean.TRUE.equals(grayResult.getShouldUseNewVersion())) {
-            log.info("命中灰度发布，使用新版本快照，snapshotId: {}, version: {}", 
+            log.info("命中灰度发布，使用新版本快照，snapshotId: {}, version: {}",
                     grayResult.getActiveSnapshotId(), grayResult.getActiveVersion());
             result = pageService.getPagePreviewData(id, grayResult.getActiveSnapshotId());
         } else {
@@ -113,6 +113,14 @@ public class PageController {
         response.put("grayInfo", grayResult);
 
         return Result.success(response);
+    }
+
+    @ApiOperation("根据快照ID获取页面预览数据（A/B测试用）")
+    @GetMapping("/{id}/preview/snapshot/{snapshotId}")
+    public Result<Map<String, Object>> getPreviewDataBySnapshot(@PathVariable Long id,
+                                                                @PathVariable Long snapshotId) {
+        log.info("根据快照ID获取页面预览数据，pageId: {}, snapshotId: {}", id, snapshotId);
+        return Result.success(pageService.getPagePreviewData(id, snapshotId));
     }
 
     @ApiOperation("复制页面")

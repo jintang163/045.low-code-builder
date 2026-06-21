@@ -203,7 +203,7 @@ public class ExpressionSandboxExecutor {
                         .allowNativeAccess(false)
                         .allowCreateThread(false)
                         .allowHostClassLoading(false)
-                        .allowHostClassLookup(false)
+                        .allowHostClassLookup(className -> false)
                         .build()) {
                     ctx.eval("js", FUNCTION_DEFINITIONS);
                     if (context != null) {

@@ -14,6 +14,7 @@ import com.lowcode.page.entity.CustomComponentVersion;
 import com.lowcode.page.mapper.CustomComponentMapper;
 import com.lowcode.page.vo.CustomComponentVO;
 import io.minio.*;
+import io.minio.http.Method;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;

@@ -1,12 +1,13 @@
 package com.lowcode.page.service.abtest;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.service.IService;
 import com.lowcode.page.entity.abtest.ABTest;
 
 import java.util.List;
 import java.util.Map;
 
-public interface ABTestService {
+public interface ABTestService extends IService<ABTest> {
 
     ABTest getTestDetail(Long id);
 
@@ -24,9 +25,11 @@ public interface ABTestService {
 
     ABTest pauseTest(Long id);
 
-    ABTest stopTest(Long winnerVariantId);
+    ABTest stopTest(Long testId, Long winnerVariantId);
 
     Map<String, Object> getTestStats(Long id);
 
     Map<String, Object> calculateConfidence(Long testId);
+
+    ABTest promoteWinner(Long testId, Long variantId);
 }

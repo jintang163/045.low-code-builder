@@ -42,6 +42,9 @@ public class DataModelService extends ServiceImpl<DataModelMapper, DataModel> {
     @Autowired
     private ModelRelationService relationService;
 
+    @Autowired(required = false)
+    private Object versionService;
+
     public DataModel getModelDetail(Long id) {
         DataModel model = getById(id);
         if (model == null) {
@@ -164,7 +167,8 @@ public class DataModelService extends ServiceImpl<DataModelMapper, DataModel> {
 
         if (versionService != null) {
             try {
-                versionService.createSnapshot(newModel.getId(), "模型更新", 2);
+                java.lang.reflect.Method method = versionService.getClass().getMethod("createSnapshot", Long.class, String.class, Integer.class);
+                method.invoke(versionService, newModel.getId(), "模型更新", 2);
             } catch (Exception e) {
                 log.warn("创建版本快照失败", e);
             }

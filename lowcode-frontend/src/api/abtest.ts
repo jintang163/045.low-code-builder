@@ -8,7 +8,8 @@ export interface ABTestInfo {
   description?: string
   resourceType: 'page' | 'component' | 'logic'
   resourceId: number
-  controlVariantId?: number
+  controlSnapshotId?: number
+  controlVersion?: string
   status?: number
   trafficAllocationType: 'percentage' | 'custom'
   sampleSize?: number
@@ -35,6 +36,7 @@ export interface ABTestVariant {
   uniqueVisitors?: number
   conversions?: number
   conversionRate?: number
+  isControl?: boolean
   createdTime?: string
 }
 
@@ -57,39 +59,67 @@ export interface ABTestEvent {
   id?: number
   testId: number
   variantId?: number
-  eventType: 'page_view' | 'click' | 'conversion' | 'custom'
+  eventType: 'VIEW' | 'CLICK' | 'CONVERSION' | 'PAGE_VIEW' | 'custom'
   eventKey: string
-  userId?: string
+  userId?: number
   sessionId?: string
   pageUrl?: string
-  componentId?: string
+  componentId?: number
   eventValue?: number
-  timestamp?: string
+  timestamp?: number
+}
+
+export interface ABTestConfidenceResult {
+  variantId: number
+  variantName: string
+  variantType: 'control' | 'experimental'
+  conversionRate: number
+  pageViews: number
+  conversions: number
+  uplift: number
+  improvementVsControl: number
+  zScore: number
+  pValue: number
+  confidenceInterval: {
+    lower: number
+    upper: number
+    display: string
+  }
+  isSignificant: boolean
+  recommendation: 'WINNER' | 'LOSER' | 'INCONCLUSIVE' | 'CONTROL'
+  isControl: boolean
 }
 
 export interface ABTestStats {
   testId: number
+  testName?: string
+  status?: number
+  confidenceLevel: number
+  startTime?: string
+  endTime?: string
+  winnerVariantId?: number
   totalPageViews: number
   totalUniqueVisitors: number
   totalConversions: number
   overallConversionRate: number
-  variants: ABTestVariantStats[]
-  metrics: ABTestMetric[]
-  winnerVariantId?: number
-  confidenceLevel: number
+  variantStats: ABTestVariantStats[]
+  confidenceResults: ABTestConfidenceResult[]
   isStatisticallySignificant: boolean
+  recommendation?: 'WINNER' | 'LOSER' | 'INCONCLUSIVE'
 }
 
 export interface ABTestVariantStats {
   variantId: number
   variantName: string
-  variantType: string
+  variantType: 'control' | 'experimental'
+  snapshotId?: number
+  version?: string
+  trafficWeight: number
+  isControl?: boolean
   pageViews: number
   uniqueVisitors: number
   conversions: number
   conversionRate: number
-  confidenceInterval: number
-  statisticalSignificance: number
   improvementVsControl?: number
 }
 
@@ -125,9 +155,16 @@ export const abtestApi = {
 
   stats: (id: number) => request.get<ABTestStats>(`/abtest/${id}/stats`),
 
-  allocate: (testId: number) => request.get<ABTestVariant>(`/abtest/${testId}/allocate`),
+  confidence: (id: number) => request.get<ABTestConfidenceResult[]>(`/abtest/${id}/confidence`),
 
-  recordEvent: (data: ABTestEvent) => request.post('/abtest/event', data),
+  allocate: (testId: number, userId?: number, params?: Record<string, any>) =>
+    request.get<ABTestVariant>(`/abtest/${testId}/allocate`, {
+      params: { userId, ...params },
+    }),
+
+  recordEvent: (data: ABTestEvent | Record<string, any>) => request.post('/abtest/event', data),
+
+  recordEvents: (data: (ABTestEvent | Record<string, any>)[]) => request.post('/abtest/events', data),
 
   getVariants: (testId: number) =>
     request.get<ABTestVariant[]>(`/abtest/${testId}/variants`),
@@ -154,7 +191,8 @@ export const mockABTests: ABTestInfo[] = [
     description: '测试不同颜色的CTA按钮对转化率的影响',
     resourceType: 'page',
     resourceId: 1,
-    controlVariantId: 1,
+    controlSnapshotId: 101,
+    controlVersion: 'v1.0.0',
     status: 1,
     trafficAllocationType: 'percentage',
     sampleSize: 10000,
@@ -169,7 +207,10 @@ export const mockABTests: ABTestInfo[] = [
         testId: 1,
         variantName: '原始版本（蓝色按钮）',
         variantType: 'control',
+        snapshotId: 101,
+        version: 'v1.0.0',
         trafficWeight: 50,
+        isControl: true,
         pageViews: 5234,
         uniqueVisitors: 4521,
         conversions: 234,
@@ -180,7 +221,10 @@ export const mockABTests: ABTestInfo[] = [
         testId: 1,
         variantName: '实验版本（绿色按钮）',
         variantType: 'experimental',
+        snapshotId: 102,
+        version: 'v1.0.1',
         trafficWeight: 50,
+        isControl: false,
         pageViews: 5198,
         uniqueVisitors: 4489,
         conversions: 312,
@@ -196,7 +240,8 @@ export const mockABTests: ABTestInfo[] = [
     description: '测试不同登录页面布局对用户注册转化率的影响',
     resourceType: 'page',
     resourceId: 2,
-    controlVariantId: 3,
+    controlSnapshotId: 201,
+    controlVersion: 'v2.0.0',
     status: 2,
     trafficAllocationType: 'percentage',
     sampleSize: 5000,
@@ -213,7 +258,10 @@ export const mockABTests: ABTestInfo[] = [
         testId: 2,
         variantName: '原始版本（完整表单）',
         variantType: 'control',
+        snapshotId: 201,
+        version: 'v2.0.0',
         trafficWeight: 50,
+        isControl: true,
         pageViews: 2876,
         uniqueVisitors: 2654,
         conversions: 156,
@@ -224,7 +272,10 @@ export const mockABTests: ABTestInfo[] = [
         testId: 2,
         variantName: '实验版本（简化表单）',
         variantType: 'experimental',
+        snapshotId: 202,
+        version: 'v2.0.1',
         trafficWeight: 50,
+        isControl: false,
         pageViews: 2901,
         uniqueVisitors: 2689,
         conversions: 193,
@@ -240,7 +291,8 @@ export const mockABTests: ABTestInfo[] = [
     description: '测试不同标题风格对商品点击率的影响',
     resourceType: 'page',
     resourceId: 3,
-    controlVariantId: 5,
+    controlSnapshotId: 301,
+    controlVersion: 'v3.0.0',
     status: 0,
     trafficAllocationType: 'percentage',
     sampleSize: 8000,
@@ -253,14 +305,20 @@ export const mockABTests: ABTestInfo[] = [
         testId: 3,
         variantName: '原始版本（功能型标题）',
         variantType: 'control',
+        snapshotId: 301,
+        version: 'v3.0.0',
         trafficWeight: 50,
+        isControl: true,
       },
       {
         id: 6,
         testId: 3,
         variantName: '实验版本（情感型标题）',
         variantType: 'experimental',
+        snapshotId: 302,
+        version: 'v3.0.1',
         trafficWeight: 50,
+        isControl: false,
       },
     ],
   },
@@ -272,7 +330,6 @@ export const mockABTests: ABTestInfo[] = [
     description: '优化支付流程，减少支付环节的用户流失',
     resourceType: 'logic',
     resourceId: 1,
-    controlVariantId: 7,
     status: 3,
     trafficAllocationType: 'percentage',
     sampleSize: 3000,
@@ -287,7 +344,10 @@ export const mockABTests: ABTestInfo[] = [
         testId: 4,
         variantName: '原始流程',
         variantType: 'control',
+        snapshotId: 401,
+        version: 'v4.0.0',
         trafficWeight: 50,
+        isControl: true,
         pageViews: 1523,
         uniqueVisitors: 1456,
         conversions: 892,
@@ -298,7 +358,10 @@ export const mockABTests: ABTestInfo[] = [
         testId: 4,
         variantName: '优化流程（一步支付）',
         variantType: 'experimental',
+        snapshotId: 402,
+        version: 'v4.0.1',
         trafficWeight: 50,
+        isControl: false,
         pageViews: 1498,
         uniqueVisitors: 1432,
         conversions: 987,
@@ -310,6 +373,8 @@ export const mockABTests: ABTestInfo[] = [
 
 export const mockStats: ABTestStats = {
   testId: 1,
+  testName: '首页按钮颜色测试',
+  status: 1,
   totalPageViews: 10432,
   totalUniqueVisitors: 9010,
   totalConversions: 546,
@@ -317,59 +382,68 @@ export const mockStats: ABTestStats = {
   winnerVariantId: 2,
   confidenceLevel: 95,
   isStatisticallySignificant: true,
-  variants: [
+  variantStats: [
     {
       variantId: 1,
       variantName: '原始版本（蓝色按钮）',
       variantType: 'control',
+      snapshotId: 101,
+      version: 'v1.0.0',
+      trafficWeight: 50,
+      isControl: true,
       pageViews: 5234,
       uniqueVisitors: 4521,
       conversions: 234,
       conversionRate: 5.18,
-      confidenceInterval: 0.45,
-      statisticalSignificance: 0,
+      improvementVsControl: 0,
     },
     {
       variantId: 2,
       variantName: '实验版本（绿色按钮）',
       variantType: 'experimental',
+      snapshotId: 102,
+      version: 'v1.0.1',
+      trafficWeight: 50,
+      isControl: false,
       pageViews: 5198,
       uniqueVisitors: 4489,
       conversions: 312,
       conversionRate: 6.95,
-      confidenceInterval: 0.52,
-      statisticalSignificance: 0.98,
       improvementVsControl: 34.17,
     },
   ],
-  metrics: [
+  confidenceResults: [
     {
-      id: 1,
-      testId: 1,
       variantId: 1,
-      metricName: '按钮点击率',
-      metricType: 'conversion',
-      metricKey: 'button_click',
-      totalValue: 234,
-      count: 5234,
-      avgValue: 0.0447,
-      uniqueCount: 234,
-      confidenceInterval: 0.0045,
-      statisticalSignificance: 0,
+      variantName: '原始版本（蓝色按钮）',
+      variantType: 'control',
+      conversionRate: 5.18,
+      pageViews: 5234,
+      conversions: 234,
+      uplift: 0,
+      improvementVsControl: 0,
+      zScore: 0,
+      pValue: 1,
+      confidenceInterval: { lower: 4.73, upper: 5.63, display: '4.73% ~ 5.63%' },
+      isSignificant: true,
+      recommendation: 'CONTROL',
+      isControl: true,
     },
     {
-      id: 2,
-      testId: 1,
       variantId: 2,
-      metricName: '按钮点击率',
-      metricType: 'conversion',
-      metricKey: 'button_click',
-      totalValue: 312,
-      count: 5198,
-      avgValue: 0.0600,
-      uniqueCount: 312,
-      confidenceInterval: 0.0052,
-      statisticalSignificance: 0.98,
+      variantName: '实验版本（绿色按钮）',
+      variantType: 'experimental',
+      conversionRate: 6.95,
+      pageViews: 5198,
+      conversions: 312,
+      uplift: 1.77,
+      improvementVsControl: 34.17,
+      zScore: 2.48,
+      pValue: 0.013,
+      confidenceInterval: { lower: 6.43, upper: 7.47, display: '6.43% ~ 7.47%' },
+      isSignificant: true,
+      recommendation: 'WINNER',
+      isControl: false,
     },
   ],
 }

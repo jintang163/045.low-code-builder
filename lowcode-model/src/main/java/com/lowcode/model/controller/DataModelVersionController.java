@@ -79,9 +79,11 @@ public class DataModelVersionController {
         DataModelVersion target = versionService.getVersion(targetVersionId);
         if (source == null || source.getSnapshot() == null
                 || target == null || target.getSnapshot() == null) {
-            return Result.fail("版本数据不存在");
+            return Result.error("版本数据不存在");
         }
-        return Result.success(compareService.compareModels(source.getSnapshot(), target.getSnapshot()));
+        DataModel sourceModel = versionService.deserializeVersion(source);
+        DataModel targetModel = versionService.deserializeVersion(target);
+        return Result.success(compareService.compareModels(sourceModel, targetModel));
     }
 
     @ApiOperation("回滚前校验")

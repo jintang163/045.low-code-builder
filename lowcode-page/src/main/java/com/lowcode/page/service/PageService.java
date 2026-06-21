@@ -315,7 +315,7 @@ public class PageService extends ServiceImpl<PageMapper, Page> {
         }
         schema.put("components", componentSchemas);
 
-        return JSON.toJSONString(schema, true);
+        return JSON.toJSONString(schema, com.alibaba.fastjson2.JSONWriter.Feature.PrettyFormat);
     }
 
     @Transactional(rollbackFor = Exception.class)

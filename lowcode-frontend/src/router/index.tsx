@@ -31,6 +31,7 @@ import DashboardDisplay from '@/pages/dashboard/Display'
 import ABTestList from '@/pages/abtest/List'
 import ABTestDesigner from '@/pages/abtest/Designer'
 import ABTestDetail from '@/pages/abtest/Detail'
+import ABTestRuntime from '@/pages/abtest/Runtime'
 
 const routes = [
   {
@@ -269,6 +270,10 @@ const routes = [
           {
             path: 'detail/:id',
             element: <ABTestDetail />,
+          },
+          {
+            path: 'runtime/:id',
+            element: <ABTestRuntime />,
           },
         ],
       },

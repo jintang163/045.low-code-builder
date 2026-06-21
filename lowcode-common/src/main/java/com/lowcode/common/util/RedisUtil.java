@@ -84,7 +84,8 @@ public class RedisUtil {
 
     public long hIncr(String key, String hashKey, long delta) {
         RMap<String, Object> map = redissonClient.getMap(key);
-        return map.addAndGet(hashKey, delta);
+        Object result = map.addAndGet(hashKey, delta);
+        return result != null ? ((Number) result).longValue() : 0L;
     }
 
     public <T> void lSet(String key, T value) {
@@ -175,11 +176,15 @@ public class RedisUtil {
 
     public boolean setIfAbsent(String key, Object value, long timeout, TimeUnit unit) {
         RBucket<Object> bucket = redissonClient.getBucket(key);
-        return bucket.setIfAbsent(value, timeout, unit);
+        return bucket.trySet(value, timeout, unit);
     }
 
     public void deleteByPattern(String pattern) {
         Iterable<String> keys = redissonClient.getKeys().getKeysByPattern(pattern);
-        redissonClient.getKeys().delete(keys);
+        java.util.List<String> keyList = new java.util.ArrayList<>();
+        for (String k : keys) {
+            keyList.add(k);
+        }
+        redissonClient.getKeys().delete(keyList.toArray(new String[0]));
     }
 }

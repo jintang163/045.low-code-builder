@@ -3,6 +3,9 @@ package com.lowcode.page.controller.abtest;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.lowcode.common.result.Result;
 import com.lowcode.page.entity.abtest.ABTest;
+import com.lowcode.page.entity.abtest.ABTestVariant;
+import com.lowcode.page.service.abtest.ABTestAllocationService;
+import com.lowcode.page.service.abtest.ABTestEventService;
 import com.lowcode.page.service.abtest.ABTestService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -21,6 +24,12 @@ public class ABTestController {
 
     @Autowired
     private ABTestService abTestService;
+
+    @Autowired
+    private ABTestEventService abTestEventService;
+
+    @Autowired
+    private ABTestAllocationService abTestAllocationService;
 
     @ApiOperation("获取测试详情")
     @GetMapping("/{id}")
@@ -79,13 +88,58 @@ public class ABTestController {
     @ApiOperation("结束测试")
     @PostMapping("/{id}/stop")
     public Result<ABTest> stop(@PathVariable Long id,
-                               @RequestParam Long winnerVariantId) {
-        return Result.success(abTestService.stopTest(winnerVariantId));
+                               @RequestParam(required = false) Long winnerVariantId) {
+        return Result.success(abTestService.stopTest(id, winnerVariantId));
+    }
+
+    @ApiOperation("推广优胜版本")
+    @PostMapping("/{id}/promote/{variantId}")
+    public Result<ABTest> promoteWinner(@PathVariable Long id,
+                                        @PathVariable Long variantId) {
+        return Result.success(abTestService.promoteWinner(id, variantId));
     }
 
     @ApiOperation("获取统计数据")
     @GetMapping("/{id}/stats")
     public Result<Map<String, Object>> stats(@PathVariable Long id) {
         return Result.success(abTestService.getTestStats(id));
+    }
+
+    @ApiOperation("获取置信区间与显著性")
+    @GetMapping("/{id}/confidence")
+    public Result<Map<String, Object>> confidence(@PathVariable Long id) {
+        return Result.success(abTestService.calculateConfidence(id));
+    }
+
+    @ApiOperation("获取用户分配的变体")
+    @GetMapping("/{testId}/allocate")
+    public Result<ABTestVariant> allocateVariant(@PathVariable Long testId,
+                                                  @RequestParam(required = false) Long userId,
+                                                  @RequestParam(required = false) String userGroup) {
+        return Result.success(abTestAllocationService.allocateVariant(testId, userId, userGroup));
+    }
+
+    @ApiOperation("记录事件")
+    @PostMapping("/event")
+    public Result<Void> recordEvent(@RequestBody Map<String, Object> eventData) {
+        abTestEventService.recordEventFromMap(eventData);
+        return Result.success();
+    }
+
+    @ApiOperation("批量记录事件")
+    @PostMapping("/events")
+    public Result<Void> batchRecordEvents(@RequestBody List<Map<String, Object>> events) {
+        abTestEventService.batchRecordEventsFromMap(events);
+        return Result.success();
+    }
+
+    @ApiOperation("获取事件统计")
+    @GetMapping("/{testId}/events/stats")
+    public Result<Map<String, Object>> getEventStats(@PathVariable Long testId,
+                                                     @RequestParam(required = false) Long variantId,
+                                                     @RequestParam(required = false) String eventType,
+                                                     @RequestParam(required = false) Long startTime,
+                                                     @RequestParam(required = false) Long endTime) {
+        return Result.success(abTestEventService.getEventStats(testId, variantId, eventType, startTime, endTime));
     }
 }

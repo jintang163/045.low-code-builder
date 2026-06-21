@@ -1,7 +1,6 @@
 package com.lowcode.common.monitor.config;
 
 import com.lowcode.common.monitor.interceptor.RequestLogInterceptor;
-import com.lowcode.common.monitor.report.MonitorReportClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Configuration;

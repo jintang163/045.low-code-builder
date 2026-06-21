@@ -1,12 +1,13 @@
 package com.lowcode.page.service;
 
+import com.baomidou.mybatisplus.extension.service.IService;
 import com.lowcode.page.dto.VersionSnapshotDTO;
 import com.lowcode.page.entity.VersionSnapshot;
 import com.lowcode.page.vo.VersionDiffVO;
 
 import java.util.List;
 
-public interface VersionSnapshotService {
+public interface VersionSnapshotService extends IService<VersionSnapshot> {
 
     VersionSnapshot createSnapshot(VersionSnapshotDTO dto);
 

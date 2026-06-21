@@ -17,6 +17,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -40,10 +41,135 @@ public class ABTestEventServiceImpl extends ServiceImpl<ABTestEventMapper, ABTes
     @Lazy
     private ABTestVariantService variantService;
 
+    public static final String EVENT_TYPE_VIEW = "VIEW";
+    public static final String EVENT_TYPE_CLICK = "CLICK";
+    public static final String EVENT_TYPE_CONVERSION = "CONVERSION";
+    public static final String EVENT_TYPE_PAGE_VIEW = "PAGE_VIEW";
+
+    @Override
+    public void recordEventFromMap(Map<String, Object> eventData) {
+        if (eventData == null || eventData.isEmpty()) {
+            return;
+        }
+        ABTestEvent event = convertFromMap(eventData);
+        recordEvent(event);
+    }
+
+    @Override
+    public void batchRecordEventsFromMap(List<Map<String, Object>> events) {
+        if (events == null || events.isEmpty()) {
+            return;
+        }
+        List<ABTestEvent> list = new ArrayList<>();
+        for (Map<String, Object> m : events) {
+            list.add(convertFromMap(m));
+        }
+        batchRecordEvents(list);
+    }
+
+    private ABTestEvent convertFromMap(Map<String, Object> eventData) {
+        ABTestEvent event = new ABTestEvent();
+        Object testId = eventData.get("testId");
+        if (testId != null) {
+            event.setTestId(toLong(testId));
+        }
+        Object variantId = eventData.get("variantId");
+        if (variantId != null) {
+            event.setVariantId(toLong(variantId));
+        }
+        Object eventType = eventData.get("eventType");
+        if (eventType != null) {
+            event.setEventType(normalizeEventType(eventType.toString()));
+        }
+        Object eventKey = eventData.get("eventKey");
+        if (eventKey != null) {
+            event.setEventKey(eventKey.toString());
+        }
+        Object userId = eventData.get("userId");
+        if (userId != null) {
+            event.setUserId(toLong(userId));
+        }
+        Object sessionId = eventData.get("sessionId");
+        if (sessionId != null) {
+            event.setSessionId(sessionId.toString());
+        }
+        Object pageUrl = eventData.get("pageUrl");
+        if (pageUrl != null) {
+            event.setPageUrl(pageUrl.toString());
+        }
+        Object componentId = eventData.get("componentId");
+        if (componentId != null) {
+            event.setComponentId(toLong(componentId));
+        }
+        Object eventValue = eventData.get("eventValue");
+        if (eventValue != null) {
+            event.setEventValue(toBigDecimal(eventValue));
+        }
+        Object timestamp = eventData.get("timestamp");
+        if (timestamp != null) {
+            Long ts = toLong(timestamp);
+            if (ts != null) {
+                event.setTimestamp(LocalDateTime.ofInstant(Instant.ofEpochMilli(ts), ZoneId.systemDefault()));
+            }
+        }
+        Object userAgent = eventData.get("userAgent");
+        if (userAgent != null) {
+            event.setUserAgent(userAgent.toString());
+        }
+        Object ipAddress = eventData.get("ipAddress");
+        if (ipAddress != null) {
+            event.setIpAddress(ipAddress.toString());
+        }
+        if (event.getTimestamp() == null) {
+            event.setTimestamp(LocalDateTime.now());
+        }
+        return event;
+    }
+
+    private String normalizeEventType(String rawType) {
+        if (rawType == null) return EVENT_TYPE_VIEW;
+        String up = rawType.toUpperCase().replace("_", "");
+        switch (up) {
+            case "VIEW":
+            case "PAGEVIEW":
+                return EVENT_TYPE_VIEW;
+            case "CLICK":
+                return EVENT_TYPE_CLICK;
+            case "CONVERSION":
+            case "CONVERT":
+                return EVENT_TYPE_CONVERSION;
+            default:
+                return rawType.toUpperCase();
+        }
+    }
+
+    private Long toLong(Object o) {
+        if (o == null) return null;
+        if (o instanceof Long) return (Long) o;
+        if (o instanceof Integer) return ((Integer) o).longValue();
+        if (o instanceof Number) return ((Number) o).longValue();
+        try {
+            return Long.parseLong(o.toString().trim());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private BigDecimal toBigDecimal(Object o) {
+        if (o == null) return null;
+        if (o instanceof BigDecimal) return (BigDecimal) o;
+        if (o instanceof Number) return new BigDecimal(o.toString());
+        try {
+            return new BigDecimal(o.toString().trim());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void recordEvent(ABTestEvent event) {
-        log.info("记录事件，testId: {}, variantId: {}, eventType: {}, userId: {}", 
+        log.info("记录事件，testId: {}, variantId: {}, eventType: {}, userId: {}",
                 event.getTestId(), event.getVariantId(), event.getEventType(), event.getUserId());
         try {
             ABTest test = abTestService.getById(event.getTestId());
@@ -51,20 +177,27 @@ public class ABTestEventServiceImpl extends ServiceImpl<ABTestEventMapper, ABTes
                 throw new BusinessException(ErrorCode.NOT_FOUND, "测试不存在");
             }
             if (test.getStatus() != 1) {
-                throw new BusinessException(ErrorCode.PARAM_ERROR, "测试未在运行中");
+                log.warn("测试未在运行中，忽略事件，testId: {}, status: {}", test.getId(), test.getStatus());
+                return;
+            }
+            if (event.getVariantId() == null) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "缺少变体ID");
             }
             ABTestVariant variant = variantService.getById(event.getVariantId());
             if (variant == null) {
                 throw new BusinessException(ErrorCode.NOT_FOUND, "变体不存在");
             }
-            if (event.getEventTime() == null) {
-                event.setEventTime(LocalDateTime.now());
+            if (event.getTimestamp() == null) {
+                event.setTimestamp(LocalDateTime.now());
             }
             save(event);
-            if ("PAGE_VIEW".equals(event.getEventType())) {
+            String eventType = event.getEventType() != null ? event.getEventType().toUpperCase() : "";
+            if (EVENT_TYPE_VIEW.equals(eventType) || EVENT_TYPE_PAGE_VIEW.equals(eventType)) {
                 variantService.incrementPageView(event.getVariantId(), event.getUserId());
-            } else if ("CONVERSION".equals(event.getEventType())) {
+            } else if (EVENT_TYPE_CONVERSION.equals(eventType)) {
                 variantService.incrementConversion(event.getVariantId(), event.getUserId(), event.getEventKey());
+            } else if (EVENT_TYPE_CLICK.equals(eventType)) {
+                variantService.incrementPageView(event.getVariantId(), event.getUserId());
             }
             log.info("记录事件成功，id: {}", event.getId());
         } catch (BusinessException e) {
@@ -83,16 +216,17 @@ public class ABTestEventServiceImpl extends ServiceImpl<ABTestEventMapper, ABTes
                 return;
             }
             for (ABTestEvent event : events) {
-                if (event.getEventTime() == null) {
-                    event.setEventTime(LocalDateTime.now());
+                if (event.getTimestamp() == null) {
+                    event.setTimestamp(LocalDateTime.now());
                 }
             }
             saveBatch(events);
             for (ABTestEvent event : events) {
                 try {
-                    if ("PAGE_VIEW".equals(event.getEventType())) {
+                    String eventType = event.getEventType() != null ? event.getEventType().toUpperCase() : "";
+                    if (EVENT_TYPE_VIEW.equals(eventType) || EVENT_TYPE_PAGE_VIEW.equals(eventType) || EVENT_TYPE_CLICK.equals(eventType)) {
                         variantService.incrementPageView(event.getVariantId(), event.getUserId());
-                    } else if ("CONVERSION".equals(event.getEventType())) {
+                    } else if (EVENT_TYPE_CONVERSION.equals(eventType)) {
                         variantService.incrementConversion(event.getVariantId(), event.getUserId(), event.getEventKey());
                     }
                 } catch (Exception e) {
@@ -107,7 +241,7 @@ public class ABTestEventServiceImpl extends ServiceImpl<ABTestEventMapper, ABTes
 
     @Override
     public Map<String, Object> getEventStats(Long testId, Long variantId, String eventType, Long startTime, Long endTime) {
-        log.info("获取事件统计，testId: {}, variantId: {}, eventType: {}, startTime: {}, endTime: {}", 
+        log.info("获取事件统计，testId: {}, variantId: {}, eventType: {}, startTime: {}, endTime: {}",
                 testId, variantId, eventType, startTime, endTime);
         try {
             LambdaQueryWrapper<ABTestEvent> wrapper = new LambdaQueryWrapper<>();
@@ -120,11 +254,11 @@ public class ABTestEventServiceImpl extends ServiceImpl<ABTestEventMapper, ABTes
             }
             if (startTime != null) {
                 LocalDateTime start = LocalDateTime.ofInstant(Instant.ofEpochMilli(startTime), ZoneId.systemDefault());
-                wrapper.ge(ABTestEvent::getEventTime, start);
+                wrapper.ge(ABTestEvent::getTimestamp, start);
             }
             if (endTime != null) {
                 LocalDateTime end = LocalDateTime.ofInstant(Instant.ofEpochMilli(endTime), ZoneId.systemDefault());
-                wrapper.le(ABTestEvent::getEventTime, end);
+                wrapper.le(ABTestEvent::getTimestamp, end);
             }
             List<ABTestEvent> events = list(wrapper);
             Map<String, Object> stats = new HashMap<>();
@@ -160,7 +294,7 @@ public class ABTestEventServiceImpl extends ServiceImpl<ABTestEventMapper, ABTes
         stats.put("eventType", eventType);
         stats.put("totalEvents", 1500);
         Map<String, Integer> eventTypeCount = new HashMap<>();
-        eventTypeCount.put("PAGE_VIEW", 1000);
+        eventTypeCount.put("VIEW", 1000);
         eventTypeCount.put("CONVERSION", 500);
         eventTypeCount.put("CLICK", 300);
         stats.put("eventTypeCount", eventTypeCount);
@@ -174,10 +308,10 @@ public class ABTestEventServiceImpl extends ServiceImpl<ABTestEventMapper, ABTes
             event.setId((long) i);
             event.setTestId(testId);
             event.setVariantId(i % 2 == 0 ? 1L : 2L);
-            event.setUserId("user_" + (i % 100));
-            event.setEventType(i % 3 == 0 ? "PAGE_VIEW" : (i % 3 == 1 ? "CONVERSION" : "CLICK"));
+            event.setUserId((long) (i % 100));
+            event.setEventType(i % 3 == 0 ? "VIEW" : (i % 3 == 1 ? "CONVERSION" : "CLICK"));
             event.setEventKey("event_" + i);
-            event.setEventTime(LocalDateTime.now().minusMinutes(i * 10));
+            event.setTimestamp(LocalDateTime.now().minusMinutes(i * 10L));
             mockEvents.add(event);
         }
         stats.put("events", mockEvents);
