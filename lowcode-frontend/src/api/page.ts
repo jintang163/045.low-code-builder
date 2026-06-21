@@ -60,6 +60,8 @@ export const pageApi = {
   publish: (id: number) => request.post<PageInfo>(`/page/${id}/publish`),
   generateCode: (id: number) => request.get<string>(`/page/${id}/generateCode`),
   preview: (id: number) => request.get(`/page/${id}/preview`),
+  copy: (id: number, data: { newPageName: string; newPageCode: string; copyMode?: string }) =>
+    request.post<PageInfo>(`/page/copy/${id}`, data),
 }
 
 export const componentApi = {

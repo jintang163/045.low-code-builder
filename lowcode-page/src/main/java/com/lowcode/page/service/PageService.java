@@ -318,6 +318,86 @@ public class PageService extends ServiceImpl<PageMapper, Page> {
         return JSON.toJSONString(schema, true);
     }
 
+    @Transactional(rollbackFor = Exception.class)
+    public Page copyPage(Long sourcePageId, String newPageName, String newPageCode, String copyMode) {
+        Page sourcePage = getPageDetail(sourcePageId);
+        if (sourcePage == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "源页面不存在");
+        }
+
+        if (newPageCode == null || newPageCode.isEmpty()) {
+            newPageCode = sourcePage.getPageCode() + "_copy";
+        }
+        if (newPageName == null || newPageName.isEmpty()) {
+            newPageName = sourcePage.getPageName() + "_副本";
+        }
+
+        LambdaQueryWrapper<Page> codeCheckWrapper = new LambdaQueryWrapper<>();
+        codeCheckWrapper.eq(Page::getPageCode, newPageCode);
+        codeCheckWrapper.eq(Page::getAppId, sourcePage.getAppId());
+        Long count = count(codeCheckWrapper);
+        if (count > 0) {
+            throw new BusinessException("页面编码已存在");
+        }
+
+        Page newPage = new Page();
+        newPage.setAppId(sourcePage.getAppId());
+        newPage.setPageName(newPageName);
+        newPage.setPageCode(newPageCode);
+        newPage.setPageType(sourcePage.getPageType());
+        newPage.setPagePath(sourcePage.getPagePath());
+        newPage.setLayoutType(sourcePage.getLayoutType());
+        newPage.setPageConfig(sourcePage.getPageConfig());
+        newPage.setMobileConfig(sourcePage.getMobileConfig());
+        newPage.setPageSchema(sourcePage.getPageSchema());
+        newPage.setIsHome(0);
+        newPage.setStatus(0);
+        newPage.setVersion("1.0.0");
+
+        save(newPage);
+
+        if (!"structure".equals(copyMode) && sourcePage.getComponents() != null) {
+            Map<String, String> idMapping = new HashMap<>();
+            List<PageComponent> newComponents = new ArrayList<>();
+
+            for (PageComponent sourceComponent : sourcePage.getComponents()) {
+                PageComponent newComponent = new PageComponent();
+                String newComponentId = UUID.randomUUID().toString().replace("-", "");
+                idMapping.put(sourceComponent.getComponentId(), newComponentId);
+
+                newComponent.setPageId(newPage.getId());
+                newComponent.setComponentId(newComponentId);
+                newComponent.setComponentType(sourceComponent.getComponentType());
+                newComponent.setComponentName(sourceComponent.getComponentName());
+                newComponent.setParentId(sourceComponent.getParentId());
+                newComponent.setSlotName(sourceComponent.getSlotName());
+                newComponent.setPropsConfig(sourceComponent.getPropsConfig());
+                newComponent.setStyleConfig(sourceComponent.getStyleConfig());
+                newComponent.setEventConfig(sourceComponent.getEventConfig());
+                newComponent.setDataSourceConfig(sourceComponent.getDataSourceConfig());
+                newComponent.setValidationConfig(sourceComponent.getValidationConfig());
+                newComponent.setPositionX(sourceComponent.getPositionX());
+                newComponent.setPositionY(sourceComponent.getPositionY());
+                newComponent.setWidth(sourceComponent.getWidth());
+                newComponent.setHeight(sourceComponent.getHeight());
+                newComponent.setSortOrder(sourceComponent.getSortOrder());
+
+                newComponents.add(newComponent);
+            }
+
+            for (PageComponent component : newComponents) {
+                if (component.getParentId() != null && idMapping.containsKey(component.getParentId())) {
+                    component.setParentId(idMapping.get(component.getParentId()));
+                }
+                componentService.save(component);
+            }
+        }
+
+        versionSnapshotService.createAutoSnapshot("PAGE", newPage.getId(), newPage.getAppId());
+
+        return getPageDetail(newPage.getId());
+    }
+
     private void clearHomePage(Long appId) {
         LambdaQueryWrapper<Page> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Page::getAppId, appId);

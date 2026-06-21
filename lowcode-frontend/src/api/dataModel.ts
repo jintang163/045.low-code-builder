@@ -386,3 +386,88 @@ export const dataModelVersionApi = {
   rollback: (modelId: number, targetVersionId: number, reason?: string) =>
     request.post<DataModel>(`/model/version/rollback`, null, { params: { modelId, targetVersionId, reason } }),
 }
+
+export interface SubFormConfig {
+  subModelId: number
+  foreignKeyField: string
+}
+
+export interface SubFormData {
+  subModelId: number
+  foreignKeyField: string
+  dataList: Record<string, any>[]
+}
+
+export const subFormApi = {
+  list: (mainModelId: number, mainId: number | string, subModelId: number, foreignKeyField: string) =>
+    request.get<Record<string, any>[]>(`/subform/list/${mainModelId}/${mainId}/${subModelId}`, {
+      params: { foreignKeyField },
+    }),
+  page: (
+    mainModelId: number,
+    mainId: number | string,
+    subModelId: number,
+    foreignKeyField: string,
+    current = 1,
+    size = 10
+  ) =>
+    request.get(`/subform/page/${mainModelId}/${mainId}/${subModelId}`, {
+      params: { foreignKeyField, current, size },
+    }),
+  save: (
+    mainModelId: number,
+    mainId: number | string,
+    subModelId: number,
+    foreignKeyField: string,
+    data: Record<string, any>
+  ) =>
+    request.post<Record<string, any>>(`/subform/save/${mainModelId}/${mainId}/${subModelId}`, data, {
+      params: { foreignKeyField },
+    }),
+  batchSave: (
+    mainModelId: number,
+    mainId: number | string,
+    subModelId: number,
+    foreignKeyField: string,
+    dataList: Record<string, any>[]
+  ) =>
+    request.post<Record<string, any>[]>(`/subform/batchSave/${mainModelId}/${mainId}/${subModelId}`, dataList, {
+      params: { foreignKeyField },
+    }),
+  delete: (subModelId: number, id: number | string) =>
+    request.delete(`/subform/${subModelId}/${id}`),
+  deleteByForeignKey: (subModelId: number, foreignKeyField: string, foreignKeyValue: any) =>
+    request.delete(`/subform/byForeignKey/${subModelId}`, {
+      params: { foreignKeyField, foreignKeyValue },
+    }),
+  getMasterWithSubForms: (mainModelId: number, mainId: number | string, subFormConfigs: SubFormConfig[]) =>
+    request.post(`/subform/masterWithSubForms/${mainModelId}/${mainId}`, subFormConfigs),
+  saveMasterWithSubForms: (
+    mainModelId: number,
+    masterData: Record<string, any>,
+    subFormDataList: SubFormData[]
+  ) => request.post(`/subform/saveMasterWithSubForms/${mainModelId}`, { masterData, subFormDataList }),
+}
+
+export interface ExcelImportResult {
+  successCount: number
+  failCount: number
+  totalCount: number
+  errors: { row: number; message: string }[]
+  data: Record<string, any>[]
+}
+
+export const excelApi = {
+  downloadTemplate: (modelId: number) =>
+    request.get(`/excel/template/${modelId}`, { responseType: 'blob' }),
+  exportData: (modelId: number, conditions?: Record<string, any>, orderBy?: string, orderDir?: string) =>
+    request.post(`/excel/export/${modelId}`, { conditions, orderBy, orderDir }, { responseType: 'blob' }),
+  importData: (modelId: number, file: File, sheetIndex = 0, startRow = 1) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return request.post<ExcelImportResult>(`/excel/import/${modelId}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      params: { sheetIndex, startRow },
+    })
+  },
+}

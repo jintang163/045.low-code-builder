@@ -114,4 +114,14 @@ public class PageController {
 
         return Result.success(response);
     }
+
+    @ApiOperation("复制页面")
+    @PostMapping("/copy/{id}")
+    public Result<com.lowcode.page.entity.Page> copyPage(
+            @PathVariable Long id,
+            @RequestParam(required = false) String newPageName,
+            @RequestParam(required = false) String newPageCode,
+            @RequestParam(defaultValue = "full") String copyMode) {
+        return Result.success(pageService.copyPage(id, newPageName, newPageCode, copyMode));
+    }
 }

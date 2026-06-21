@@ -78,6 +78,16 @@ import { useNetworkStatus } from '@/hooks/useNetworkStatus'
 import { savePageOffline, savePageOfflineOnly, loadPageForEdit } from '@/utils/offline/pageOfflineService'
 import { startSync } from '@/utils/offline/syncManager'
 import { getPendingCount, addPendingChange } from '@/utils/offline/indexedDB'
+import {
+  RateField,
+  StepsField,
+  SignatureField,
+  LocationPicker,
+  SubFormField,
+  FormCopyButton,
+  ExcelImportButton,
+  ExcelExportButton,
+} from '@/components/form-advanced'
 
 const { Header, Sider, Content } = Layout
 const { Option } = Select
@@ -149,6 +159,14 @@ const componentIconMap: Record<string, string> = {
   MOBILEPULLREFRESH: '🔄',
   MOBILESWIPECELL: '↔️',
   MOBILEWATERFALL: '🌊',
+  RATE: '⭐',
+  STEPS: '👣',
+  SIGNATURE: '✍️',
+  LOCATIONPICKER: '📍',
+  SUBFORM: '📋',
+  FORMCOPY: '📑',
+  EXCELIMPORT: '📥',
+  EXCELEXPORT: '📤',
 }
 
 interface ComponentItemProps {
@@ -250,7 +268,7 @@ const CanvasComponent: React.FC<CanvasComponentProps> = ({ component, isSelected
       ...style,
     }
 
-    const systemTypes = ['INPUT', 'TEXTAREA', 'NUMBER', 'SELECT', 'DATE', 'DATETIME', 'TIME', 'SWITCH', 'CHECKBOX', 'RADIO', 'UPLOAD', 'RICHTEXT', 'TABLE', 'BUTTON', 'LINK', 'IMAGE', 'TEXT', 'TITLE', 'ICON', 'DIVIDER', 'TABS', 'CARD', 'GRID', 'FLEX', 'MODAL', 'FORM', 'STEPS', 'TIMELINE', 'PROGRESS', 'RATE', 'SLIDER', 'LINECHART', 'BARCHART', 'PIECHART', 'AREACHART', 'SCATTERCHART', 'RADARCHART', 'MOBILEGRID', 'MOBILECOLLAPSE', 'MOBILETABBAR', 'MOBILESWIPER', 'MOBILESEARCHBAR', 'MOBILEPULLREFRESH', 'MOBILESWIPECELL', 'MOBILEWATERFALL']
+    const systemTypes = ['INPUT', 'TEXTAREA', 'NUMBER', 'SELECT', 'DATE', 'DATETIME', 'TIME', 'SWITCH', 'CHECKBOX', 'RADIO', 'UPLOAD', 'RICHTEXT', 'TABLE', 'BUTTON', 'LINK', 'IMAGE', 'TEXT', 'TITLE', 'ICON', 'DIVIDER', 'TABS', 'CARD', 'GRID', 'FLEX', 'MODAL', 'FORM', 'STEPS', 'TIMELINE', 'PROGRESS', 'RATE', 'SLIDER', 'LINECHART', 'BARCHART', 'PIECHART', 'AREACHART', 'SCATTERCHART', 'RADARCHART', 'MOBILEGRID', 'MOBILECOLLAPSE', 'MOBILETABBAR', 'MOBILESWIPER', 'MOBILESEARCHBAR', 'MOBILEPULLREFRESH', 'MOBILESWIPECELL', 'MOBILEWATERFALL', 'SIGNATURE', 'LOCATIONPICKER', 'SUBFORM', 'FORMCOPY', 'EXCELIMPORT', 'EXCELEXPORT']
 
     if (!systemTypes.includes(component.componentType)) {
       return (
@@ -653,6 +671,117 @@ const CanvasComponent: React.FC<CanvasComponentProps> = ({ component, isSelected
               </div>
             ))}
           </div>
+        )
+      }
+      case 'RATE': {
+        return (
+          <RateField
+            value={props.value || 3}
+            count={props.count || 5}
+            allowHalf={props.allowHalf}
+            allowClear={props.allowClear}
+            disabled={props.disabled}
+          />
+        )
+      }
+      case 'STEPS': {
+        const items = props.items || [
+          { title: '步骤一', description: '第一步' },
+          { title: '步骤二', description: '第二步' },
+          { title: '步骤三', description: '第三步' },
+        ]
+        return (
+          <StepsField
+            current={props.current || 1}
+            items={items}
+            direction={props.direction || 'horizontal'}
+            status={props.status}
+            showNavigation={false}
+          />
+        )
+      }
+      case 'SIGNATURE': {
+        return (
+          <div style={{ textAlign: 'center' }}>
+            <div
+              style={{
+                width: props.width || 300,
+                height: props.height || 150,
+                border: '1px dashed #d9d9d9',
+                borderRadius: 4,
+                background: props.backgroundColor || '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#bbb',
+                fontSize: 14,
+                margin: '0 auto',
+              }}
+            >
+              ✍️ 签名区域
+            </div>
+            <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>
+              签名板 ({props.width || 300} × {props.height || 150})
+            </div>
+          </div>
+        )
+      }
+      case 'LOCATIONPICKER': {
+        return (
+          <Input
+            readOnly
+            placeholder={props.placeholder || '请选择位置'}
+            prefix={<span>📍</span>}
+            style={{ width: '100%' }}
+          />
+        )
+      }
+      case 'SUBFORM': {
+        const columns = [
+          { key: 'field1', title: '字段1', dataIndex: 'field1' },
+          { key: 'field2', title: '字段2', dataIndex: 'field2' },
+        ]
+        const mockData = [
+          { field1: '示例数据1-1', field2: '示例数据1-2' },
+          { field1: '示例数据2-1', field2: '示例数据2-2' },
+        ]
+        return (
+          <SubFormField
+            value={mockData}
+            columns={columns}
+            title={props.title || '子表单'}
+            showAddButton={props.showAddButton !== false}
+            showDeleteButton={props.showDeleteButton !== false}
+            minRows={props.minRows || 0}
+            maxRows={props.maxRows || 10}
+            disabled
+          />
+        )
+      }
+      case 'FORMCOPY': {
+        return (
+          <FormCopyButton
+            buttonText="复制表单"
+            type="default"
+            disabled
+          />
+        )
+      }
+      case 'EXCELIMPORT': {
+        return (
+          <ExcelImportButton
+            buttonText="Excel导入"
+            showTemplateDownload={props.showTemplateDownload !== false}
+            disabled
+          />
+        )
+      }
+      case 'EXCELEXPORT': {
+        return (
+          <ExcelExportButton
+            buttonText="Excel导出"
+            disabled
+          />
         )
       }
       default:

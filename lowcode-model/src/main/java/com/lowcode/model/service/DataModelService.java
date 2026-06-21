@@ -444,11 +444,3 @@ public class DataModelService extends ServiceImpl<DataModelMapper, DataModel> {
         }
     }
 }
-                return FieldTypeEnum.BLOB;
-            case "ENUM":
-                return FieldTypeEnum.ENUM;
-            default:
-                return FieldTypeEnum.STRING;
-        }
-    }
-}
