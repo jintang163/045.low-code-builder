@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { Layout, Menu, Avatar, Dropdown, Space, Breadcrumb } from 'antd'
 import {
   DashboardOutlined,
@@ -29,6 +29,8 @@ import {
 } from '@ant-design/icons'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAppStore } from '@/store/appStore'
+import { useTheme } from '@/context/ThemeContext'
+import { themeApi } from '@/api'
 
 const { Header, Sider, Content } = Layout
 
@@ -36,7 +38,31 @@ const MainLayout: React.FC = ({ children }: { children?: React.ReactNode }) => {
   const navigate = useNavigate()
   const location = useLocation()
   const { collapsed, setCollapsed, currentApp, setCurrentApp } = useAppStore()
+  const { theme, loadTheme, applyTheme } = useTheme()
   const [selectedKeys, setSelectedKeys] = useState<string[]>([location.pathname])
+
+  const layoutMode = useMemo(() => theme?.layoutMode || 'side', [theme])
+  const sidebarTheme = useMemo(() => (theme?.sidebarTheme as 'light' | 'dark') || 'dark', [theme])
+  const headerTheme = useMemo(() => (theme?.headerTheme as 'light' | 'dark') || 'light', [theme])
+
+  useEffect(() => {
+    if (currentApp?.id) {
+      loadTheme(currentApp.id).catch((e) => {
+        console.warn('加载应用主题失败，使用全局默认', e)
+      })
+    }
+  }, [currentApp?.id, loadTheme])
+
+  const sidebarBg = sidebarTheme === 'dark' ? '#001529' : '#fff'
+  const sidebarTextColor = sidebarTheme === 'dark' ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.85)'
+  const sidebarLogoBg = sidebarTheme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.04)'
+  const sidebarLogoColor = sidebarTheme === 'dark' ? '#fff' : 'rgba(0,0,0,0.85)'
+
+  const headerBg = headerTheme === 'dark' ? '#001529' : '#fff'
+  const headerTextColor = headerTheme === 'dark' ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.85)'
+  const headerBoxShadow = headerTheme === 'dark' ? '0 1px 4px rgba(0,0,0,0.2)' : '0 1px 4px rgba(0,21,41,.08)'
+
+  const contentBg = theme?.themeMode === 'dark' ? '#141414' : '#f5f5f5'
 
   const menuItems = [
     {
@@ -245,76 +271,147 @@ const MainLayout: React.FC = ({ children }: { children?: React.ReactNode }) => {
     return items
   }
 
+  const renderSider = () => (
+    <Sider
+      trigger={null}
+      collapsible
+      collapsed={collapsed}
+      theme={sidebarTheme}
+      style={{ background: sidebarBg }}
+    >
+      <div
+        style={{
+          height: 64,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: sidebarLogoColor,
+          fontSize: collapsed ? 18 : 20,
+          fontWeight: 'bold',
+          background: sidebarLogoBg,
+        }}
+      >
+        {collapsed ? 'LC' : '低代码平台'}
+      </div>
+      <Menu
+        theme={sidebarTheme}
+        mode="inline"
+        selectedKeys={selectedKeys}
+        items={menuItems}
+        onClick={handleMenuClick}
+        style={{ borderRight: 0, background: sidebarBg, color: sidebarTextColor }}
+      />
+    </Sider>
+  )
+
+  const renderHeader = (showToggle = true) => (
+    <Header
+      style={{
+        padding: '0 16px',
+        background: headerBg,
+        color: headerTextColor,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        boxShadow: headerBoxShadow,
+        height: 64,
+        lineHeight: '64px',
+      }}
+    >
+      <Space>
+        {layoutMode === 'top' && (
+          <div style={{ color: headerTextColor, fontSize: 18, fontWeight: 'bold', marginRight: 24 }}>
+            低代码平台
+          </div>
+        )}
+        {showToggle && (
+          <>
+            {collapsed ? (
+              <MenuUnfoldOutlined
+                onClick={() => setCollapsed(false)}
+                style={{ fontSize: 20, cursor: 'pointer', color: headerTextColor }}
+              />
+            ) : (
+              <MenuFoldOutlined
+                onClick={() => setCollapsed(true)}
+                style={{ fontSize: 20, cursor: 'pointer', color: headerTextColor }}
+              />
+            )}
+          </>
+        )}
+        {layoutMode === 'top' ? (
+          <Menu
+            theme={headerTheme}
+            mode="horizontal"
+            selectedKeys={selectedKeys}
+            items={menuItems}
+            onClick={handleMenuClick}
+            style={{ background: 'transparent', borderBottom: 'none', color: headerTextColor, minWidth: 400 }}
+          />
+        ) : (
+          <Breadcrumb items={getBreadcrumbItems()} />
+        )}
+      </Space>
+      <Space>
+        {currentApp && (
+          <span style={{ color: theme?.primaryColor || '#1677ff', fontWeight: 500 }}>
+            当前应用: {currentApp.appName}
+          </span>
+        )}
+        <Dropdown menu={userMenu}>
+          <Space style={{ cursor: 'pointer', color: headerTextColor }}>
+            <Avatar size="small" icon={<UserOutlined />} />
+            <span>管理员</span>
+          </Space>
+        </Dropdown>
+      </Space>
+    </Header>
+  )
+
+  const renderContent = () => (
+    <Content
+      style={{
+        margin: 0,
+        padding: 16,
+        background: contentBg,
+        overflow: 'auto',
+        height: layoutMode === 'top' ? 'calc(100vh - 64px)' : 'calc(100vh - 64px)',
+        minHeight: layoutMode === 'top' ? 'calc(100vh - 64px)' : 'calc(100vh - 64px)',
+      }}
+    >
+      {children}
+    </Content>
+  )
+
+  if (layoutMode === 'top') {
+    return (
+      <Layout style={{ height: '100vh', background: contentBg }}>
+        {renderHeader(false)}
+        {renderContent()}
+      </Layout>
+    )
+  }
+
+  if (layoutMode === 'mix') {
+    return (
+      <Layout style={{ height: '100vh' }}>
+        {renderHeader(true)}
+        <Layout>
+          {renderSider()}
+          <Layout>
+            {renderContent()}
+          </Layout>
+        </Layout>
+      </Layout>
+    )
+  }
+
   return (
     <Layout style={{ height: '100vh' }}>
-      <Sider trigger={null} collapsible collapsed={collapsed} theme="dark">
-        <div
-          style={{
-            height: 64,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#fff',
-            fontSize: collapsed ? 18 : 20,
-            fontWeight: 'bold',
-            background: 'rgba(255, 255, 255, 0.1)',
-          }}
-        >
-          {collapsed ? 'LC' : '低代码平台'}
-        </div>
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={selectedKeys}
-          items={menuItems}
-          onClick={handleMenuClick}
-          style={{ borderRight: 0 }}
-        />
-      </Sider>
+      {renderSider()}
       <Layout>
-        <Header
-          style={{
-            padding: '0 16px',
-            background: '#fff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            boxShadow: '0 1px 4px rgba(0,21,41,.08)',
-          }}
-        >
-          <Space>
-            {collapsed ? (
-              <MenuUnfoldOutlined onClick={() => setCollapsed(false)} style={{ fontSize: 20, cursor: 'pointer' }} />
-            ) : (
-              <MenuFoldOutlined onClick={() => setCollapsed(true)} style={{ fontSize: 20, cursor: 'pointer' }} />
-            )}
-            <Breadcrumb items={getBreadcrumbItems()} />
-          </Space>
-          <Space>
-            {currentApp && (
-              <span style={{ color: '#1677ff', fontWeight: 500 }}>
-                当前应用: {currentApp.appName}
-              </span>
-            )}
-            <Dropdown menu={userMenu}>
-              <Space style={{ cursor: 'pointer' }}>
-                <Avatar size="small" icon={<UserOutlined />} />
-                <span>管理员</span>
-              </Space>
-            </Dropdown>
-          </Space>
-        </Header>
-        <Content
-          style={{
-            margin: 0,
-            padding: 16,
-            background: '#f5f5f5',
-            overflow: 'auto',
-            height: 'calc(100vh - 64px)',
-          }}
-        >
-          {children}
-        </Content>
+        {renderHeader(true)}
+        {renderContent()}
       </Layout>
     </Layout>
   )

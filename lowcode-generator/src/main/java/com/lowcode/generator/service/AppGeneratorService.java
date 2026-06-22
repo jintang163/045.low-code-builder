@@ -57,6 +57,9 @@ public class AppGeneratorService {
     @Autowired
     private SdkGeneratorService sdkGeneratorService;
 
+    @Autowired
+    private AppThemeService appThemeService;
+
     public GeneratedApp generateApp(AppGenerateConfig config) throws Exception {
         GeneratedApp app = new GeneratedApp();
         app.setAppName(config.getAppName());
@@ -311,6 +314,15 @@ public class AppGeneratorService {
         List<GeneratedCode> codes = new ArrayList<>();
         String baseDir = tempDir + "/src/frontend/" + config.getAppCode() + "-web";
 
+        com.lowcode.generator.entity.AppTheme theme = null;
+        if (config.getAppId() != null) {
+            try {
+                theme = appThemeService.getDefaultTheme(config.getAppId());
+            } catch (Exception e) {
+                log.warn("获取默认主题失败，使用默认配置", e);
+            }
+        }
+
         List<Page> pages = new ArrayList<>();
         if (config.getPageIds() != null && !config.getPageIds().isEmpty()) {
             for (Long pageId : config.getPageIds()) {
@@ -324,7 +336,7 @@ public class AppGeneratorService {
         codes.add(generateFrontendPackageJson(config, baseDir));
         codes.add(generateFrontendViteConfig(config, baseDir));
         codes.add(generateFrontendMainTs(config, baseDir));
-        codes.add(generateFrontendAppTsx(config, baseDir, pages));
+        codes.add(generateFrontendAppTsx(config, baseDir, pages, theme));
         codes.addAll(generateFrontendPages(config, baseDir, pages));
         codes.add(generateFrontendRouter(config, baseDir, pages));
         codes.add(generateFrontendServices(config, baseDir));
@@ -394,6 +406,7 @@ public class AppGeneratorService {
         StringBuilder sb = new StringBuilder();
         sb.append("import React from 'react'\n");
         sb.append("import ReactDOM from 'react-dom/client'\n");
+        sb.append("import { BrowserRouter } from 'react-router-dom'\n");
         sb.append("import { ConfigProvider, theme as antTheme } from 'antd'\n");
         sb.append("import zhCN from 'antd/locale/zh_CN'\n");
         sb.append("import { ThemeProvider, useTheme } from './theme'\n");
@@ -427,7 +440,9 @@ public class AppGeneratorService {
         sb.append("  <React.StrictMode>\n");
         sb.append("    <ThemeProvider>\n");
         sb.append("      <ThemeConfig>\n");
-        sb.append("        <App />\n");
+        sb.append("        <BrowserRouter>\n");
+        sb.append("          <App />\n");
+        sb.append("        </BrowserRouter>\n");
         sb.append("      </ThemeConfig>\n");
         sb.append("    </ThemeProvider>\n");
         sb.append("  </React.StrictMode>,\n");
@@ -435,11 +450,13 @@ public class AppGeneratorService {
         return new GeneratedCode("MAIN_TS", "main.tsx", "src/main.tsx", sb.toString());
     }
 
-    private GeneratedCode generateFrontendAppTsx(AppGenerateConfig config, String baseDir, List<Page> pages) {
+    private GeneratedCode generateFrontendAppTsx(AppGenerateConfig config, String baseDir, List<Page> pages, com.lowcode.generator.entity.AppTheme theme) {
         StringBuilder sb = new StringBuilder();
-        sb.append("import React from 'react'\n");
-        sb.append("import { BrowserRouter, Routes, Route, Link } from 'react-router-dom'\n");
-        sb.append("import { Layout, Menu } from 'antd'\n\n");
+        sb.append("import React, { useEffect, useMemo } from 'react'\n");
+        sb.append("import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom'\n");
+        sb.append("import { Layout, Menu, Space, Avatar, Dropdown, Button } from 'antd'\n");
+        sb.append("import { MenuFoldOutlined, MenuUnfoldOutlined, UserOutlined, LogoutOutlined, BulbOutlined } from '@ant-design/icons'\n");
+        sb.append("import { useTheme } from './theme'\n\n");
 
         if (pages != null && !pages.isEmpty()) {
             for (Page page : pages) {
@@ -449,7 +466,42 @@ public class AppGeneratorService {
         }
 
         sb.append("\nconst { Header, Content, Sider } = Layout\n\n");
+
+        String layoutMode = theme != null && theme.getLayoutMode() != null ? theme.getLayoutMode() : "side";
+        String sidebarTheme = theme != null && theme.getSidebarTheme() != null ? theme.getSidebarTheme() : "dark";
+        String headerTheme = theme != null && theme.getHeaderTheme() != null ? theme.getHeaderTheme() : "light";
+        String primaryColor = theme != null && theme.getPrimaryColor() != null ? theme.getPrimaryColor() : "#1677ff";
+
+        String sidebarBg = "dark".equals(sidebarTheme) ? "#001529" : "#fff";
+        String sidebarTextColor = "dark".equals(sidebarTheme) ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.85)";
+        String sidebarLogoBg = "dark".equals(sidebarTheme) ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.04)";
+        String sidebarLogoColor = "dark".equals(sidebarTheme) ? "#fff" : "rgba(0,0,0,0.85)";
+        String headerBg = "dark".equals(headerTheme) ? "#001529" : "#fff";
+        String headerTextColor = "dark".equals(headerTheme) ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.85)";
+        String contentBg = "dark".equals(theme != null && theme.getThemeMode() != null ? theme.getThemeMode() : "light") ? "#141414" : "#f5f5f5";
+        String firstChar = config.getAppName() != null && !config.getAppName().isEmpty() ? String.valueOf(config.getAppName().charAt(0)) : "A";
+
         sb.append("const App: React.FC = () => {\n");
+        sb.append("  const { theme, themeMode, setThemeMode, applyTheme } = useTheme()\n");
+        sb.append("  const navigate = useNavigate()\n");
+        sb.append("  const location = useLocation()\n");
+        sb.append("  const [collapsed, setCollapsed] = React.useState(false)\n\n");
+
+        sb.append("  const effectiveTheme = useMemo(() => ({\n");
+        sb.append("    layoutMode: theme?.layoutMode || '").append(layoutMode).append("',\n");
+        sb.append("    sidebarTheme: theme?.sidebarTheme || '").append(sidebarTheme).append("',\n");
+        sb.append("    headerTheme: theme?.headerTheme || '").append(headerTheme).append("',\n");
+        sb.append("    primaryColor: theme?.primaryColor || '").append(primaryColor).append("',\n");
+        sb.append("  }), [theme])\n\n");
+
+        sb.append("  const sidebarBg = effectiveTheme.sidebarTheme === 'dark' ? '").append(sidebarBg).append("' : '").append("#fff").append("'\n");
+        sb.append("  const sidebarTextColor = effectiveTheme.sidebarTheme === 'dark' ? '").append(sidebarTextColor).append("' : '").append("rgba(0,0,0,0.85)").append("'\n");
+        sb.append("  const sidebarLogoBg = effectiveTheme.sidebarTheme === 'dark' ? '").append(sidebarLogoBg).append("' : '").append("rgba(0,0,0,0.04)").append("'\n");
+        sb.append("  const sidebarLogoColor = effectiveTheme.sidebarTheme === 'dark' ? '").append(sidebarLogoColor).append("' : '").append("rgba(0,0,0,0.85)").append("'\n");
+        sb.append("  const headerBg = effectiveTheme.headerTheme === 'dark' ? '").append(headerBg).append("' : '").append("#fff").append("'\n");
+        sb.append("  const headerTextColor = effectiveTheme.headerTheme === 'dark' ? '").append(headerTextColor).append("' : '").append("rgba(0,0,0,0.85)").append("'\n");
+        sb.append("  const contentBg = (theme?.themeMode || '").append(theme != null && theme.getThemeMode() != null ? theme.getThemeMode() : "light").append("') === 'dark' ? '").append(contentBg).append("' : '").append("#f5f5f5").append("'\n\n");
+
         sb.append("  const menuItems = [\n");
         if (pages != null && !pages.isEmpty()) {
             for (Page page : pages) {
@@ -458,38 +510,140 @@ public class AppGeneratorService {
             }
         }
         sb.append("  ]\n\n");
-        sb.append("  return (\n");
-        sb.append("    <BrowserRouter>\n");
-        sb.append("      <Layout style={{ minHeight: '100vh' }}>\n");
-        sb.append("        <Sider theme='dark' width={220}>\n");
-        sb.append("          <div style={{ height: 60, margin: 16, background: 'rgba(255, 255, 255, 0.2)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold' }}>\n");
+
+        sb.append("  const userMenu = {\n");
+        sb.append("    items: [\n");
+        sb.append("      { key: 'profile', icon: <UserOutlined />, label: '个人中心' },\n");
+        sb.append("      { type: 'divider' as const },\n");
+        sb.append("      { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', onClick: () => localStorage.removeItem('token') },\n");
+        sb.append("    ],\n");
+        sb.append("  }\n\n");
+        sb.append("  const appLogoShort = '").append(firstChar).append("'\n");
+        sb.append("  const appLogoFull = '").append(config.getAppName()).append("'\n\n");
+
+        sb.append("  const renderSider = () => (\n");
+        sb.append("    <Sider trigger={null} collapsible collapsed={collapsed} theme={effectiveTheme.sidebarTheme as any} style={{ background: sidebarBg }}>\n");
+        sb.append("      <div style={{\n");
+        sb.append("        height: 60, margin: 16, borderRadius: 4, display: 'flex',\n");
+        sb.append("        alignItems: 'center', justifyContent: 'center', fontWeight: 'bold',\n");
+        sb.append("        background: sidebarLogoBg, color: sidebarLogoColor,\n");
+        sb.append("        fontSize: collapsed ? 14 : 16\n");
+        sb.append("      }}>\n");
+        sb.append("        {collapsed ? appLogoShort : appLogoFull}\n");
+        sb.append("      </div>\n");
+        sb.append("      <Menu\n");
+        sb.append("        theme={effectiveTheme.sidebarTheme as any}\n");
+        sb.append("        mode='inline'\n");
+        sb.append("        selectedKeys={[location.pathname]}\n");
+        sb.append("        items={menuItems}\n");
+        sb.append("        style={{ borderRight: 0, background: sidebarBg, color: sidebarTextColor }}\n");
+        sb.append("        onClick={({ key }: any) => navigate(key)}\n");
+        sb.append("      />\n");
+        sb.append("    </Sider>\n");
+        sb.append("  )\n\n");
+
+        sb.append("  const renderHeader = (showToggle = true) => (\n");
+        sb.append("    <Header style={{\n");
+        sb.append("      padding: '0 16px',\n");
+        sb.append("      background: headerBg,\n");
+        sb.append("      color: headerTextColor,\n");
+        sb.append("      display: 'flex',\n");
+        sb.append("      alignItems: 'center',\n");
+        sb.append("      justifyContent: 'space-between',\n");
+        sb.append("      height: 64,\n");
+        sb.append("      lineHeight: '64px',\n");
+        sb.append("      boxShadow: effectiveTheme.headerTheme === 'dark' ? '0 1px 4px rgba(0,0,0,0.2)' : '0 1px 4px rgba(0,21,41,.08)',\n");
+        sb.append("    }}>\n");
+        sb.append("      <Space>\n");
+        sb.append("        {effectiveTheme.layoutMode === 'top' && (\n");
+        sb.append("          <div style={{ color: headerTextColor, fontSize: 18, fontWeight: 'bold', marginRight: 24 }}>\n");
         sb.append("            ").append(config.getAppName()).append("\n");
         sb.append("          </div>\n");
-        sb.append("          <Menu theme='dark' mode='inline' items={menuItems} />\n");
-        sb.append("        </Sider>\n");
-        sb.append("        <Layout>\n");
-        sb.append("          <Header style={{ background: '#fff', padding: '0 24px', borderBottom: '1px solid #f0f0f0' }}>\n");
-        sb.append("            <h2 style={{ margin: 0 }}>").append(config.getAppName()).append("</h2>\n");
-        sb.append("          </Header>\n");
-        sb.append("          <Content style={{ padding: '24px', background: '#f5f5f5' }}>\n");
-        sb.append("            <div style={{ background: '#fff', padding: 24, minHeight: 360, borderRadius: 8 }}>\n");
-        sb.append("              <Routes>\n");
+        sb.append("        )}\n");
+        sb.append("        {showToggle && (\n");
+        sb.append("          collapsed ? (\n");
+        sb.append("            <MenuUnfoldOutlined onClick={() => setCollapsed(false)} style={{ fontSize: 20, cursor: 'pointer', color: headerTextColor }} />\n");
+        sb.append("          ) : (\n");
+        sb.append("            <MenuFoldOutlined onClick={() => setCollapsed(true)} style={{ fontSize: 20, cursor: 'pointer', color: headerTextColor }} />\n");
+        sb.append("          )\n");
+        sb.append("        )}\n");
+        sb.append("        {effectiveTheme.layoutMode === 'top' ? (\n");
+        sb.append("          <Menu\n");
+        sb.append("            theme={effectiveTheme.headerTheme as any}\n");
+        sb.append("            mode='horizontal'\n");
+        sb.append("            selectedKeys={[location.pathname]}\n");
+        sb.append("            items={menuItems}\n");
+        sb.append("            onClick={({ key }: any) => navigate(key)}\n");
+        sb.append("            style={{ background: 'transparent', borderBottom: 'none', color: headerTextColor, minWidth: 400 }}\n");
+        sb.append("          />\n");
+        sb.append("        ) : null}\n");
+        sb.append("      </Space>\n");
+        sb.append("      <Space>\n");
+        sb.append("        <Button\n");
+        sb.append("          type='text'\n");
+        sb.append("          icon={<BulbOutlined />}\n");
+        sb.append("          onClick={() => setThemeMode(themeMode === 'dark' ? 'light' : 'dark')}\n");
+        sb.append("          style={{ color: headerTextColor }}\n");
+        sb.append("        />\n");
+        sb.append("        <Dropdown menu={userMenu}>\n");
+        sb.append("          <Space style={{ cursor: 'pointer', color: headerTextColor }}>\n");
+        sb.append("            <Avatar size='small' icon={<UserOutlined />} />\n");
+        sb.append("            <span>管理员</span>\n");
+        sb.append("          </Space>\n");
+        sb.append("        </Dropdown>\n");
+        sb.append("      </Space>\n");
+        sb.append("    </Header>\n");
+        sb.append("  )\n\n");
+
+        sb.append("  const renderContent = () => (\n");
+        sb.append("    <Content style={{ padding: 24, background: contentBg, overflow: 'auto', minHeight: 'calc(100vh - 64px)' }}>\n");
+        sb.append("      <div style={{ background: themeMode === 'dark' ? '#1f1f1f' : '#fff', padding: 24, minHeight: 360, borderRadius: 8 }}>\n");
+        sb.append("        <Routes>\n");
         if (pages != null && !pages.isEmpty()) {
             for (Page page : pages) {
                 String pagePath = page.getPagePath() != null ? page.getPagePath() : "/" + page.getPageCode();
                 String componentName = toCamelCase(page.getPageCode()) + "Page";
                 String isHome = page.getIsHome() != null && page.getIsHome() == 1 ? "path='/' " : "";
-                sb.append("                <Route ").append(isHome).append("path='").append(pagePath).append("' element={<").append(componentName).append(" />} />\n");
+                sb.append("          <Route ").append(isHome).append("path='").append(pagePath).append("' element={<").append(componentName).append(" />} />\n");
             }
         }
-        sb.append("                <Route path='/' element={<div>Welcome to ").append(config.getAppName()).append("</div>} />\n");
-        sb.append("              </Routes>\n");
-        sb.append("            </div>\n");
-        sb.append("          </Content>\n");
-        sb.append("        </Layout>\n");
-        sb.append("      </Layout>\n");
-        sb.append("    </BrowserRouter>\n");
-        sb.append("  )\n");
+        sb.append("          <Route path='/' element={<div style={{ color: effectiveTheme.primaryColor, fontSize: 20 }}>Welcome to ").append(config.getAppName()).append("</div>} />\n");
+        sb.append("        </Routes>\n");
+        sb.append("      </div>\n");
+        sb.append("    </Content>\n");
+        sb.append("  )\n\n");
+
+        if ("top".equals(layoutMode)) {
+            sb.append("  return (\n");
+            sb.append("    <Layout style={{ minHeight: '100vh', background: contentBg }}>\n");
+            sb.append("      {renderHeader(false)}\n");
+            sb.append("      {renderContent()}\n");
+            sb.append("    </Layout>\n");
+            sb.append("  )\n");
+        } else if ("mix".equals(layoutMode)) {
+            sb.append("  return (\n");
+            sb.append("    <Layout style={{ minHeight: '100vh' }}>\n");
+            sb.append("      {renderHeader(true)}\n");
+            sb.append("      <Layout>\n");
+            sb.append("        {renderSider()}\n");
+            sb.append("        <Layout>\n");
+            sb.append("          {renderContent()}\n");
+            sb.append("        </Layout>\n");
+            sb.append("      </Layout>\n");
+            sb.append("    </Layout>\n");
+            sb.append("  )\n");
+        } else {
+            sb.append("  return (\n");
+            sb.append("    <Layout style={{ minHeight: '100vh' }}>\n");
+            sb.append("      {renderSider()}\n");
+            sb.append("      <Layout>\n");
+            sb.append("        {renderHeader(true)}\n");
+            sb.append("        {renderContent()}\n");
+            sb.append("      </Layout>\n");
+            sb.append("    </Layout>\n");
+            sb.append("  )\n");
+        }
+
         sb.append("}\n\n");
         sb.append("export default App\n");
         return new GeneratedCode("APP_TSX", "App.tsx", "src/App.tsx", sb.toString());
