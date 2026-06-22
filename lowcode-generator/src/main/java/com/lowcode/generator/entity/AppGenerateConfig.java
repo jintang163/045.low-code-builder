@@ -32,7 +32,17 @@ public class AppGenerateConfig {
     private Integer redisDatabase;
 
     private boolean generateDocker;
+    private boolean generateK8s;
+    private boolean generateSdk;
     private boolean generateReadme;
     private boolean includeFrontend;
     private boolean includeBackend;
+
+    private String sdkLanguage;
+    private String namespace;
+    private Integer replicas;
+    private String cpuRequest;
+    private String memoryRequest;
+    private String cpuLimit;
+    private String memoryLimit;
 }

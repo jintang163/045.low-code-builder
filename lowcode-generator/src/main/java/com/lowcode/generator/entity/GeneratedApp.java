@@ -14,4 +14,6 @@ public class GeneratedApp {
     private List<GeneratedCode> backendCodes;
     private List<GeneratedCode> frontendCodes;
     private List<GeneratedCode> configFiles;
+    private List<GeneratedCode> sdkCodes;
+    private List<GeneratedCode> k8sFiles;
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Table, Button, Space, Tag, Modal, Form, Input, Select, message, Popconfirm, Card, Row, Col, Spin, Radio, Descriptions, Alert, List } from 'antd'
+import { Table, Button, Space, Tag, Modal, Form, Input, Select, message, Popconfirm, Card, Row, Col, Spin, Radio, Descriptions, Alert, List, Divider } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, AppstoreOutlined, RocketOutlined, SettingOutlined, StopOutlined, DownloadOutlined, SyncOutlined, CloudDownloadOutlined, HistoryOutlined } from '@ant-design/icons'
 import { useAppStore } from '@/store/appStore'
 import { appApi, AppInfo, AppGenerateConfig } from '@/api'
@@ -123,12 +123,36 @@ const AppList: React.FC = () => {
       appId: app.id,
       appName: app.appName,
       appCode: app.appCode,
+      appDesc: app.appDesc,
+      version: '1.0.0',
+      author: 'lowcode',
+      basePackage: 'com.lowcode.' + app.appCode,
+      moduleName: app.appCode,
       packageName: 'com.lowcode.' + app.appCode,
       frontendFramework: 'react',
       backendFramework: 'springboot',
       dbType: 'MySQL',
-      includeDocker: true,
-      includeReadme: true,
+      dbHost: 'localhost',
+      dbPort: 3306,
+      dbName: app.appCode,
+      dbUsername: 'root',
+      dbPassword: '123456',
+      redisHost: 'localhost',
+      redisPort: 6379,
+      redisDatabase: 0,
+      includeBackend: true,
+      includeFrontend: true,
+      generateDocker: true,
+      generateK8s: true,
+      generateSdk: true,
+      generateReadme: true,
+      sdkLanguage: 'java',
+      namespace: 'default',
+      replicas: 2,
+      cpuRequest: '200m',
+      memoryRequest: '512Mi',
+      cpuLimit: '500m',
+      memoryLimit: '1Gi',
     })
     setGenerateModalVisible(true)
   }
@@ -336,58 +360,217 @@ const AppList: React.FC = () => {
       </Modal>
 
       <Modal
-        title="生成应用代码包"
+        title="导出应用代码包"
         open={generateModalVisible}
         onOk={handleGenerateSubmit}
         onCancel={() => setGenerateModalVisible(false)}
-        width={600}
+        width={720}
+        okText="导出代码"
       >
         <Form form={generateForm} layout="vertical">
           <Form.Item name="appId" hidden><Input /></Form.Item>
-          <Form.Item name="appName" label="应用名称"><Input disabled /></Form.Item>
-          <Form.Item name="appCode" label="应用编码"><Input disabled /></Form.Item>
-          <Form.Item
-            name="packageName"
-            label="后端包名"
-            rules={[{ required: true, message: '请输入包名' }]}
-          >
-            <Input placeholder="com.lowcode.xxx" />
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="appName" label="应用名称"><Input disabled /></Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="appCode" label="应用编码"><Input disabled /></Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="version"
+                label="版本号"
+                rules={[{ required: true, message: '请输入版本号' }]}
+              >
+                <Input placeholder="1.0.0" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="author" label="作者">
+                <Input placeholder="lowcode" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="basePackage"
+                label="后端包名"
+                rules={[{ required: true, message: '请输入包名' }]}
+              >
+                <Input placeholder="com.lowcode.xxx" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="moduleName" label="模块名">
+                <Input placeholder="xxx" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Divider orientation="left">代码生成选项</Divider>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item name="includeBackend" label="后端代码" valuePropName="checked">
+                <Input type="checkbox" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="includeFrontend" label="前端代码" valuePropName="checked">
+                <Input type="checkbox" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="generateReadme" label="README文档" valuePropName="checked">
+                <Input type="checkbox" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Divider orientation="left">数据库配置</Divider>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item
+                name="dbType"
+                label="数据库类型"
+                rules={[{ required: true }]}
+              >
+                <Select>
+                  <Select.Option value="MySQL">MySQL</Select.Option>
+                  <Select.Option value="PostgreSQL">PostgreSQL</Select.Option>
+                  <Select.Option value="DAMENG">达梦数据库</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="dbHost" label="数据库主机">
+                <Input placeholder="localhost" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="dbPort" label="端口">
+                <Input type="number" placeholder="3306" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item name="dbName" label="数据库名">
+                <Input placeholder="数据库名" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="dbUsername" label="用户名">
+                <Input placeholder="root" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="dbPassword" label="密码">
+                <Input.Password placeholder="密码" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Divider orientation="left">Redis配置</Divider>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item name="redisHost" label="Redis主机">
+                <Input placeholder="localhost" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="redisPort" label="端口">
+                <Input type="number" placeholder="6379" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="redisDatabase" label="数据库">
+                <Input type="number" placeholder="0" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Divider orientation="left">部署配置</Divider>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item name="generateDocker" label="Docker配置" valuePropName="checked">
+                <Input type="checkbox" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="generateK8s" label="K8s部署文件" valuePropName="checked">
+                <Input type="checkbox" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="generateSdk" label="生成SDK" valuePropName="checked">
+                <Input type="checkbox" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Form.Item noStyle shouldUpdate={(prevValues, curValues) => prevValues.generateK8s !== curValues.generateK8s}>
+            {({ getFieldValue }) => getFieldValue('generateK8s') ? (
+              <div style={{ padding: '12px', background: '#f5f5f5', borderRadius: 4, marginBottom: 16 }}>
+                <h4 style={{ margin: '0 0 12px 0' }}>K8s 配置</h4>
+                <Row gutter={16}>
+                  <Col span={8}>
+                    <Form.Item name="namespace" label="命名空间">
+                      <Input placeholder="default" />
+                    </Form.Item>
+                  </Col>
+                  <Col span={8}>
+                    <Form.Item name="replicas" label="副本数">
+                      <Input type="number" placeholder="2" />
+                    </Form.Item>
+                  </Col>
+                  <Col span={8}>
+                    <Form.Item name="cpuRequest" label="CPU请求">
+                      <Input placeholder="200m" />
+                    </Form.Item>
+                  </Col>
+                </Row>
+                <Row gutter={16}>
+                  <Col span={8}>
+                    <Form.Item name="memoryRequest" label="内存请求">
+                      <Input placeholder="512Mi" />
+                    </Form.Item>
+                  </Col>
+                  <Col span={8}>
+                    <Form.Item name="cpuLimit" label="CPU限制">
+                      <Input placeholder="500m" />
+                    </Form.Item>
+                  </Col>
+                  <Col span={8}>
+                    <Form.Item name="memoryLimit" label="内存限制">
+                      <Input placeholder="1Gi" />
+                    </Form.Item>
+                  </Col>
+                </Row>
+              </div>
+            ) : null}
           </Form.Item>
-          <Form.Item
-            name="frontendFramework"
-            label="前端框架"
-            rules={[{ required: true }]}
-          >
-            <Select>
-              <Select.Option value="react">React + Ant Design</Select.Option>
-              <Select.Option value="vue">Vue + Element UI</Select.Option>
-            </Select>
-          </Form.Item>
-          <Form.Item
-            name="backendFramework"
-            label="后端框架"
-            rules={[{ required: true }]}
-          >
-            <Select>
-              <Select.Option value="springboot">Spring Boot + MyBatis Plus</Select.Option>
-            </Select>
-          </Form.Item>
-          <Form.Item
-            name="dbType"
-            label="数据库类型"
-            rules={[{ required: true }]}
-          >
-            <Select>
-              <Select.Option value="MySQL">MySQL</Select.Option>
-              <Select.Option value="PostgreSQL">PostgreSQL</Select.Option>
-              <Select.Option value="DAMENG">达梦数据库</Select.Option>
-            </Select>
-          </Form.Item>
-          <Form.Item name="includeDocker" label="包含Docker配置" valuePropName="checked">
-            <Input type="checkbox" />
-          </Form.Item>
-          <Form.Item name="includeReadme" label="包含README文档" valuePropName="checked">
-            <Input type="checkbox" />
+
+          <Form.Item noStyle shouldUpdate={(prevValues, curValues) => prevValues.generateSdk !== curValues.generateSdk}>
+            {({ getFieldValue }) => getFieldValue('generateSdk') ? (
+              <div style={{ padding: '12px', background: '#f5f5f5', borderRadius: 4, marginBottom: 16 }}>
+                <h4 style={{ margin: '0 0 12px 0' }}>SDK 配置</h4>
+                <Row gutter={16}>
+                  <Col span={12}>
+                    <Form.Item name="sdkLanguage" label="SDK语言">
+                      <Select>
+                        <Select.Option value="java">Java</Select.Option>
+                        <Select.Option value="javascript">JavaScript</Select.Option>
+                        <Select.Option value="typescript">TypeScript</Select.Option>
+                        <Select.Option value="python">Python</Select.Option>
+                      </Select>
+                    </Form.Item>
+                  </Col>
+                </Row>
+              </div>
+            ) : null}
           </Form.Item>
         </Form>
       </Modal>

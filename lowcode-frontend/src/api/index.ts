@@ -40,12 +40,41 @@ export interface AppGenerateConfig {
   appId: number
   appName: string
   appCode: string
+  appDesc?: string
+  version?: string
+  author?: string
+  basePackage?: string
+  moduleName?: string
   packageName?: string
   frontendFramework?: string
   backendFramework?: string
   dbType?: string
-  includeDocker?: boolean
-  includeReadme?: boolean
+  dbHost?: string
+  dbPort?: number
+  dbName?: string
+  dbUsername?: string
+  dbPassword?: string
+  redisHost?: string
+  redisPort?: number
+  redisPassword?: string
+  redisDatabase?: number
+  generateDocker?: boolean
+  generateK8s?: boolean
+  generateSdk?: boolean
+  generateReadme?: boolean
+  includeFrontend?: boolean
+  includeBackend?: boolean
+  sdkLanguage?: string
+  namespace?: string
+  replicas?: number
+  cpuRequest?: string
+  memoryRequest?: string
+  cpuLimit?: string
+  memoryLimit?: string
+  dataModelIds?: number[]
+  pageIds?: number[]
+  logicIds?: number[]
+  workflowIds?: number[]
 }
 
 export const authApi = {

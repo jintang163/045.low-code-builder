@@ -41,6 +41,12 @@ public class AppGeneratorService {
     @Autowired
     private ModelFieldMapper modelFieldMapper;
 
+    @Autowired
+    private K8sGeneratorService k8sGeneratorService;
+
+    @Autowired
+    private SdkGeneratorService sdkGeneratorService;
+
     public GeneratedApp generateApp(AppGenerateConfig config) throws Exception {
         GeneratedApp app = new GeneratedApp();
         app.setAppName(config.getAppName());
@@ -53,6 +59,8 @@ public class AppGeneratorService {
         List<GeneratedCode> backendCodes = new ArrayList<>();
         List<GeneratedCode> frontendCodes = new ArrayList<>();
         List<GeneratedCode> configFiles = new ArrayList<>();
+        List<GeneratedCode> k8sFiles = new ArrayList<>();
+        List<GeneratedCode> sdkCodes = new ArrayList<>();
 
         if (config.isIncludeBackend()) {
             backendCodes.addAll(generateBackend(config, tempDir));
@@ -66,6 +74,14 @@ public class AppGeneratorService {
             configFiles.addAll(generateDockerConfig(config, tempDir));
         }
 
+        if (config.isGenerateK8s()) {
+            k8sFiles.addAll(generateK8sConfig(config, tempDir));
+        }
+
+        if (config.isGenerateSdk()) {
+            sdkCodes.addAll(generateSdk(config, tempDir));
+        }
+
         if (config.isGenerateReadme()) {
             configFiles.add(generateReadme(config, tempDir));
         }
@@ -75,10 +91,12 @@ public class AppGeneratorService {
 
         File zipFile = new File(zipPath);
         app.setFileSize(zipFile.length());
-        app.setDownloadUrl("/api/generator/app/download/" + config.getAppCode());
+        app.setDownloadUrl("/api/app/download/" + config.getAppCode());
         app.setBackendCodes(backendCodes);
         app.setFrontendCodes(frontendCodes);
         app.setConfigFiles(configFiles);
+        app.setK8sFiles(k8sFiles);
+        app.setSdkCodes(sdkCodes);
 
         return app;
     }
@@ -461,6 +479,22 @@ public class AppGeneratorService {
         return new GeneratedCode("NGINX_CONFIG", "nginx.conf", "docker/nginx.conf", sb.toString());
     }
 
+    private List<GeneratedCode> generateK8sConfig(AppGenerateConfig config, String tempDir) throws Exception {
+        List<GeneratedCode> codes = k8sGeneratorService.generateK8sFiles(config);
+        for (GeneratedCode code : codes) {
+            writeCodeToFile(tempDir + "/src", code);
+        }
+        return codes;
+    }
+
+    private List<GeneratedCode> generateSdk(AppGenerateConfig config, String tempDir) throws Exception {
+        List<GeneratedCode> codes = sdkGeneratorService.generateSdk(config);
+        for (GeneratedCode code : codes) {
+            writeCodeToFile(tempDir + "/src", code);
+        }
+        return codes;
+    }
+
     private GeneratedCode generateReadme(AppGenerateConfig config, String tempDir) throws Exception {
         StringBuilder sb = new StringBuilder();
         sb.append("# ").append(config.getAppName()).append("\n\n");
@@ -508,7 +542,7 @@ public class AppGeneratorService {
         Path filePath = Paths.get(baseDir, code.getFilePath());
         Files.createDirectories(filePath.getParent());
         try (FileWriter writer = new FileWriter(filePath.toFile(), StandardCharsets.UTF_8)) {
-            writer.write(code.getContent());
+            writer.write(code.getCodeContent());
         }
     }
 
