@@ -21,11 +21,20 @@ public class K8sGeneratorService {
         String memoryLimit = config.getMemoryLimit() != null ? config.getMemoryLimit() : "1Gi";
 
         codes.add(generateNamespace(config, namespace));
-        codes.add(generateDeployment(config, namespace, replicas, cpuRequest, memoryRequest, cpuLimit, memoryLimit));
-        codes.add(generateService(config, namespace));
+        codes.add(generateBackendDeployment(config, namespace, replicas, cpuRequest, memoryRequest, cpuLimit, memoryLimit));
+        if (config.isIncludeFrontend()) {
+            codes.add(generateFrontendDeployment(config, namespace, replicas));
+        }
+        codes.add(generateBackendService(config, namespace));
+        if (config.isIncludeFrontend()) {
+            codes.add(generateFrontendService(config, namespace));
+        }
         codes.add(generateIngress(config, namespace));
         codes.add(generateConfigMap(config, namespace));
-        codes.add(generateHpa(config, namespace));
+        codes.add(generateBackendHpa(config, namespace));
+        if (config.isIncludeFrontend()) {
+            codes.add(generateFrontendHpa(config, namespace));
+        }
         codes.add(generateKustomization(config));
         codes.add(generateK8sReadme(config));
 
@@ -44,7 +53,7 @@ public class K8sGeneratorService {
         return new GeneratedCode("K8S_NAMESPACE", "namespace.yaml", "k8s/namespace.yaml", sb.toString());
     }
 
-    private GeneratedCode generateDeployment(AppGenerateConfig config, String namespace, int replicas,
+    private GeneratedCode generateBackendDeployment(AppGenerateConfig config, String namespace, int replicas,
                                             String cpuRequest, String memoryRequest,
                                             String cpuLimit, String memoryLimit) {
         StringBuilder sb = new StringBuilder();
@@ -118,10 +127,62 @@ public class K8sGeneratorService {
         sb.append("              port: 8080\n");
         sb.append("            initialDelaySeconds: 10\n");
         sb.append("            periodSeconds: 5\n");
-        return new GeneratedCode("K8S_DEPLOYMENT", "deployment.yaml", "k8s/deployment.yaml", sb.toString());
+        return new GeneratedCode("K8S_DEPLOYMENT_BACKEND", "deployment-backend.yaml", "k8s/deployment-backend.yaml", sb.toString());
     }
 
-    private GeneratedCode generateService(AppGenerateConfig config, String namespace) {
+    private GeneratedCode generateFrontendDeployment(AppGenerateConfig config, String namespace, int replicas) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("apiVersion: apps/v1\n");
+        sb.append("kind: Deployment\n");
+        sb.append("metadata:\n");
+        sb.append("  name: ").append(config.getAppCode()).append("-frontend\n");
+        sb.append("  namespace: ").append(namespace).append("\n");
+        sb.append("  labels:\n");
+        sb.append("    app: ").append(config.getAppCode()).append("\n");
+        sb.append("    component: frontend\n");
+        sb.append("spec:\n");
+        sb.append("  replicas: ").append(replicas).append("\n");
+        sb.append("  selector:\n");
+        sb.append("    matchLabels:\n");
+        sb.append("      app: ").append(config.getAppCode()).append("\n");
+        sb.append("      component: frontend\n");
+        sb.append("  template:\n");
+        sb.append("    metadata:\n");
+        sb.append("      labels:\n");
+        sb.append("        app: ").append(config.getAppCode()).append("\n");
+        sb.append("        component: frontend\n");
+        sb.append("    spec:\n");
+        sb.append("      containers:\n");
+        sb.append("        - name: ").append(config.getAppCode()).append("-frontend\n");
+        sb.append("          image: ").append(config.getAppCode()).append("-frontend:").append(config.getVersion()).append("\n");
+        sb.append("          imagePullPolicy: IfNotPresent\n");
+        sb.append("          ports:\n");
+        sb.append("            - containerPort: 80\n");
+        sb.append("              name: http\n");
+        sb.append("              protocol: TCP\n");
+        sb.append("          resources:\n");
+        sb.append("            requests:\n");
+        sb.append("              cpu: 100m\n");
+        sb.append("              memory: 256Mi\n");
+        sb.append("            limits:\n");
+        sb.append("              cpu: 200m\n");
+        sb.append("              memory: 512Mi\n");
+        sb.append("          livenessProbe:\n");
+        sb.append("            httpGet:\n");
+        sb.append("              path: /\n");
+        sb.append("              port: 80\n");
+        sb.append("            initialDelaySeconds: 10\n");
+        sb.append("            periodSeconds: 10\n");
+        sb.append("          readinessProbe:\n");
+        sb.append("            httpGet:\n");
+        sb.append("              path: /\n");
+        sb.append("              port: 80\n");
+        sb.append("            initialDelaySeconds: 5\n");
+        sb.append("            periodSeconds: 5\n");
+        return new GeneratedCode("K8S_DEPLOYMENT_FRONTEND", "deployment-frontend.yaml", "k8s/deployment-frontend.yaml", sb.toString());
+    }
+
+    private GeneratedCode generateBackendService(AppGenerateConfig config, String namespace) {
         StringBuilder sb = new StringBuilder();
         sb.append("apiVersion: v1\n");
         sb.append("kind: Service\n");
@@ -141,7 +202,30 @@ public class K8sGeneratorService {
         sb.append("  selector:\n");
         sb.append("    app: ").append(config.getAppCode()).append("\n");
         sb.append("    component: backend\n");
-        return new GeneratedCode("K8S_SERVICE", "service.yaml", "k8s/service.yaml", sb.toString());
+        return new GeneratedCode("K8S_SERVICE_BACKEND", "service-backend.yaml", "k8s/service-backend.yaml", sb.toString());
+    }
+
+    private GeneratedCode generateFrontendService(AppGenerateConfig config, String namespace) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("apiVersion: v1\n");
+        sb.append("kind: Service\n");
+        sb.append("metadata:\n");
+        sb.append("  name: ").append(config.getAppCode()).append("-frontend\n");
+        sb.append("  namespace: ").append(namespace).append("\n");
+        sb.append("  labels:\n");
+        sb.append("    app: ").append(config.getAppCode()).append("\n");
+        sb.append("    component: frontend\n");
+        sb.append("spec:\n");
+        sb.append("  type: ClusterIP\n");
+        sb.append("  ports:\n");
+        sb.append("    - port: 80\n");
+        sb.append("      targetPort: 80\n");
+        sb.append("      protocol: TCP\n");
+        sb.append("      name: http\n");
+        sb.append("  selector:\n");
+        sb.append("    app: ").append(config.getAppCode()).append("\n");
+        sb.append("    component: frontend\n");
+        return new GeneratedCode("K8S_SERVICE_FRONTEND", "service-frontend.yaml", "k8s/service-frontend.yaml", sb.toString());
     }
 
     private GeneratedCode generateIngress(AppGenerateConfig config, String namespace) {
@@ -196,7 +280,7 @@ public class K8sGeneratorService {
         return new GeneratedCode("K8S_CONFIGMAP", "configmap.yaml", "k8s/configmap.yaml", sb.toString());
     }
 
-    private GeneratedCode generateHpa(AppGenerateConfig config, String namespace) {
+    private GeneratedCode generateBackendHpa(AppGenerateConfig config, String namespace) {
         StringBuilder sb = new StringBuilder();
         sb.append("apiVersion: autoscaling/v2\n");
         sb.append("kind: HorizontalPodAutoscaler\n");
@@ -225,7 +309,39 @@ public class K8sGeneratorService {
         sb.append("        target:\n");
         sb.append("          type: Utilization\n");
         sb.append("          averageUtilization: 80\n");
-        return new GeneratedCode("K8S_HPA", "hpa.yaml", "k8s/hpa.yaml", sb.toString());
+        return new GeneratedCode("K8S_HPA_BACKEND", "hpa-backend.yaml", "k8s/hpa-backend.yaml", sb.toString());
+    }
+
+    private GeneratedCode generateFrontendHpa(AppGenerateConfig config, String namespace) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("apiVersion: autoscaling/v2\n");
+        sb.append("kind: HorizontalPodAutoscaler\n");
+        sb.append("metadata:\n");
+        sb.append("  name: ").append(config.getAppCode()).append("-frontend-hpa\n");
+        sb.append("  namespace: ").append(namespace).append("\n");
+        sb.append("  labels:\n");
+        sb.append("    app: ").append(config.getAppCode()).append("\n");
+        sb.append("spec:\n");
+        sb.append("  scaleTargetRef:\n");
+        sb.append("    apiVersion: apps/v1\n");
+        sb.append("    kind: Deployment\n");
+        sb.append("    name: ").append(config.getAppCode()).append("-frontend\n");
+        sb.append("  minReplicas: 2\n");
+        sb.append("  maxReplicas: 10\n");
+        sb.append("  metrics:\n");
+        sb.append("    - type: Resource\n");
+        sb.append("      resource:\n");
+        sb.append("        name: cpu\n");
+        sb.append("        target:\n");
+        sb.append("          type: Utilization\n");
+        sb.append("          averageUtilization: 60\n");
+        sb.append("    - type: Resource\n");
+        sb.append("      resource:\n");
+        sb.append("        name: memory\n");
+        sb.append("        target:\n");
+        sb.append("          type: Utilization\n");
+        sb.append("          averageUtilization: 70\n");
+        return new GeneratedCode("K8S_HPA_FRONTEND", "hpa-frontend.yaml", "k8s/hpa-frontend.yaml", sb.toString());
     }
 
     private GeneratedCode generateKustomization(AppGenerateConfig config) {
@@ -238,10 +354,17 @@ public class K8sGeneratorService {
         sb.append("resources:\n");
         sb.append("  - namespace.yaml\n");
         sb.append("  - configmap.yaml\n");
-        sb.append("  - deployment.yaml\n");
-        sb.append("  - service.yaml\n");
+        sb.append("  - deployment-backend.yaml\n");
+        sb.append("  - service-backend.yaml\n");
+        if (config.isIncludeFrontend()) {
+            sb.append("  - deployment-frontend.yaml\n");
+            sb.append("  - service-frontend.yaml\n");
+        }
         sb.append("  - ingress.yaml\n");
-        sb.append("  - hpa.yaml\n");
+        sb.append("  - hpa-backend.yaml\n");
+        if (config.isIncludeFrontend()) {
+            sb.append("  - hpa-frontend.yaml\n");
+        }
         sb.append("\n");
         sb.append("commonLabels:\n");
         sb.append("  app: ").append(config.getAppCode()).append("\n");

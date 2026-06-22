@@ -5,17 +5,24 @@ import com.lowcode.flow.entity.AppExposedApi;
 import com.lowcode.flow.mapper.AppExposedApiMapper;
 import com.lowcode.generator.entity.AppGenerateConfig;
 import com.lowcode.generator.entity.GeneratedCode;
+import com.lowcode.model.entity.DataModel;
+import com.lowcode.model.mapper.DataModelMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
 
+@Slf4j
 @Service
 public class SdkGeneratorService {
 
     @Autowired
     private AppExposedApiMapper appExposedApiMapper;
+
+    @Autowired
+    private DataModelMapper dataModelMapper;
 
     public List<GeneratedCode> generateSdk(AppGenerateConfig config) {
         List<GeneratedCode> codes = new ArrayList<>();
@@ -49,17 +56,113 @@ public class SdkGeneratorService {
     private List<AppExposedApi> getApis(AppGenerateConfig config) {
         List<AppExposedApi> apis = new ArrayList<>();
         try {
-            apis = appExposedApiMapper.selectList(
-                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<AppExposedApi>()
-                            .eq(AppExposedApi::getAppCode, config.getAppCode())
-                            .eq(AppExposedApi::getStatus, 1)
-            );
+            com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<AppExposedApi> wrapper =
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
+
+            if (config.getAppId() != null) {
+                wrapper.eq(AppExposedApi::getAppId, config.getAppId());
+            } else if (config.getAppCode() != null) {
+                wrapper.eq(AppExposedApi::getAppCode, config.getAppCode());
+            } else {
+                return getApisFromDataModels(config);
+            }
+
+            wrapper.eq(AppExposedApi::getStatus, 1)
+                    .eq(AppExposedApi::getApiType, "HTTP")
+                    .orderByAsc(AppExposedApi::getApiCode);
+
+            apis = appExposedApiMapper.selectList(wrapper);
         } catch (Exception e) {
-            apis = getDefaultApis(config);
+            log.warn("获取真实接口配置失败，使用数据模型生成默认API", e);
+            apis = getApisFromDataModels(config);
         }
+
         if (apis == null || apis.isEmpty()) {
-            apis = getDefaultApis(config);
+            apis = getApisFromDataModels(config);
         }
+
+        return apis;
+    }
+
+    private List<AppExposedApi> getApisFromDataModels(AppGenerateConfig config) {
+        List<AppExposedApi> apis = new ArrayList<>();
+
+        if (config.getDataModelIds() == null || config.getDataModelIds().isEmpty()) {
+            return getDefaultApis(config);
+        }
+
+        try {
+            for (Long modelId : config.getDataModelIds()) {
+                DataModel model = dataModelMapper.selectById(modelId);
+                if (model != null) {
+                    String tableName = model.getTableName();
+                    String modelName = model.getModelName() != null ? model.getModelName() : tableName;
+
+                    apis.add(AppExposedApi.builder()
+                            .apiName("查询" + modelName + "列表")
+                            .apiCode(tableName + ".list")
+                            .apiType("HTTP")
+                            .httpMethod("GET")
+                            .apiPath("/api/" + tableName + "/list")
+                            .description("分页查询" + modelName + "数据列表")
+                            .authType("TOKEN")
+                            .status(1)
+                            .build());
+
+                    apis.add(AppExposedApi.builder()
+                            .apiName("获取" + modelName + "详情")
+                            .apiCode(tableName + ".get")
+                            .apiType("HTTP")
+                            .httpMethod("GET")
+                            .apiPath("/api/" + tableName + "/{id}")
+                            .description("根据ID获取" + modelName + "详情")
+                            .authType("TOKEN")
+                            .status(1)
+                            .build());
+
+                    apis.add(AppExposedApi.builder()
+                            .apiName("创建" + modelName)
+                            .apiCode(tableName + ".create")
+                            .apiType("HTTP")
+                            .httpMethod("POST")
+                            .apiPath("/api/" + tableName)
+                            .description("创建新的" + modelName + "记录")
+                            .authType("TOKEN")
+                            .status(1)
+                            .build());
+
+                    apis.add(AppExposedApi.builder()
+                            .apiName("更新" + modelName)
+                            .apiCode(tableName + ".update")
+                            .apiType("HTTP")
+                            .httpMethod("PUT")
+                            .apiPath("/api/" + tableName)
+                            .description("更新" + modelName + "记录")
+                            .authType("TOKEN")
+                            .status(1)
+                            .build());
+
+                    apis.add(AppExposedApi.builder()
+                            .apiName("删除" + modelName)
+                            .apiCode(tableName + ".delete")
+                            .apiType("HTTP")
+                            .httpMethod("DELETE")
+                            .apiPath("/api/" + tableName + "/{id}")
+                            .description("根据ID删除" + modelName + "记录")
+                            .authType("TOKEN")
+                            .status(1)
+                            .build());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("根据数据模型生成API失败，使用默认API", e);
+            return getDefaultApis(config);
+        }
+
+        if (apis.isEmpty()) {
+            return getDefaultApis(config);
+        }
+
         return apis;
     }
 

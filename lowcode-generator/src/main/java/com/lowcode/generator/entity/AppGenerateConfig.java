@@ -6,6 +6,7 @@ import java.util.List;
 
 @Data
 public class AppGenerateConfig {
+    private Long appId;
     private String appName;
     private String appCode;
     private String appDesc;
