@@ -49,6 +49,7 @@ import {
   SafetyOutlined,
   HistoryOutlined,
   CloudServerOutlined,
+  MessageOutlined,
 } from '@ant-design/icons'
 import { useParams, useNavigate } from 'react-router-dom'
 import { DndProvider, useDrag, useDrop } from 'react-dnd'
@@ -94,6 +95,8 @@ import {
   ExcelImportButton,
   ExcelExportButton,
 } from '@/components/form-advanced'
+import { CommentPanel, DesignHistoryPanel } from '@/components/comment'
+import { collaborationApi } from '@/api/collaboration'
 
 const { Header, Sider, Content } = Layout
 const { Option } = Select
@@ -839,7 +842,7 @@ const CanvasComponent: React.FC<CanvasComponentProps> = ({ component, isSelected
 const PageDesigner: React.FC = () => {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { currentApp } = useAppStore()
+  const { currentApp, userInfo } = useAppStore()
   const [page, setPage] = useState<PageInfo | null>(null)
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null)
   const [form] = Form.useForm()
@@ -868,6 +871,8 @@ const PageDesigner: React.FC = () => {
   const [versionHistoryVisible, setVersionHistoryVisible] = useState(false)
   const [releaseManagementVisible, setReleaseManagementVisible] = useState(false)
   const [themePanelVisible, setThemePanelVisible] = useState(false)
+  const [collaborationDrawerVisible, setCollaborationDrawerVisible] = useState(false)
+  const pageBeforeSnapshotRef = useRef<any>(null)
 
   const { themeMode, toggleThemeMode, theme } = useTheme()
 
@@ -938,6 +943,7 @@ const PageDesigner: React.FC = () => {
     try {
       const result = await loadPageForEdit(Number(id))
       setPage(result.page || null)
+      pageBeforeSnapshotRef.current = JSON.parse(JSON.stringify(result.page || null))
       setIsOfflineMode(result.fromCache)
       form.setFieldsValue({
         ...result.page,
@@ -1689,6 +1695,18 @@ const PageDesigner: React.FC = () => {
           try {
             const res = await pageApi.save(data)
             setPage(res.data)
+            pageBeforeSnapshotRef.current = JSON.parse(JSON.stringify(res.data))
+            try {
+              await collaborationApi.createHistory({
+                appId: currentApp?.id,
+                targetType: 'PAGE',
+                targetId: res.data.id,
+                targetName: res.data.pageName,
+                operationType: 'CREATE',
+                operationDesc: `创建页面: ${res.data.pageName}`,
+                afterSnapshot: JSON.stringify(res.data),
+              })
+            } catch (_) { /* ignore */ }
             message.success('创建成功')
             try {
               const { savePageOfflineOnly } = await import('@/utils/offline/pageOfflineService')
@@ -1725,6 +1743,20 @@ const PageDesigner: React.FC = () => {
         if (page.id) {
           try {
             await pageApi.update(data)
+            const afterSnapshot = JSON.parse(JSON.stringify(data))
+            try {
+              await collaborationApi.createHistory({
+                appId: currentApp?.id,
+                targetType: 'PAGE',
+                targetId: page!.id,
+                targetName: values.pageName,
+                operationType: 'UPDATE',
+                operationDesc: `更新页面: ${values.pageName}`,
+                beforeSnapshot: JSON.stringify(pageBeforeSnapshotRef.current),
+                afterSnapshot: JSON.stringify(afterSnapshot),
+              })
+              pageBeforeSnapshotRef.current = afterSnapshot
+            } catch (_) { /* ignore */ }
             message.success('保存成功')
             try {
               await versionApi.createSnapshot({
@@ -1772,6 +1804,17 @@ const PageDesigner: React.FC = () => {
     if (!page?.id) return
     try {
       await pageApi.publish(page.id)
+      try {
+        await collaborationApi.createHistory({
+          appId: currentApp?.id,
+          targetType: 'PAGE',
+          targetId: page.id,
+          targetName: page.pageName,
+          operationType: 'PUBLISH',
+          operationDesc: `发布页面: ${page.pageName}`,
+          afterSnapshot: JSON.stringify(pageBeforeSnapshotRef.current || page),
+        })
+      } catch (_) { /* ignore */ }
       message.success('发布成功')
       loadPage()
     } catch (e) {
@@ -3577,6 +3620,12 @@ const PageDesigner: React.FC = () => {
             </Button>
             <Divider type="vertical" />
             <Button 
+              icon={<MessageOutlined />}
+              onClick={() => setCollaborationDrawerVisible(true)}
+            >
+              协作评论
+            </Button>
+            <Button 
               icon={<HistoryOutlined />} 
               onClick={() => setVersionHistoryVisible(true)}
             >
@@ -4357,6 +4406,38 @@ const PageDesigner: React.FC = () => {
               loadPage()
             }}
           />
+        )}
+      </Drawer>
+
+      <Drawer
+        title="协作评论与设计历史"
+        placement="right"
+        width={520}
+        open={collaborationDrawerVisible}
+        onClose={() => setCollaborationDrawerVisible(false)}
+        destroyOnClose
+      >
+        {page?.id && currentApp?.id && (
+          <Tabs defaultActiveKey="comments" size="small">
+            <Tabs.TabPane tab="评论与任务" key="comments">
+              <CommentPanel
+                appId={currentApp.id}
+                targetType="PAGE"
+                targetId={page.id}
+                targetName={page.pageName}
+                userId={userInfo?.id || 1}
+                username={userInfo?.username}
+                avatar={userInfo?.avatar}
+              />
+            </Tabs.TabPane>
+            <Tabs.TabPane tab="设计历史" key="history">
+              <DesignHistoryPanel
+                appId={currentApp.id}
+                targetType="PAGE"
+                targetId={page.id}
+              />
+            </Tabs.TabPane>
+          </Tabs>
         )}
       </Drawer>
 

@@ -49,6 +49,7 @@ import {
   FilterOutlined,
   ApartmentOutlined,
   ShareAltOutlined,
+  MessageOutlined,
 } from '@ant-design/icons'
 import { useParams, useNavigate } from 'react-router-dom'
 import { DndProvider, useDrag, useDrop } from 'react-dnd'
@@ -56,6 +57,8 @@ import { HTML5Backend } from 'react-dnd-html5-backend'
 import { BusinessLogic, LogicNode, LogicEdge, logicApi, debugApi, rpaApi, RpaScript, crossAppApi, AppExposedApi, AppExposedEvent } from '@/api/flow'
 import { appApi, AppInfo } from '@/api'
 import { useAppStore } from '@/store/appStore'
+import { CommentPanel, DesignHistoryPanel } from '@/components/comment'
+import { collaborationApi } from '@/api/collaboration'
 
 const { Header, Sider, Content } = Layout
 const { Option } = Select
@@ -298,7 +301,7 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({ node, isSelected, onSelect, onD
 const LogicDesigner: React.FC = () => {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { currentApp } = useAppStore()
+  const { currentApp, userInfo } = useAppStore()
   const [logic, setLogic] = useState<BusinessLogic | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [connecting, setConnecting] = useState(false)
@@ -319,9 +322,11 @@ const LogicDesigner: React.FC = () => {
   const [appList, setAppList] = useState<AppInfo[]>([])
   const [exposedApis, setExposedApis] = useState<AppExposedApi[]>([])
   const [exposedEvents, setExposedEvents] = useState<AppExposedEvent[]>([])
+  const [collaborationDrawerVisible, setCollaborationDrawerVisible] = useState(false)
 
   const canvasRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
+  const logicBeforeSnapshotRef = useRef<any>(null)
 
   const loadLogic = useCallback(async () => {
     if (!id || id === 'undefined') {
@@ -345,6 +350,7 @@ const LogicDesigner: React.FC = () => {
     try {
       const res = await logicApi.get(Number(id))
       setLogic(res.data || null)
+      logicBeforeSnapshotRef.current = JSON.parse(JSON.stringify(res.data || null))
       form.setFieldsValue(res.data)
     } catch (e) {
       console.error(e)
@@ -446,10 +452,36 @@ const LogicDesigner: React.FC = () => {
       }
       if (logic.id) {
         await logicApi.update(data)
+        const afterSnapshot = JSON.parse(JSON.stringify(data))
+        try {
+          await collaborationApi.createHistory({
+            appId: currentApp?.id,
+            targetType: 'LOGIC_NODE',
+            targetId: logic.id,
+            targetName: values.logicName,
+            operationType: 'UPDATE',
+            operationDesc: `更新业务逻辑: ${values.logicName}`,
+            beforeSnapshot: JSON.stringify(logicBeforeSnapshotRef.current),
+            afterSnapshot: JSON.stringify(afterSnapshot),
+          })
+          logicBeforeSnapshotRef.current = afterSnapshot
+        } catch (_) { /* ignore */ }
         message.success('保存成功')
       } else {
         const res = await logicApi.save(data)
         setLogic(res.data)
+        logicBeforeSnapshotRef.current = JSON.parse(JSON.stringify(res.data))
+        try {
+          await collaborationApi.createHistory({
+            appId: currentApp?.id,
+            targetType: 'LOGIC_NODE',
+            targetId: res.data.id,
+            targetName: res.data.logicName,
+            operationType: 'CREATE',
+            operationDesc: `创建业务逻辑: ${res.data.logicName}`,
+            afterSnapshot: JSON.stringify(res.data),
+          })
+        } catch (_) { /* ignore */ }
         message.success('创建成功')
         navigate(`/logic/designer/${res.data.id}`, { replace: true })
       }
@@ -462,6 +494,17 @@ const LogicDesigner: React.FC = () => {
     if (!logic?.id) return
     try {
       await logicApi.publish(logic.id)
+      try {
+        await collaborationApi.createHistory({
+          appId: currentApp?.id,
+          targetType: 'LOGIC_NODE',
+          targetId: logic.id,
+          targetName: logic.logicName,
+          operationType: 'PUBLISH',
+          operationDesc: `发布业务逻辑: ${logic.logicName}`,
+          afterSnapshot: JSON.stringify(logicBeforeSnapshotRef.current || logic),
+        })
+      } catch (_) { /* ignore */ }
       message.success('发布成功')
       loadLogic()
     } catch (e) {
@@ -1133,6 +1176,9 @@ const LogicDesigner: React.FC = () => {
               重做
             </Button>
             <Divider type="vertical" />
+            <Button icon={<MessageOutlined />} onClick={() => setCollaborationDrawerVisible(true)}>
+              协作评论
+            </Button>
             <Button icon={<BugOutlined />} onClick={handleDebugStart}>
               调试
             </Button>
@@ -1420,6 +1466,38 @@ const LogicDesigner: React.FC = () => {
             {codeContent}
           </pre>
         </Modal>
+
+        <Drawer
+          title="协作评论与设计历史"
+          placement="right"
+          width={520}
+          open={collaborationDrawerVisible}
+          onClose={() => setCollaborationDrawerVisible(false)}
+          destroyOnClose
+        >
+          {logic?.id && currentApp?.id && (
+            <Tabs defaultActiveKey="comments" size="small">
+              <Tabs.TabPane tab="评论与任务" key="comments">
+                <CommentPanel
+                  appId={currentApp.id}
+                  targetType="LOGIC_NODE"
+                  targetId={logic.id}
+                  targetName={logic.logicName}
+                  userId={userInfo?.id || 1}
+                  username={userInfo?.username}
+                  avatar={userInfo?.avatar}
+                />
+              </Tabs.TabPane>
+              <Tabs.TabPane tab="设计历史" key="history">
+                <DesignHistoryPanel
+                  appId={currentApp.id}
+                  targetType="LOGIC_NODE"
+                  targetId={logic.id}
+                />
+              </Tabs.TabPane>
+            </Tabs>
+          )}
+        </Drawer>
       </Layout>
     </DndProvider>
   )

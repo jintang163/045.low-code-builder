@@ -185,14 +185,40 @@ const CommentPanel: React.FC<CommentPanelProps> = ({
     }
   }
 
-  const handleUploadChange: UploadProps['onChange'] = ({ fileList }) => {
+  const handleUploadChange: UploadProps['onChange'] = ({ file, fileList }) => {
     setAttachments(fileList)
+  }
+
+  const customUploadRequest = async (options: any) => {
+    const { file, onProgress, onSuccess, onError } = options
+    try {
+      onProgress?.({ percent: 30 })
+      const res = await collaborationApi.uploadAttachment(file)
+      onProgress?.({ percent: 100 })
+      if (res.code === 0 || res.code === 200) {
+        const uploadData = res.data as any
+        onSuccess?.({
+          ...uploadData,
+          url: uploadData.fileUrl,
+          name: uploadData.fileName,
+          type: uploadData.fileType,
+          size: uploadData.fileSize,
+        })
+        message.success('上传成功')
+      } else {
+        onError?.(new Error(res.message || '上传失败'))
+        message.error(res.message || '上传失败')
+      }
+    } catch (e: any) {
+      onError?.(e)
+      message.error(e.message || '上传失败')
+    }
   }
 
   const beforeUpload = (file: File) => {
     const isImage = file.type.startsWith('image/')
     const isLt10M = file.size / 1024 / 1024 < 10
-    if (!isImage && !file.type.startsWith('application/')) {
+    if (!isImage && !file.type.startsWith('application/') && !file.type.startsWith('text/')) {
       message.error('只能上传图片或文档文件!')
       return Upload.LIST_IGNORE
     }
@@ -200,7 +226,7 @@ const CommentPanel: React.FC<CommentPanelProps> = ({
       message.error('文件大小不能超过 10MB!')
       return Upload.LIST_IGNORE
     }
-    return false
+    return true
   }
 
   const handleSubmit = async () => {
@@ -211,12 +237,16 @@ const CommentPanel: React.FC<CommentPanelProps> = ({
     }
 
     try {
-      const atts: CommentAttachment[] = attachments.map((f) => ({
-        fileName: f.name,
-        fileUrl: f.url || f.response?.url || '#',
-        fileType: f.type,
-        fileSize: f.size,
-      }))
+      const atts: CommentAttachment[] = attachments
+        .filter((f) => f.status === 'done' && f.response)
+        .map((f) => ({
+          fileName: f.response.fileName || f.name,
+          fileUrl: f.response.fileUrl || f.url,
+          fileType: f.response.fileType || f.type,
+          fileSize: f.response.fileSize || f.size,
+          width: f.response.width,
+          height: f.response.height,
+        }))
 
       const res = await collaborationApi.createComment({
         appId,
@@ -253,12 +283,16 @@ const CommentPanel: React.FC<CommentPanelProps> = ({
     }
 
     try {
-      const atts: CommentAttachment[] = attachments.map((f) => ({
-        fileName: f.name,
-        fileUrl: f.url || f.response?.url || '#',
-        fileType: f.type,
-        fileSize: f.size,
-      }))
+      const atts: CommentAttachment[] = attachments
+        .filter((f) => f.status === 'done' && f.response)
+        .map((f) => ({
+          fileName: f.response.fileName || f.name,
+          fileUrl: f.response.fileUrl || f.url,
+          fileType: f.response.fileType || f.type,
+          fileSize: f.response.fileSize || f.size,
+          width: f.response.width,
+          height: f.response.height,
+        }))
 
       const taskAssignment: TaskAssignmentDTO = {
         taskTitle: values.taskTitle,
@@ -668,6 +702,7 @@ const CommentPanel: React.FC<CommentPanelProps> = ({
                   fileList={attachments}
                   onChange={handleUploadChange}
                   beforeUpload={beforeUpload}
+                  customRequest={customUploadRequest}
                   multiple
                   accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
                   listType="picture"

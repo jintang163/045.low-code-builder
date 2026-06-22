@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Layout,
   Button,
@@ -15,6 +15,7 @@ import {
   Drawer,
   Tag,
   Divider,
+  Card,
 } from 'antd'
 import {
   SaveOutlined,
@@ -26,6 +27,7 @@ import {
   ImportOutlined,
   SyncOutlined,
   HistoryOutlined,
+  MessageOutlined,
 } from '@ant-design/icons'
 import { useParams, useNavigate } from 'react-router-dom'
 import { DndProvider, useDrag, useDrop } from 'react-dnd'
@@ -34,6 +36,8 @@ import ReactECharts from 'echarts-for-react'
 import { DataModel, ModelField, dataModelApi, fieldTypeOptions } from '@/api/dataModel'
 import { useAppStore } from '@/store/appStore'
 import { VersionHistoryPanel } from '@/components/dataModelVersion'
+import { CommentPanel, DesignHistoryPanel } from '@/components/comment'
+import { collaborationApi } from '@/api/collaboration'
 
 const { Header, Sider, Content } = Layout
 const { Option } = Select
@@ -116,7 +120,7 @@ const FieldItem: React.FC<{
 const DataModelDesigner: React.FC = () => {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { currentApp } = useAppStore()
+  const { currentApp, userInfo } = useAppStore()
   const [model, setModel] = useState<DataModel | null>(null)
   const [selectedFieldIndex, setSelectedFieldIndex] = useState<number | null>(null)
   const [form] = Form.useForm()
@@ -127,11 +131,13 @@ const DataModelDesigner: React.FC = () => {
   const [erOption, setErOption] = useState<any>({})
   const [importVisible, setImportVisible] = useState(false)
   const [versionDrawerVisible, setVersionDrawerVisible] = useState(false)
+  const [collaborationDrawerVisible, setCollaborationDrawerVisible] = useState(false)
   const [dataSources] = useState([
     { id: 1, name: '主数据库' },
     { id: 2, name: '业务数据库' },
   ])
   const [tables, setTables] = useState<{ name: string; comment: string }[]>([])
+  const beforeSnapshotRef = useRef<any>(null)
 
   const loadModel = useCallback(async () => {
     if (!id || id === 'undefined') {
@@ -149,6 +155,7 @@ const DataModelDesigner: React.FC = () => {
     try {
       const res = await dataModelApi.get(Number(id))
       setModel(res.data || null)
+      beforeSnapshotRef.current = JSON.parse(JSON.stringify(res.data || null))
       form.setFieldsValue(res.data)
       if (res.data?.fields && res.data.fields.length > 0) {
         setSelectedFieldIndex(0)
@@ -209,14 +216,41 @@ const DataModelDesigner: React.FC = () => {
   const handleSave = async () => {
     try {
       const values = await form.validateFields()
+      const beforeSnapshot = beforeSnapshotRef.current
       if (!model) {
         const data = { ...model, ...values }
         if (model.id) {
           await dataModelApi.update(data)
+          const afterSnapshot = JSON.parse(JSON.stringify({ ...model, ...values }))
+          try {
+            await collaborationApi.createHistory({
+              appId: currentApp?.id,
+              targetType: 'DATA_MODEL',
+              targetId: model.id,
+              targetName: data.modelName,
+              operationType: 'UPDATE',
+              operationDesc: `更新数据模型: ${data.modelName}`,
+              beforeSnapshot: JSON.stringify(beforeSnapshot),
+              afterSnapshot: JSON.stringify(afterSnapshot),
+            })
+          } catch (_) { /* ignore */ }
+          beforeSnapshotRef.current = afterSnapshot
           message.success('保存成功')
         } else {
           const res = await dataModelApi.save(data)
           setModel(res.data)
+          beforeSnapshotRef.current = JSON.parse(JSON.stringify(res.data))
+          try {
+            await collaborationApi.createHistory({
+              appId: currentApp?.id,
+              targetType: 'DATA_MODEL',
+              targetId: res.data.id,
+              targetName: res.data.modelName,
+              operationType: 'CREATE',
+              operationDesc: `创建数据模型: ${res.data.modelName}`,
+              afterSnapshot: JSON.stringify(res.data),
+            })
+          } catch (_) { /* ignore */ }
           message.success('创建成功')
           navigate(`/dataModel/designer/${res.data.id}`, { replace: true })
         }
@@ -230,6 +264,17 @@ const DataModelDesigner: React.FC = () => {
     if (!model?.id) return
     try {
       await dataModelApi.publish(model.id)
+      try {
+        await collaborationApi.createHistory({
+          appId: currentApp?.id,
+          targetType: 'DATA_MODEL',
+          targetId: model.id,
+          targetName: model.modelName,
+          operationType: 'PUBLISH',
+          operationDesc: `发布数据模型: ${model.modelName}`,
+          afterSnapshot: JSON.stringify(beforeSnapshotRef.current || model),
+        })
+      } catch (_) { /* ignore */ }
       message.success('发布成功')
       loadModel()
     } catch (e) {
@@ -349,6 +394,9 @@ const DataModelDesigner: React.FC = () => {
             </Form>
           </Space>
           <Space>
+            <Button icon={<MessageOutlined />} onClick={() => setCollaborationDrawerVisible(true)}>
+              协作评论
+            </Button>
             <Button icon={<HistoryOutlined />} onClick={() => setVersionDrawerVisible(true)}>
               版本历史
             </Button>
@@ -566,6 +614,38 @@ const DataModelDesigner: React.FC = () => {
               }
             }}
           />
+        )}
+      </Drawer>
+
+      <Drawer
+        title="协作评论与设计历史"
+        placement="right"
+        width={520}
+        open={collaborationDrawerVisible}
+        onClose={() => setCollaborationDrawerVisible(false)}
+        destroyOnClose
+      >
+        {model?.id && currentApp?.id && (
+          <Tabs defaultActiveKey="comments" size="small">
+            <Tabs.TabPane tab="评论与任务" key="comments">
+              <CommentPanel
+                appId={currentApp.id}
+                targetType="DATA_MODEL"
+                targetId={model.id}
+                targetName={model.modelName}
+                userId={userInfo?.id || 1}
+                username={userInfo?.username}
+                avatar={userInfo?.avatar}
+              />
+            </Tabs.TabPane>
+            <Tabs.TabPane tab="设计历史" key="history">
+              <DesignHistoryPanel
+                appId={currentApp.id}
+                targetType="DATA_MODEL"
+                targetId={model.id}
+              />
+            </Tabs.TabPane>
+          </Tabs>
         )}
       </Drawer>
     </DndProvider>

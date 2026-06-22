@@ -1,20 +1,32 @@
 package com.lowcode.collaboration.controller;
 
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.lowcode.collaboration.dto.CommentCreateDTO;
 import com.lowcode.collaboration.dto.CommentQueryDTO;
 import com.lowcode.collaboration.entity.Comment;
+import com.lowcode.collaboration.feign.OssFeignClient;
+import com.lowcode.collaboration.feign.OssFileVO;
 import com.lowcode.collaboration.service.CommentService;
+import com.lowcode.common.exception.BusinessException;
+import com.lowcode.common.exception.ErrorCode;
 import com.lowcode.common.result.Result;
 import com.lowcode.common.util.UserContext;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.InputStream;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
+@Slf4j
 @Api(tags = "评论管理")
 @RestController
 @RequestMapping("/api/collaboration/comment")
@@ -22,6 +34,9 @@ public class CommentController {
 
     @Autowired
     private CommentService commentService;
+
+    @Autowired(required = false)
+    private OssFeignClient ossFeignClient;
 
     @ApiOperation("创建评论")
     @PostMapping
@@ -98,5 +113,53 @@ public class CommentController {
         Long userId = UserContext.getCurrentUserId();
         commentService.markAllMentionsAsRead(userId);
         return Result.success();
+    }
+
+    @ApiOperation("上传评论附件（图片/文件）")
+    @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Result<Map<String, Object>> uploadAttachment(@RequestParam("file") MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "上传文件不能为空");
+        }
+
+        try {
+            OssFileVO ossFile;
+            if (ossFeignClient != null) {
+                Result<OssFileVO> uploadResult = ossFeignClient.upload(file, "collaboration/comments", null);
+                if (uploadResult == null || uploadResult.getCode() != 0 && uploadResult.getCode() != 200) {
+                    throw new BusinessException(ErrorCode.SYSTEM_ERROR,
+                            uploadResult != null ? uploadResult.getMessage() : "文件上传失败");
+                }
+                ossFile = uploadResult.getData();
+            } else {
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "OSS服务未连接");
+            }
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("id", ossFile.getId());
+            result.put("fileName", ossFile.getOriginalName());
+            result.put("fileUrl", ossFile.getUrl());
+            result.put("fileType", ossFile.getContentType());
+            result.put("fileSize", ossFile.getFileSize());
+
+            if (ossFile.getContentType() != null && ossFile.getContentType().startsWith("image/")) {
+                try (InputStream is = file.getInputStream()) {
+                    BufferedImage image = ImageIO.read(is);
+                    if (image != null) {
+                        result.put("width", image.getWidth());
+                        result.put("height", image.getHeight());
+                    }
+                } catch (Exception e) {
+                    log.warn("读取图片尺寸失败: {}", e.getMessage());
+                }
+            }
+
+            return Result.success(result);
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("上传评论附件失败", e);
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "文件上传失败: " + e.getMessage());
+        }
     }
 }

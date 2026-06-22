@@ -125,6 +125,22 @@ export interface DesignHistoryCreateDTO {
 }
 
 export const collaborationApi = {
+  uploadAttachment: (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return request.post<{
+      id: number
+      fileName: string
+      fileUrl: string
+      fileType: string
+      fileSize: number
+      width?: number
+      height?: number
+    }>('/collaboration/comment/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+
   createComment: (data: CommentCreateDTO) =>
     request.post<Comment>('/collaboration/comment', data),
 

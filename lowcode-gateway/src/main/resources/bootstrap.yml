@@ -54,6 +54,12 @@ spring:
             - Path=/api/deploy/**,/ws/deploy/**
           filters:
             - StripPrefix=0
+        - id: lowcode-collaboration
+          uri: lb://lowcode-collaboration
+          predicates:
+            - Path=/api/collaboration/**,/ws/collaboration/**
+          filters:
+            - StripPrefix=0
       globalcors:
         corsConfigurations:
           '[/**]':
