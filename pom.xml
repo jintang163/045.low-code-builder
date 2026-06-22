@@ -22,6 +22,7 @@
         <module>lowcode-oss</module>
         <module>lowcode-monitor</module>
         <module>lowcode-deploy</module>
+        <module>lowcode-collaboration</module>
     </modules>
 
     <properties>

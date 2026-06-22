@@ -1,0 +1,253 @@
+.comment-panel {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.panel-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fafafa;
+}
+
+.panel-sub-header {
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 13px;
+  color: #666;
+}
+
+.comments-section,
+.tasks-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.comment-input-area {
+  padding: 16px;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fafafa;
+}
+
+.input-row {
+  margin-bottom: 8px;
+}
+
+.reply-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding: 6px 12px;
+  background: #e6f4ff;
+  border-radius: 4px;
+}
+
+.toolbar-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.comments-list,
+.tasks-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.comment-item {
+  padding: 12px;
+  background: #fff;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  border: 1px solid #f0f0f0;
+  transition: all 0.3s;
+
+  &:hover {
+    border-color: #d9d9d9;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+
+  &.resolved {
+    opacity: 0.7;
+    background: #f6ffed;
+    border-color: #b7eb8f;
+  }
+}
+
+.comment-author {
+  display: inline-flex;
+  align-items: center;
+  font-weight: 500;
+  color: #262626;
+}
+
+.comment-tag {
+  font-size: 11px;
+  padding: 0 6px;
+  line-height: 18px;
+  height: 18px;
+}
+
+.comment-content {
+  .comment-text {
+    margin: 8px 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #262626;
+    line-height: 1.6;
+  }
+
+  .reply-tag {
+    margin-bottom: 8px;
+  }
+
+  .comment-attachments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 8px 0;
+
+    .attachment-image {
+      border-radius: 4px;
+      object-fit: cover;
+      cursor: pointer;
+      transition: transform 0.2s;
+
+      &:hover {
+        transform: scale(1.02);
+      }
+    }
+
+    .attachment-file {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 12px;
+      background: #f5f5f5;
+      border-radius: 4px;
+      color: #1890ff;
+      text-decoration: none;
+      font-size: 12px;
+
+      &:hover {
+        background: #e6f4ff;
+      }
+    }
+  }
+
+  .comment-mentions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+  }
+}
+
+.comment-replies {
+  margin-top: 12px;
+  padding-left: 40px;
+  border-left: 2px solid #f0f0f0;
+
+  .comment-item {
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    background: #fafafa;
+  }
+}
+
+.mention-user-popover {
+  width: 280px;
+}
+
+.task-item {
+  padding: 12px 16px;
+  background: #fff;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  transition: all 0.3s;
+
+  &:hover {
+    border-color: #1890ff;
+    box-shadow: 0 2px 8px rgba(24, 144, 255, 0.1);
+  }
+}
+
+.task-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+
+  .task-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+  }
+}
+
+.task-desc {
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 12px;
+  color: #8c8c8c;
+
+  > div {
+    display: flex;
+    align-items: center;
+  }
+}
+
+:global {
+  .ant-comment-actions {
+    margin-top: 8px;
+  }
+
+  .ant-comment-content-author {
+    margin-bottom: 4px;
+  }
+
+  .ant-tabs-nav {
+    margin-bottom: 0 !important;
+  }
+
+  .ant-upload-list-picture {
+    margin-top: 8px;
+  }
+
+  .ant-upload-select-picture {
+    margin: 0;
+  }
+}
