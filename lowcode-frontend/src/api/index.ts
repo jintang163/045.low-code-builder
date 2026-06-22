@@ -154,3 +154,42 @@ export const userRoleApi = {
   deleteRole: (id: number) =>
     request.delete(`/role/${id}`),
 }
+
+export interface AppTheme {
+  id?: number
+  appId: number
+  themeName: string
+  themeMode?: 'light' | 'dark'
+  primaryColor?: string
+  successColor?: string
+  warningColor?: string
+  errorColor?: string
+  infoColor?: string
+  borderRadius?: string
+  fontFamily?: string
+  fontSize?: string
+  layoutMode?: string
+  sidebarTheme?: string
+  headerTheme?: string
+  customCss?: string
+  themeConfig?: string
+  isDefault?: number
+  status?: number
+  createdTime?: string
+  updatedTime?: string
+}
+
+export const themeApi = {
+  list: (appId: number) => request.get<AppTheme[]>(`/theme/list/${appId}`),
+  getDefault: (appId: number) => request.get<AppTheme>(`/theme/default/${appId}`),
+  get: (id: number) => request.get<AppTheme>(`/theme/${id}`),
+  create: (data: AppTheme) => request.post<AppTheme>('/theme', data),
+  update: (data: AppTheme) => request.put<AppTheme>('/theme', data),
+  delete: (id: number) => request.delete(`/theme/${id}`),
+  setDefault: (appId: number, themeId: number) =>
+    request.post<AppTheme>('/theme/default', {}, { params: { appId, themeId } }),
+  duplicate: (id: number, newName?: string) =>
+    request.post<AppTheme>(`/theme/duplicate/${id}`, {}, { params: { newName } }),
+  getCss: (id: number) => request.get<string>(`/theme/${id}/css`),
+  getDefaultCss: (appId: number) => request.get<string>(`/theme/app/${appId}/css`),
+}

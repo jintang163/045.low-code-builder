@@ -1,10 +1,10 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { ConfigProvider } from 'antd'
-import zhCN from 'antd/locale/zh_CN'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import './styles/global.less'
+import './styles/theme.less'
+import AppThemeProvider from './context/AppThemeProvider'
 import { initDB } from './utils/offline/indexedDB'
 import { getNetworkDetector } from './utils/offline/networkDetector'
 import { getSyncManager } from './utils/offline/syncManager'
@@ -69,18 +69,10 @@ registerServiceWorker()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <ConfigProvider
-      locale={zhCN}
-      theme={{
-        token: {
-          colorPrimary: '#1677ff',
-          borderRadius: 6,
-        },
-      }}
-    >
+    <AppThemeProvider>
       <BrowserRouter>
         <App />
       </BrowserRouter>
-    </ConfigProvider>
+    </AppThemeProvider>
   </React.StrictMode>,
 )

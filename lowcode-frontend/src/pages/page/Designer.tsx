@@ -75,6 +75,12 @@ import { generateColor } from '@/utils/collaboration'
 import type { CRDTOperation, ConflictInfo } from '@/utils/collaboration'
 import OfflineStatus from '@/components/offline/OfflineStatus'
 import { useNetworkStatus } from '@/hooks/useNetworkStatus'
+import ThemeConfigPanel from '@/components/ThemeConfigPanel'
+import { useTheme } from '@/context/ThemeContext'
+import {
+  BulbOutlined,
+  PictureOutlined,
+} from '@ant-design/icons'
 import { savePageOffline, savePageOfflineOnly, loadPageForEdit } from '@/utils/offline/pageOfflineService'
 import { startSync } from '@/utils/offline/syncManager'
 import { getPendingCount, addPendingChange } from '@/utils/offline/indexedDB'
@@ -861,6 +867,9 @@ const PageDesigner: React.FC = () => {
   const [aiSessionId, setAiSessionId] = useState('')
   const [versionHistoryVisible, setVersionHistoryVisible] = useState(false)
   const [releaseManagementVisible, setReleaseManagementVisible] = useState(false)
+  const [themePanelVisible, setThemePanelVisible] = useState(false)
+
+  const { themeMode, toggleThemeMode, theme } = useTheme()
 
   const [extDataSources, setExtDataSources] = useState<DataSource[]>([])
   const [selectedExtDataSourceId, setSelectedExtDataSourceId] = useState<number | null>(null)
@@ -3587,6 +3596,18 @@ const PageDesigner: React.FC = () => {
             >
               AI助手
             </Button>
+            <Button 
+              icon={<PictureOutlined />} 
+              onClick={() => setThemePanelVisible(true)}
+            >
+              主题
+            </Button>
+            <Button 
+              icon={themeMode === 'dark' ? <BulbOutlined /> : <BulbOutlined />}
+              onClick={toggleThemeMode}
+            >
+              {themeMode === 'dark' ? '浅色' : '深色'}
+            </Button>
             <Button icon={<EyeOutlined />} onClick={handlePreview}>
               预览
             </Button>
@@ -4338,6 +4359,12 @@ const PageDesigner: React.FC = () => {
           />
         )}
       </Drawer>
+
+      <ThemeConfigPanel
+        visible={themePanelVisible}
+        onClose={() => setThemePanelVisible(false)}
+        appId={currentApp?.id || 1}
+      />
     </DndProvider>
   )
 }
