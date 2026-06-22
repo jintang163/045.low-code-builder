@@ -60,6 +60,12 @@ spring:
             - Path=/api/collaboration/**,/ws/collaboration/**
           filters:
             - StripPrefix=0
+        - id: lowcode-attendance
+          uri: lb://lowcode-attendance
+          predicates:
+            - Path=/api/attendance/**
+          filters:
+            - StripPrefix=0
       globalcors:
         corsConfigurations:
           '[/**]':

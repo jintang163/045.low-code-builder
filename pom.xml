@@ -23,6 +23,7 @@
         <module>lowcode-monitor</module>
         <module>lowcode-deploy</module>
         <module>lowcode-collaboration</module>
+        <module>lowcode-attendance</module>
     </modules>
 
     <properties>

@@ -26,6 +26,11 @@ import {
   FileTextOutlined,
   ExperimentOutlined,
   RobotOutlined,
+  CalendarOutlined,
+  ClockCircleOutlined,
+  WalletOutlined,
+  SolutionOutlined,
+  EnvironmentOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAppStore } from '@/store/appStore'
@@ -114,6 +119,38 @@ const MainLayout: React.FC = ({ children }: { children?: React.ReactNode }) => {
       key: '/rpa',
       icon: <RobotOutlined />,
       label: 'RPA自动化',
+    },
+    {
+      key: '/attendance',
+      icon: <CalendarOutlined />,
+      label: '考勤管理',
+      children: [
+        {
+          key: '/attendance/schedule',
+          icon: <CalendarOutlined />,
+          label: '排班管理',
+        },
+        {
+          key: '/attendance/stats',
+          icon: <ClockCircleOutlined />,
+          label: '考勤统计',
+        },
+        {
+          key: '/attendance/leave',
+          icon: <SolutionOutlined />,
+          label: '请假审批',
+        },
+        {
+          key: '/attendance/salary',
+          icon: <WalletOutlined />,
+          label: '工资管理',
+        },
+        {
+          key: '/attendance/clockin',
+          icon: <EnvironmentOutlined />,
+          label: '打卡中心',
+        },
+      ],
     },
     {
       key: '/report',
@@ -243,6 +280,12 @@ const MainLayout: React.FC = ({ children }: { children?: React.ReactNode }) => {
       '/abtest/detail': 'A/B测试详情',
       '/rpa': 'RPA自动化',
       '/rpa/designer': 'RPA脚本设计器',
+      '/attendance': '考勤管理',
+      '/attendance/schedule': '排班管理',
+      '/attendance/stats': '考勤统计',
+      '/attendance/leave': '请假审批',
+      '/attendance/salary': '工资管理',
+      '/attendance/clockin': '打卡中心',
       '/component': '组件管理',
       '/component/debugger': '组件调试',
       '/permission': '权限管理',

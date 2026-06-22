@@ -216,6 +216,24 @@ services:
     networks:
       - lowcode-network
 
+  lowcode-attendance:
+    build:
+      context: ../
+      dockerfile: docker/lowcode-attendance/Dockerfile
+    container_name: lowcode-attendance
+    ports:
+      - "8088:8088"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      NACOS_SERVER_ADDR: nacos:8848
+    depends_on:
+      - nacos
+      - redis
+      - mysql
+    restart: unless-stopped
+    networks:
+      - lowcode-network
+
   lowcode-frontend:
     build:
       context: ../lowcode-frontend

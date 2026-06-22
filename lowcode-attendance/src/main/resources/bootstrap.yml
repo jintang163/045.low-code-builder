@@ -1,0 +1,94 @@
+spring:
+  application:
+    name: lowcode-attendance
+  profiles:
+    active: dev
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+        namespace: ${NACOS_NAMESPACE:public}
+      config:
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+        namespace: ${NACOS_NAMESPACE:public}
+        file-extension: yaml
+        group: DEFAULT_GROUP
+  devtools:
+    restart:
+      enabled: true
+      additional-paths: src/main/java
+      trigger-file: .reloadtrigger
+
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/lowcode_platform?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: root
+  redis:
+    host: localhost
+    port: 6379
+    password: lowcode@2024
+    database: 0
+
+server:
+  port: 8088
+  servlet:
+    context-path: /
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.lowcode.attendance.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    cache-enabled: false
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+knife4j:
+  enable: true
+  openapi:
+    title: 考勤排班服务API
+    description: 低代码平台员工排班与考勤服务接口文档
+    version: 1.0.0
+    concat: lowcode-platform
+
+attendance:
+  gps:
+    default-latitude: 39.9042
+    default-longitude: 116.4074
+    allow-radius-meters: 500
+  work:
+    morning-shift-start: "08:00"
+    morning-shift-end: "16:00"
+    evening-shift-start: "14:00"
+    evening-shift-end: "22:00"
+    default-hourly-wage: 20.00
+
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://mysql:3306/lowcode_platform?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: lowcode@2024
+  redis:
+    host: redis
+    port: 6379
+    password: lowcode@2024
+    database: 0
+
+server:
+  port: 8088

@@ -34,6 +34,11 @@ import ABTestDetail from '@/pages/abtest/Detail'
 import ABTestRuntime from '@/pages/abtest/Runtime'
 import RpaScriptList from '@/pages/rpa/List'
 import RpaDesigner from '@/pages/rpa/Designer'
+import AttendanceSchedule from '@/pages/attendance/Schedule'
+import AttendanceStats from '@/pages/attendance/AttendanceStats'
+import LeaveApproval from '@/pages/attendance/LeaveApproval'
+import SalaryManagement from '@/pages/attendance/SalaryManagement'
+import MobileClockIn from '@/pages/attendance/MobileClockIn'
 
 const routes = [
   {
@@ -293,6 +298,31 @@ const routes = [
           {
             path: 'designer',
             element: <RpaDesigner />,
+          },
+        ],
+      },
+      {
+        path: 'attendance',
+        children: [
+          {
+            path: 'schedule',
+            element: <AttendanceSchedule />,
+          },
+          {
+            path: 'stats',
+            element: <AttendanceStats />,
+          },
+          {
+            path: 'leave',
+            element: <LeaveApproval />,
+          },
+          {
+            path: 'salary',
+            element: <SalaryManagement />,
+          },
+          {
+            path: 'clockin',
+            element: <MobileClockIn />,
           },
         ],
       },
