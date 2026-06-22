@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Button, message, Modal, Tabs, List, Tag, Card, Descriptions, Spin } from 'antd'
+import { Button, message, Modal, Tabs, List, Tag, Card, Descriptions, Spin, Alert } from 'antd'
 import {
   EnvironmentOutlined,
   CalendarOutlined,
@@ -8,6 +8,8 @@ import {
   WarningOutlined,
   HomeOutlined,
   UserOutlined,
+  ReloadOutlined,
+  SafetyOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { attendanceApi, AttendanceRecord, ShiftSchedule } from '@/api/attendance'
@@ -22,6 +24,7 @@ interface LocationInfo {
   address?: string
   distance?: number
   inRange?: boolean
+  locatedAt?: number
 }
 
 const MobileClockInPage: React.FC = () => {
@@ -29,6 +32,7 @@ const MobileClockInPage: React.FC = () => {
   const [currentTime, setCurrentTime] = useState(dayjs())
   const [location, setLocation] = useState<LocationInfo | null>(null)
   const [locating, setLocating] = useState(false)
+  const [locationError, setLocationError] = useState<string | null>(null)
   const [todayRecord, setTodayRecord] = useState<AttendanceRecord | null>(null)
   const [todaySchedule, setTodaySchedule] = useState<ShiftSchedule | null>(null)
   const [activeTab, setActiveTab] = useState('clockin')
@@ -44,28 +48,83 @@ const MobileClockInPage: React.FC = () => {
     return () => clearInterval(timer)
   }, [])
 
-  const getLocation = (): Promise<{ latitude: number; longitude: number }> => {
-    return new Promise((resolve, reject) => {
-      if (!navigator.geolocation) {
-        reject(new Error('浏览器不支持定位功能'))
-        return
+  const validateLocationFreshness = (loc: LocationInfo | null): boolean => {
+    if (!loc) return false
+    if (!loc.locatedAt) return false
+    const age = Date.now() - loc.locatedAt
+    return age < 5 * 60 * 1000
+  }
+
+  const canClockIn = (): { ok: boolean; reason?: string } => {
+    if (locating) {
+      return { ok: false, reason: '正在定位中...' }
+    }
+    if (!location) {
+      return { ok: false, reason: '无法获取定位，请先点击右上角刷新定位' }
+    }
+    if (!validateLocationFreshness(location)) {
+      return { ok: false, reason: '定位已过期，请刷新定位' }
+    }
+    if (!location.inRange) {
+      return { ok: false, reason: `不在考勤范围内，距离最近考勤点${location.distance?.toFixed(0) || 0}米` }
+    }
+    return { ok: true }
+  }
+
+  const getLocation = async () => {
+    setLocationError(null)
+    if (!navigator.geolocation) {
+      setLocationError('当前浏览器不支持GPS定位，请使用支持的浏览器')
+      return null
+    }
+
+    setLocating(true)
+    try {
+      const pos: GeolocationPosition = await new Promise((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          reject(new Error('定位超时，请检查GPS设置'))
+        }, 15000)
+        navigator.geolocation.getCurrentPosition(
+          (p) => {
+            clearTimeout(timeoutId)
+            resolve(p)
+          },
+          (err) => {
+            clearTimeout(timeoutId)
+            reject(err)
+          },
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        )
+      })
+
+      const loc: LocationInfo = {
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+        locatedAt: Date.now(),
       }
-      setLocating(true)
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setLocating(false)
-          resolve({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          })
-        },
-        (error) => {
-          setLocating(false)
-          reject(error)
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-      )
-    })
+      setLocation(loc)
+      return loc
+    } catch (err: any) {
+      let msg = '定位失败'
+      switch (err?.code) {
+        case 1:
+          msg = '请允许浏览器获取位置权限'
+          break
+        case 2:
+          msg = '无法获取位置，请开启GPS定位'
+          break
+        case 3:
+          msg = '定位超时，请重试'
+          break
+        default:
+          msg = err?.message || '定位失败'
+      }
+      setLocationError(msg)
+      message.error(msg)
+      return null
+    } finally {
+      setLocating(false)
+    }
   }
 
   const checkDistance = async (lat: number, lng: number) => {
@@ -73,21 +132,24 @@ const MobileClockInPage: React.FC = () => {
     try {
       const res = await attendanceApi.checkLocation(currentApp.id, lat, lng)
       if (res.code === 0 || res.code === 200) {
-        setLocation({
+        setLocation((prev) => ({
+          ...prev!,
           latitude: lat,
           longitude: lng,
           distance: res.data?.distance,
           inRange: res.data?.inRange,
-        })
+          locatedAt: Date.now(),
+        }))
       }
     } catch (e) {
       console.error(e)
-      setLocation({
-        latitude: lat,
-        longitude: lng,
-        inRange: true,
-        distance: 0,
-      })
+    }
+  }
+
+  const refreshLocation = async () => {
+    const pos = await getLocation()
+    if (pos) {
+      await checkDistance(pos.latitude, pos.longitude)
     }
   }
 
@@ -96,8 +158,8 @@ const MobileClockInPage: React.FC = () => {
     try {
       const today = dayjs().format('YYYY-MM-DD')
       const [scheduleRes, recordRes] = await Promise.all([
-        attendanceApi.getUserSchedule(currentApp.id, userInfo?.id || 1, today, today),
-        attendanceApi.getTodayRecord(currentApp.id, userInfo?.id || 1),
+        attendanceApi.getUserSchedules(currentApp.id, userInfo?.id || 1, today, today),
+        attendanceApi.getTodayRecord(currentApp.id),
       ])
       if (scheduleRes.code === 0 || scheduleRes.code === 200) {
         const schedules = scheduleRes.data || []
@@ -141,7 +203,7 @@ const MobileClockInPage: React.FC = () => {
     try {
       const startDate = dayjs().startOf('month').format('YYYY-MM-DD')
       const endDate = dayjs().endOf('month').format('YYYY-MM-DD')
-      const res = await attendanceApi.getUserSchedule(
+      const res = await attendanceApi.getUserSchedules(
         currentApp.id,
         userInfo?.id || 1,
         startDate,
@@ -159,14 +221,7 @@ const MobileClockInPage: React.FC = () => {
 
   useEffect(() => {
     loadTodayInfo()
-    getLocation()
-      .then((pos) => {
-        checkDistance(pos.latitude, pos.longitude)
-      })
-      .catch((err) => {
-        console.warn('定位失败:', err)
-        message.warning('定位失败，无法验证考勤地点')
-      })
+    refreshLocation()
   }, [currentApp])
 
   useEffect(() => {
@@ -179,18 +234,19 @@ const MobileClockInPage: React.FC = () => {
 
   const handleClockIn = async (type: 'IN' | 'OUT') => {
     if (!currentApp) return
-    if (!location?.inRange) {
-      message.warning('您不在考勤范围内，无法打卡')
+    const check = canClockIn()
+    if (!check.ok) {
+      message.warning(check.reason || '无法打卡')
       return
     }
 
     setClockingIn(true)
     try {
-      const res = await attendanceApi.clockIn({
+      const apiMethod = type === 'IN' ? attendanceApi.clockIn : attendanceApi.clockOut
+      const res = await apiMethod({
         appId: currentApp.id,
-        clockType: type,
-        latitude: location.latitude,
-        longitude: location.longitude,
+        latitude: location!.latitude,
+        longitude: location!.longitude,
       })
       if (res.code === 0 || res.code === 200) {
         message.success(type === 'IN' ? '上班打卡成功' : '下班打卡成功')
@@ -224,11 +280,26 @@ const MobileClockInPage: React.FC = () => {
   }
 
   const isTodayRest = todaySchedule?.shiftType === 'REST'
+  const clockInCheck = canClockIn()
 
   return (
     <div className="mobile-clockin-page">
       <div className="clockin-container">
-        <Tabs activeKey={activeTab} onChange={setActiveTab} centered>
+        <Tabs
+          activeKey={activeTab}
+          onChange={setActiveTab}
+          centered
+          tabBarExtraContent={
+            <Button
+              type="text"
+              icon={<ReloadOutlined spin={locating} />}
+              onClick={refreshLocation}
+              style={{ color: '#fff' }}
+            >
+              刷新定位
+            </Button>
+          }
+        >
           <TabPane tab="打卡" key="clockin" />
           <TabPane tab="排班" key="schedule" />
           <TabPane tab="考勤" key="records" />
@@ -267,6 +338,13 @@ const MobileClockInPage: React.FC = () => {
             {!isTodayRest && (
               <div
                 className="clockin-circle"
+                style={{
+                  cursor: clockInCheck.ok ? 'pointer' : 'not-allowed',
+                  opacity: clockInCheck.ok ? 1 : 0.6,
+                  background: !clockInCheck.ok
+                    ? 'linear-gradient(135deg, #999 0%, #bbb 100%)'
+                    : undefined,
+                }}
                 onClick={() => {
                   if (!todayRecord?.clockInTime) {
                     handleClockIn('IN')
@@ -276,7 +354,15 @@ const MobileClockInPage: React.FC = () => {
                 }}
               >
                 <Spin spinning={clockingIn}>
-                  {!todayRecord?.clockInTime ? (
+                  {!clockInCheck.ok && !todayRecord?.clockInTime && !todayRecord?.clockOutTime ? (
+                    <>
+                      <WarningOutlined style={{ fontSize: 40, marginBottom: 8 }} />
+                      <div className="clockin-time" style={{ fontSize: 20 }}>
+                        {clockInCheck.reason?.slice(0, 8)}
+                      </div>
+                      <div className="clockin-status">点击刷新定位</div>
+                    </>
+                  ) : !todayRecord?.clockInTime ? (
                     <>
                       <div className="clockin-time">上班打卡</div>
                       <div className="clockin-status">点击打卡</div>
@@ -335,29 +421,62 @@ const MobileClockInPage: React.FC = () => {
               </div>
             )}
 
-            <div className="location-info">
-              <div>
-                <EnvironmentOutlined /> 考勤地点
+            {locationError && (
+              <Alert
+                style={{ marginTop: 16 }}
+                type="error"
+                showIcon
+                icon={<WarningOutlined />}
+                message={locationError}
+                action={
+                  <Button size="small" type="primary" onClick={refreshLocation}>
+                    重试
+                  </Button>
+                }
+              />
+            )}
+
+            {!locationError && (
+              <div className="location-info">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>
+                    <EnvironmentOutlined /> 考勤地点
+                  </span>
+                  <Button size="small" type="link" icon={<ReloadOutlined spin={locating} />} onClick={refreshLocation}>
+                    刷新定位
+                  </Button>
+                </div>
+                {locating ? (
+                  <div className="location-text">定位中...</div>
+                ) : location ? (
+                  <>
+                    <div className="location-text">
+                      当前位置距离考勤点 {location.distance?.toFixed(0) || 0} 米
+                      {location.locatedAt && (
+                        <span style={{ color: '#999', fontSize: 11 }}>
+                          {' '}（{dayjs(location.locatedAt).format('HH:mm:ss')} 更新）
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ marginTop: 4, fontSize: 12 }}>
+                      {location.inRange ? (
+                        <span style={{ color: '#52c41a' }}>
+                          <SafetyOutlined /> 在考勤范围内，可以打卡
+                        </span>
+                      ) : (
+                        <span style={{ color: '#ff4d4f' }}>
+                          <WarningOutlined /> 不在考勤范围内，无法打卡
+                        </span>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="location-text" style={{ color: '#ff4d4f' }}>
+                    <WarningOutlined /> 无法获取定位，请点击右上角刷新
+                  </div>
+                )}
               </div>
-              {locating ? (
-                <div className="location-text">定位中...</div>
-              ) : location ? (
-                <>
-                  <div className="location-text">
-                    当前位置距离考勤点 {location.distance?.toFixed(0) || 0} 米
-                  </div>
-                  <div style={{ marginTop: 4, fontSize: 12 }}>
-                    {location.inRange ? (
-                      <span style={{ color: '#52c41a' }}>✓ 在考勤范围内</span>
-                    ) : (
-                      <span style={{ color: '#ff4d4f' }}>✗ 不在考勤范围内</span>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <div className="location-text">定位失败</div>
-              )}
-            </div>
+            )}
           </div>
         )}
 

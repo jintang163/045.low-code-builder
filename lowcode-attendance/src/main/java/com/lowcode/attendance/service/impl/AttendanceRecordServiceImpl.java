@@ -144,7 +144,7 @@ public class AttendanceRecordServiceImpl extends ServiceImpl<AttendanceRecordMap
 
     private void validateGpsLocation(Long appId, BigDecimal latitude, BigDecimal longitude) {
         if (latitude == null || longitude == null) {
-            return;
+            throw new BusinessException("无法获取定位信息，请开启GPS定位后再打卡");
         }
 
         List<LocationConfig> locations = locationConfigMapper.selectByAppId(appId);
@@ -152,20 +152,22 @@ public class AttendanceRecordServiceImpl extends ServiceImpl<AttendanceRecordMap
             double distance = calculateDistance(latitude.doubleValue(), longitude.doubleValue(),
                     defaultLatitude.doubleValue(), defaultLongitude.doubleValue());
             if (distance > defaultAllowRadius) {
-                throw new BusinessException("打卡位置超出允许范围");
+                throw new BusinessException("打卡位置超出允许范围，当前距离考勤点" + String.format("%.0f", distance) + "米，允许范围" + defaultAllowRadius + "米");
             }
         } else {
             boolean valid = false;
+            double minDistance = Double.MAX_VALUE;
             for (LocationConfig loc : locations) {
                 double distance = calculateDistance(latitude.doubleValue(), longitude.doubleValue(),
                         loc.getLatitude().doubleValue(), loc.getLongitude().doubleValue());
+                minDistance = Math.min(minDistance, distance);
                 if (distance <= loc.getAllowRadius()) {
                     valid = true;
                     break;
                 }
             }
             if (!valid) {
-                throw new BusinessException("打卡位置超出允许范围");
+                throw new BusinessException("打卡位置超出允许范围，最近考勤点距离" + String.format("%.0f", minDistance) + "米");
             }
         }
     }

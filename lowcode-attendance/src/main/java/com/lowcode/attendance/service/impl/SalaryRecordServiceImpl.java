@@ -47,8 +47,7 @@ public class SalaryRecordServiceImpl extends ServiceImpl<SalaryRecordMapper, Sal
 
         List<ShiftSchedule> allSchedules = shiftScheduleMapper.selectByAppAndDateRange(dto.getAppId(), startDate, endDate);
         List<AttendanceRecord> allRecords = attendanceRecordMapper.selectByAppAndDateRange(dto.getAppId(), startDate, endDate);
-        List<LeaveRequest> allLeaves = leaveRequestMapper.selectOverlappingLeaves(dto.getAppId(),
-                0L, startDate, endDate);
+        List<LeaveRequest> allLeaves = leaveRequestMapper.selectApprovedLeavesInRange(dto.getAppId(), startDate, endDate);
 
         Map<Long, List<ShiftSchedule>> scheduleMap = allSchedules.stream()
                 .filter(s -> !"REST".equals(s.getShiftType()))
@@ -118,7 +117,7 @@ public class SalaryRecordServiceImpl extends ServiceImpl<SalaryRecordMapper, Sal
             }
             salary.setHourlyWage(hourlyWage);
 
-            BigDecimal baseSalary = hourlyWage.multiply(BigDecimal.valueOf(8 * 22));
+            BigDecimal baseSalary = hourlyWage.multiply(totalHours);
             salary.setBaseSalary(baseSalary);
 
             BigDecimal leaveDays = BigDecimal.ZERO;

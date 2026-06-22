@@ -7,8 +7,6 @@ import {
   Form,
   Select,
   Input,
-  InputNumber,
-  TimePicker,
   Tag,
   Space,
   Card,
@@ -19,17 +17,19 @@ import {
   DatePicker,
   Popconfirm,
   Tooltip,
+  Checkbox,
 } from 'antd'
 import {
   PlusOutlined,
   DeleteOutlined,
   TeamOutlined,
-  CalendarOutlined,
+  CheckOutlined,
   BatchJobOutlined,
+  CalendarOutlined,
 } from '@ant-design/icons'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
-import { attendanceApi, ShiftSchedule, ShiftConfig } from '@/api/attendance'
+import { attendanceApi, ShiftSchedule, ShiftConfig, EmployeeUser } from '@/api/attendance'
 import { useAppStore } from '@/store/appStore'
 import './Schedule.less'
 
@@ -47,24 +47,32 @@ const ShiftSchedulePage: React.FC = () => {
   const { currentApp, userInfo } = useAppStore()
   const [shiftConfigs, setShiftConfigs] = useState<ShiftConfig[]>([])
   const [schedules, setSchedules] = useState<ShiftSchedule[]>([])
+  const [employees, setEmployees] = useState<EmployeeUser[]>([])
   const [loading, setLoading] = useState(false)
   const [currentMonth, setCurrentMonth] = useState<Dayjs>(dayjs())
   const [modalVisible, setModalVisible] = useState(false)
   const [selectedDate, setSelectedDate] = useState<Dayjs | null>(null)
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
   const [batchModalVisible, setBatchModalVisible] = useState(false)
   const [userListVisible, setUserListVisible] = useState(false)
+  const [employeeSelectVisible, setEmployeeSelectVisible] = useState(false)
+  const [pendingDropDate, setPendingDropDate] = useState<Dayjs | null>(null)
+  const [pendingDropShift, setPendingDropShift] = useState<string | null>(null)
+  const [selectedEmployees, setSelectedEmployees] = useState<number[]>([])
   const [form] = Form.useForm()
   const [batchForm] = Form.useForm()
   const [draggedShift, setDraggedShift] = useState<string | null>(null)
 
-  const mockUsers = [
-    { id: 1, username: 'zhangsan', nickname: '张三', avatar: '' },
-    { id: 2, username: 'lisi', nickname: '李四', avatar: '' },
-    { id: 3, username: 'wangwu', nickname: '王五', avatar: '' },
-    { id: 4, username: 'zhaoliu', nickname: '赵六', avatar: '' },
-    { id: 5, username: 'sunqi', nickname: '孙七', avatar: '' },
-  ]
+  const loadEmployees = async () => {
+    if (!currentApp) return
+    try {
+      const res = await attendanceApi.getEmployeeList(currentApp.id)
+      if (res.code === 0 || res.code === 200) {
+        setEmployees(res.data || [])
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }
 
   const loadShiftConfigs = async () => {
     if (!currentApp) return
@@ -96,6 +104,7 @@ const ShiftSchedulePage: React.FC = () => {
   }
 
   useEffect(() => {
+    loadEmployees()
     loadShiftConfigs()
     loadSchedules(currentMonth)
   }, [currentApp])
@@ -107,7 +116,6 @@ const ShiftSchedulePage: React.FC = () => {
 
   const handleDateSelect = (date: Dayjs) => {
     setSelectedDate(date)
-    setSelectedUserId(null)
     form.resetFields()
     form.setFieldsValue({
       shiftDate: date.format('YYYY-MM-DD'),
@@ -121,10 +129,11 @@ const ShiftSchedulePage: React.FC = () => {
     try {
       const values = await form.validateFields()
       const config = shiftConfigs.find((c) => c.shiftCode === values.shiftType)
+      const employee = employees.find((e) => e.id === values.userId)
       const data: Partial<ShiftSchedule> = {
         appId: currentApp.id,
-        userId: values.userId || userInfo?.id || 1,
-        userName: values.userName || userInfo?.nickname || '员工',
+        userId: values.userId,
+        userName: employee?.nickname || employee?.username || '员工',
         shiftType: values.shiftType,
         shiftDate: selectedDate.format('YYYY-MM-DD'),
         workHours: config?.workHours || 8,
@@ -220,26 +229,54 @@ const ShiftSchedulePage: React.FC = () => {
   const handleDayDrop = async (date: Dayjs, e: React.DragEvent) => {
     e.preventDefault()
     if (!draggedShift || !currentApp) return
+    setPendingDropDate(date)
+    setPendingDropShift(draggedShift)
+    setSelectedEmployees([])
+    setEmployeeSelectVisible(true)
+    setDraggedShift(null)
+  }
 
-    const config = shiftConfigs.find((c) => c.shiftCode === draggedShift)
+  const handleConfirmDrop = async () => {
+    if (!pendingDropDate || !pendingDropShift || selectedEmployees.length === 0 || !currentApp) {
+      message.warning('请选择至少一个员工')
+      return
+    }
+
+    const config = shiftConfigs.find((c) => c.shiftCode === pendingDropShift)
     try {
-      const data: Partial<ShiftSchedule> = {
-        appId: currentApp.id,
-        userId: userInfo?.id || 1,
-        userName: userInfo?.nickname || '员工',
-        shiftType: draggedShift,
-        shiftDate: date.format('YYYY-MM-DD'),
-        workHours: config?.workHours || 8,
-        hourlyWage: config?.hourlyWage || 20,
+      for (const userId of selectedEmployees) {
+        const employee = employees.find((e) => e.id === userId)
+        const data: Partial<ShiftSchedule> = {
+          appId: currentApp.id,
+          userId,
+          userName: employee?.nickname || employee?.username || '员工',
+          shiftType: pendingDropShift,
+          shiftDate: pendingDropDate.format('YYYY-MM-DD'),
+          workHours: config?.workHours || 8,
+          hourlyWage: config?.hourlyWage || 20,
+        }
+        await attendanceApi.saveSchedule(data)
       }
-      await attendanceApi.saveSchedule(data)
-      message.success('排班成功')
+      message.success(`成功为 ${selectedEmployees.length} 位员工排班`)
+      setEmployeeSelectVisible(false)
+      setPendingDropDate(null)
+      setPendingDropShift(null)
+      setSelectedEmployees([])
       loadSchedules(currentMonth)
     } catch (e) {
       console.error(e)
       message.error('排班失败')
     }
-    setDraggedShift(null)
+  }
+
+  const shiftName = (shiftType: string) => {
+    const map: Record<string, string> = {
+      MORNING: '早班',
+      EVENING: '晚班',
+      DOUBLE: '全天',
+      REST: '休息',
+    }
+    return map[shiftType] || shiftType
   }
 
   return (
@@ -310,10 +347,13 @@ const ShiftSchedulePage: React.FC = () => {
       >
         <Form form={form} layout="vertical">
           <Form.Item label="员工" name="userId" rules={[{ required: true, message: '请选择员工' }]}>
-            <Select placeholder="选择员工">
-              {mockUsers.map((user) => (
+            <Select placeholder="选择员工" showSearch optionFilterProp="children">
+              {employees.map((user) => (
                 <Option key={user.id} value={user.id}>
-                  {user.nickname || user.username}
+                  <Space>
+                    <Avatar size="small" icon={<TeamOutlined />} />
+                    {user.nickname || user.username}
+                  </Space>
                 </Option>
               ))}
             </Select>
@@ -348,10 +388,13 @@ const ShiftSchedulePage: React.FC = () => {
       >
         <Form form={batchForm} layout="vertical">
           <Form.Item label="选择员工" name="userIds" rules={[{ required: true, message: '请选择员工' }]}>
-            <Select mode="multiple" placeholder="选择多个员工">
-              {mockUsers.map((user) => (
+            <Select mode="multiple" placeholder="选择多个员工" showSearch optionFilterProp="children">
+              {employees.map((user) => (
                 <Option key={user.id} value={user.id}>
-                  {user.nickname || user.username}
+                  <Space>
+                    <Avatar size="small" icon={<TeamOutlined />} />
+                    {user.nickname || user.username}
+                  </Space>
                 </Option>
               ))}
             </Select>
@@ -369,6 +412,61 @@ const ShiftSchedulePage: React.FC = () => {
             </Select>
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        title={
+        pendingDropDate
+          ? `${pendingDropDate.format('YYYY-MM-DD')} 拖拽排班 - ${shiftName(pendingDropShift || '')}`
+          : '选择员工'
+        }
+        open={employeeSelectVisible}
+        onCancel={() => {
+          setEmployeeSelectVisible(false)
+          setPendingDropDate(null)
+          setPendingDropShift(null)
+        }}
+        onOk={handleConfirmDrop}
+        okText="确认排班"
+        width={500}
+      >
+        <div style={{ marginBottom: 12 }}>
+          <p style={{ color: '#666', marginBottom: 12 }}>请选择要排班的员工：</p>
+          <Checkbox
+            indeterminate={
+              selectedEmployees.length > 0 && selectedEmployees.length < employees.length
+            }
+            checked={selectedEmployees.length === employees.length && employees.length > 0}
+            onChange={(e) => {
+              if (e.target.checked) {
+                setSelectedEmployees(employees.map((e) => e.id))
+              } else {
+                setSelectedEmployees([])
+              }
+              }
+            }
+          >
+            全选
+          </Checkbox>
+        </div>
+        <div style={{ maxHeight: 300, overflow: 'auto', border: '1px solid #f0f0f0', padding: 12, borderRadius: 4 }}>
+          <Checkbox.Group
+            value={selectedEmployees}
+            onChange={(values) => setSelectedEmployees(values as number[])}
+            style={{ width: '100%' }}
+          >
+            {employees.map((emp) => (
+            <div key={emp.id} style={{ display: 'flex', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f5f5f5' }}>
+              <Checkbox value={emp.id} style={{ marginRight: 12 }}>
+                <Space>
+                  <Avatar size="small" icon={<TeamOutlined />} />
+                  <span>{emp.nickname || emp.username}</span>
+                </Space>
+              </Checkbox>
+              </div>
+            ))}
+          </Checkbox.Group>
+        </div>
       </Modal>
 
       <Drawer
@@ -401,7 +499,7 @@ const ShiftSchedulePage: React.FC = () => {
                 ]}
               >
                 <List.Item.Meta
-                  avatar={<Avatar icon={<TeamOutlined />} />}
+                  avatar={<Avatar icon={<TeamOutlined />} />
                   title={item.userName || '员工'}
                   description={
                     <Space>
@@ -419,7 +517,7 @@ const ShiftSchedulePage: React.FC = () => {
           />
         )}
         {selectedDate && getSchedulesByDate(selectedDate).length === 0 && (
-          <div style={{ textAlign: 'center', color: '#999', padding: '40px 0' }}>
+          <div style={{ textAlign: 'center', color: '#999', padding: '40px 0 }}>
             当天暂无排班
           </div>
         )}

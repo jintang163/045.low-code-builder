@@ -109,7 +109,30 @@ export interface AttendanceStats {
   leaveDays: number
 }
 
+export interface EmployeeUser {
+  id: number
+  username: string
+  nickname: string
+  avatar?: string
+}
+
+export interface LocationCheckVO {
+  inRange: boolean
+  distance: number
+  address?: string
+}
+
 export const attendanceApi = {
+  getEmployeeList: (appId: number, pageNum = 1, pageSize = 100, username?: string) =>
+    request.get<EmployeeUser[]>('/attendance/user/list', {
+      params: { appId, pageNum, pageSize, username },
+    }),
+
+  checkLocation: (appId: number, latitude: number, longitude: number) =>
+    request.get<LocationCheckVO>('/attendance/record/check-location', {
+      params: { appId, latitude, longitude },
+    }),
+
   getShiftConfigs: (appId: number) =>
     request.get<ShiftConfig[]>('/attendance/shift/configs', { params: { appId } }),
 

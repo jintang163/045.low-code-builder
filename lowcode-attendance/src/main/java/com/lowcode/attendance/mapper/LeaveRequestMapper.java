@@ -23,4 +23,9 @@ public interface LeaveRequestMapper extends BaseMapper<LeaveRequest> {
                                                  @Param("userId") Long userId,
                                                  @Param("startDate") LocalDate startDate,
                                                  @Param("endDate") LocalDate endDate);
+
+    @Select("SELECT * FROM att_leave_request WHERE app_id = #{appId} AND start_date <= #{endDate} AND end_date >= #{startDate} AND deleted = 0 AND status = 'APPROVED'")
+    List<LeaveRequest> selectApprovedLeavesInRange(@Param("appId") Long appId,
+                                                    @Param("startDate") LocalDate startDate,
+                                                    @Param("endDate") LocalDate endDate);
 }

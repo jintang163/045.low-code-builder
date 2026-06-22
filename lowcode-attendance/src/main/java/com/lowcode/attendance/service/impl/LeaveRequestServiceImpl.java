@@ -5,20 +5,32 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.lowcode.attendance.dto.LeaveApprovalDTO;
 import com.lowcode.attendance.dto.LeaveRequestDTO;
 import com.lowcode.attendance.entity.LeaveRequest;
+import com.lowcode.attendance.feign.UserFeignClient;
 import com.lowcode.attendance.mapper.LeaveRequestMapper;
 import com.lowcode.attendance.service.LeaveRequestService;
+import com.lowcode.common.exception.BusinessException;
 import com.lowcode.common.util.UserContext;
 import org.springframework.beans.BeanUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.util.CollectionUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.List;
 
 @Service
 public class LeaveRequestServiceImpl extends ServiceImpl<LeaveRequestMapper, LeaveRequest> implements LeaveRequestService {
+
+    @Autowired
+    private UserFeignClient userFeignClient;
+
+    private static final List<String> APPROVER_ROLES = Arrays.asList(
+            "SHOP_MANAGER", "MANAGER", "ADMIN", "ROLE_ADMIN", "admin"
+    );
 
     @Override
     public LeaveRequest create(LeaveRequestDTO dto) {
@@ -45,6 +57,8 @@ public class LeaveRequestServiceImpl extends ServiceImpl<LeaveRequestMapper, Lea
         Long approverId = UserContext.getCurrentUserId();
         String approverName = UserContext.getCurrentUsername();
 
+        validateApproverPermission(approverId);
+
         LeaveRequest leave = baseMapper.selectById(dto.getId());
         if (leave == null) {
             throw new IllegalArgumentException("请假申请不存在");
@@ -61,6 +75,25 @@ public class LeaveRequestServiceImpl extends ServiceImpl<LeaveRequestMapper, Lea
 
         baseMapper.updateById(leave);
         return leave;
+    }
+
+    private void validateApproverPermission(Long approverId) {
+        try {
+            com.lowcode.common.result.Result<List<String>> result = userFeignClient.getUserRoles(approverId);
+            if (result != null && result.isSuccess() && !CollectionUtils.isEmpty(result.getData())) {
+                List<String> roles = result.getData();
+                for (String role : roles) {
+                    for (String allowedRole : APPROVER_ROLES) {
+                        if (role != null && role.toUpperCase().contains(allowedRole.toUpperCase())) {
+                            return;
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            throw new BusinessException("获取审批人角色信息失败，请联系管理员");
+        }
+        throw new BusinessException("当前用户无权限审批请假，请联系店长或管理员");
     }
 
     @Override
